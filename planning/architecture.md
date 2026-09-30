@@ -1,0 +1,41 @@
+# Architecture
+
+## Container
+
+Local-only CLI + MCP adapter driving the user's own logged-in Chrome. No prod deploy in MVP.
+
+## Stack
+
+| Decision | Choice | Why |
+|---|---|---|
+| Runtime | Node 22 LTS, ESM, TypeScript strict | LTS + native TS support; team standard |
+| Package manager | pnpm 11 | Fast, strict, requires Node 22 |
+| Browser automation | Playwright + chrome-devtools-mcp / @playwright/mcp | Industry standard: accessibility snapshots with refs (e.g. `[ref=e5]`), no vision model needed |
+| Snapshot contract | `{snapshotId, url, title, elements[{ref, role, name, value, disabled}]}` written to disk | Refs stable per snapshot only; file + grep keeps tokens low |
+| Interface | CLI (`open`, `snapshot`, `click`, `fill`, `extract`) + MCP stdio adapter + SKILL.md | CLI-first is token-efficient; MCP reuses same backend |
+| Datastore | Local filesystem JSON | No DB needed for MVP |
+| Identity | Local Chrome profile, user performs logins | Lawful: agent never handles credentials |
+| CI | `pnpm lint && pnpm build && pnpm smoke` | Minimal gate |
+| Secrets | `.env`, never committed | Standard |
+| Observability | `.specloop/logs` + per-run evidence files | Audit trail |
+
+## Conventions
+
+TypeScript `strict: true`, `module/moduleResolution: nodenext`, `target: es2025`. ESLint + Prettier. All docs in English.
+
+## Fixed rules
+
+- Lawful use only; no CAPTCHA/bot-wall bypass. Hard rule.
+- Docs in English, chat in Spanish. Hard rule.
+- Re-snapshot after every mutation; stale refs fail fast with re-snapshot instruction.
+- Never paste full snapshots inline; write to file and grep.
+
+## Still to define
+
+- PWA SDK shape (v2 custom bridge).
+- Notebook adapter beyond text extract (post-MVP).
+
+## Declined
+
+- Custom WebSocket bridge in MVP — reuse existing MCP servers for speed.
+- Headless credential-based login — use the user's own session.

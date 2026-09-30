@@ -1,0 +1,23 @@
+{
+  "name": "pwa-nav",
+  "version": "0.1.0",
+  "description": "CLI + bridge for fluid QA on login-walled sites (spec 001: nav-snapshot)",
+  "type": "module",
+  "bin": {
+    "pwa-nav": "./dist/cli.js"
+  },
+  "engines": {
+    "node": ">=22"
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "lint": "eslint .",
+    "smoke": "node ./dist/smoke.js"
+  },
+  "devDependencies": {
+    "@types/node": "^22.13.0",
+    "eslint": "^9.23.0",
+    "typescript": "^5.8.2",
+    "typescript-eslint": "^8.27.0"
+  }
+}

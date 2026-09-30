@@ -1,0 +1,6 @@
+- heading "Example Domain" [ref=e1]
+- paragraph "This domain is for use in illustrative examples." [ref=e2]
+- link "More information..." [ref=e3]
+- navigation "Primary" [ref=e4]
+- link "Home" [ref=e5]
+- link "Docs" [ref=e6]

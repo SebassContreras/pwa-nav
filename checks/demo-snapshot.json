@@ -1,0 +1,12 @@
+{
+  "steps": [
+    { "op": "open", "url": "https://example.com" },
+    {
+      "op": "snapshot",
+      "input": "checks/fixtures/demo-tree.txt",
+      "url": "https://example.com",
+      "title": "Example Domain"
+    },
+    { "op": "assert-text", "text": "Example Domain" }
+  ]
+}

@@ -1,0 +1,6 @@
+- heading "Welcome back" [ref=e1]
+- paragraph "You are signed in with the demo account." [ref=e2]
+- navigation "Primary" [ref=e3]
+- link "Dashboard" [ref=e4]
+- link "Settings" [ref=e5]
+- button "Sign out" [ref=e6]

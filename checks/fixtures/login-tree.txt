@@ -1,0 +1,6 @@
+- heading "Sign in" [ref=e1]
+- paragraph "Use your demo account to continue." [ref=e2]
+- textbox "Email" [ref=e3]
+- textbox "Password" [ref=e4]
+- button "Sign in" [ref=e5]
+- link "Forgot password?" [ref=e6]

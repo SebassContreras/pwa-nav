@@ -1,0 +1,172 @@
+// RefMap store for spec 002-nav-actions (T001).
+// Persists snapshots + refMaps to .agent/ and resolves snapshotId + ref.
+// Pure logic + file IO, no browser calls. Reuses the Snapshot contract.
+import { mkdir, readFile, writeFile } from "node:fs/promises";
+import { join, resolve as resolvePath } from "node:path";
+import type { Snapshot, SnapshotElement } from "./snapshot.js";
+
+export const STALE_REF_CODE = "stale_ref" as const;
+
+const SNAPSHOT_FILE = "snapshot.json";
+const REFS_DIR = "refs";
+const LATEST_FILE = "latest.json";
+
+const SNAPSHOT_ID_PATTERN = /^[A-Za-z0-9_-]+$/;
+
+export interface RefStoreOptions {
+  agentDir?: string;
+}
+
+export class StaleRefError extends Error {
+  readonly code: typeof STALE_REF_CODE = STALE_REF_CODE;
+  readonly snapshotId: string;
+
+  constructor(snapshotId: string, detail: string) {
+    super(`${detail} (code: ${STALE_REF_CODE}, snapshotId: ${snapshotId}). Re-snapshot to get a fresh snapshotId + ref.`);
+    this.name = "StaleRefError";
+    this.snapshotId = snapshotId;
+  }
+}
+
+export function isStaleRefError(error: unknown): error is StaleRefError {
+  return error instanceof StaleRefError;
+}
+
+function agentDirOf(options: RefStoreOptions = {}): string {
+  return options.agentDir ?? ".agent";
+}
+
+function snapshotPath(agentDir: string): string {
+  return resolvePath(join(agentDir, SNAPSHOT_FILE));
+}
+
+function refPath(agentDir: string, snapshotId: string): string {
+  return resolvePath(join(agentDir, REFS_DIR, `${snapshotId}.json`));
+}
+
+function latestPath(agentDir: string): string {
+  return resolvePath(join(agentDir, REFS_DIR, LATEST_FILE));
+}
+
+function isValidSnapshotId(value: string): boolean {
+  return value.length > 0 && SNAPSHOT_ID_PATTERN.test(value);
+}
+
+function isSnapshotElement(raw: unknown): raw is SnapshotElement {
+  if (typeof raw !== "object" || raw === null) {
+    return false;
+  }
+  const record = raw as Record<string, unknown>;
+  return (
+    typeof record["ref"] === "string" &&
+    typeof record["role"] === "string" &&
+    typeof record["name"] === "string" &&
+    (record["value"] === undefined || typeof record["value"] === "string") &&
+    (record["disabled"] === undefined || typeof record["disabled"] === "boolean")
+  );
+}
+
+function isSnapshot(raw: unknown): raw is Snapshot {
+  if (typeof raw !== "object" || raw === null) {
+    return false;
+  }
+  const record = raw as Record<string, unknown>;
+  return (
+    typeof record["snapshotId"] === "string" &&
+    typeof record["url"] === "string" &&
+    typeof record["title"] === "string" &&
+    Array.isArray(record["elements"]) &&
+    record["elements"].every(isSnapshotElement)
+  );
+}
+
+async function readJsonFile(path: string): Promise<unknown> {
+  let text: string;
+  try {
+    text = await readFile(path, "utf8");
+  } catch {
+    return null;
+  }
+  try {
+    return JSON.parse(text) as unknown;
+  } catch {
+    return null;
+  }
+}
+
+// Latest snapshotId: prefer refs/latest.json, fall back to snapshot.json.
+export async function latestSnapshotId(options: RefStoreOptions = {}): Promise<string | null> {
+  const agentDir = agentDirOf(options);
+  const latestRaw = await readJsonFile(latestPath(agentDir));
+  if (typeof latestRaw === "object" && latestRaw !== null) {
+    const id = (latestRaw as Record<string, unknown>)["snapshotId"];
+    if (typeof id === "string" && isValidSnapshotId(id)) {
+      return id;
+    }
+  }
+  const snapshotRaw = await readJsonFile(snapshotPath(agentDir));
+  if (isSnapshot(snapshotRaw)) {
+    return snapshotRaw.snapshotId;
+  }
+  return null;
+}
+
+// Persist snapshot + refMap. Supersedes any previous snapshotId.
+export async function save(snapshot: Snapshot, options: RefStoreOptions = {}): Promise<string> {
+  if (!isValidSnapshotId(snapshot.snapshotId)) {
+    throw new Error(`invalid snapshotId: ${snapshot.snapshotId}`);
+  }
+  const agentDir = agentDirOf(options);
+  const body = JSON.stringify(snapshot, null, 2) + "\n";
+  await mkdir(resolvePath(join(agentDir, REFS_DIR)), { recursive: true });
+  await writeFile(refPath(agentDir, snapshot.snapshotId), body, "utf8");
+  await writeFile(snapshotPath(agentDir), body, "utf8");
+  await writeFile(
+    latestPath(agentDir),
+    JSON.stringify({ snapshotId: snapshot.snapshotId }, null, 2) + "\n",
+    "utf8",
+  );
+  return snapshot.snapshotId;
+}
+
+// Retrieve a persisted snapshot by id. Null when unknown.
+export async function load(snapshotId: string, options: RefStoreOptions = {}): Promise<Snapshot | null> {
+  if (!isValidSnapshotId(snapshotId)) {
+    return null;
+  }
+  const agentDir = agentDirOf(options);
+  const perId = await readJsonFile(refPath(agentDir, snapshotId));
+  if (isSnapshot(perId) && perId.snapshotId === snapshotId) {
+    return perId;
+  }
+  const current = await readJsonFile(snapshotPath(agentDir));
+  if (isSnapshot(current) && current.snapshotId === snapshotId) {
+    return current;
+  }
+  return null;
+}
+
+// Resolve snapshotId + ref to an element. Throws StaleRefError when the
+// snapshotId is unknown/superseded or the ref is absent.
+export async function resolve(
+  snapshotId: string,
+  ref: string,
+  options: RefStoreOptions = {},
+): Promise<SnapshotElement> {
+  const snapshot = await load(snapshotId, options);
+  if (snapshot === null) {
+    throw new StaleRefError(snapshotId, `unknown snapshotId "${snapshotId}"`);
+  }
+  const latest = await latestSnapshotId(options);
+  if (latest !== null && snapshotId !== latest) {
+    throw new StaleRefError(
+      snapshotId,
+      `superseded snapshotId "${snapshotId}" (latest is "${latest}")`,
+    );
+  }
+  const element = snapshot.elements.find((entry) => entry.ref === ref);
+  if (element === undefined) {
+    throw new StaleRefError(snapshotId, `unknown ref "${ref}" for snapshotId "${snapshotId}"`);
+  }
+  return element;
+}

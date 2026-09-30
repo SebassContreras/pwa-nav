@@ -1,0 +1,23 @@
+{
+  "steps": [
+    { "op": "open", "url": "https://example.com/login" },
+    {
+      "op": "snapshot",
+      "input": "checks/fixtures/login-tree.txt",
+      "url": "https://example.com/login",
+      "title": "Sign in"
+    },
+    {
+      "op": "act",
+      "ops": ["fill:e3=user@example.com", "fill:e4=secret-example"]
+    },
+    { "op": "click", "ref": "e5" },
+    {
+      "op": "snapshot",
+      "input": "checks/fixtures/login-success-tree.txt",
+      "url": "https://example.com/login",
+      "title": "Welcome back"
+    },
+    { "op": "assert-text", "text": "Welcome back" }
+  ]
+}

@@ -1,0 +1,7 @@
+- heading "My Research Notebook" [ref=e1]
+- textbox "Ask about this notebook" [ref=e2]
+- button "Send" [ref=e3]
+- article "Notebook answer - read-only pilot summary" [ref=e4]
+- paragraph "Key point - extract text lists one line per named element." [ref=e5]
+- paragraph "Evidence lands under .agent evidence run dir for audit." [ref=e6]
+- link "Sources" [ref=e7]

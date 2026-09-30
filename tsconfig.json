@@ -1,0 +1,24 @@
+// Choice: emit for build. `pnpm build` runs `tsc -p tsconfig.json` and emits
+// to dist/. Ad-hoc typecheck without emit: `npx tsc --noEmit -p tsconfig.json`.
+// Note: target is es2024, not es2025 from planning/architecture.md, because
+// the pinned TypeScript 5.x toolchain accepts at most es2024 (plus esnext).
+// Revisit when the toolchain supports an es2025 target.
+{
+  "compilerOptions": {
+    "target": "es2024",
+    "module": "nodenext",
+    "moduleResolution": "nodenext",
+    "strict": true,
+    "outDir": "dist",
+    "rootDir": "src",
+    "declaration": true,
+    "sourceMap": true,
+    "skipLibCheck": true,
+    "forceConsistentCasingInFileNames": true,
+    "rewriteRelativeImportExtensions": true,
+    "verbatimModuleSyntax": true,
+    "noFallthroughCasesInSwitch": true,
+    "noUncheckedIndexedAccess": true
+  },
+  "include": ["src/**/*.ts"]
+}
