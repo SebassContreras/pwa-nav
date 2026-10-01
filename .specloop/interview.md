@@ -12,17 +12,17 @@
 | stakeholders | covered | None — solo + dev team, no external approval (derived solo) |
 | automatability | covered | Agent: CLI snapshot/actions/QA loop/evidence logs. Human: logins, approvals on login-walled sites, final verification (derived solo) |
 | runtime | covered | Node 22 LTS + pnpm 11 + TypeScript strict ESM (standard: Node 22 native TS + tsconfig/node22 — https://nodejs.org/docs/latest-v22.x/api/typescript.html; pnpm 11 requires Node 22 — https://pnpm.io/blog/releases/11.0) (derived solo) |
-| framework | covered | Playwright + chrome-devtools-mcp / @playwright/mcp reused, no custom WS in MVP (standard: accessibility snapshots with refs e5/e10 — https://playwright.dev/docs/getting-started-mcp) (derived solo) |
+| framework | covered | CORRECTED 2026-10-01: raw W3C WebDriver BiDi attached to the user's Firefox PWA (PWAsForFirefox), no Playwright/Chromium, no custom WS bridge between CLI and daemon (standard: W3C WebDriver BiDi — https://w3c.github.io/webdriver-bidi/; Firefox remote protocol — https://firefox-source-docs.mozilla.org/remote/index.html). Snapshot contract and ref semantics unchanged. User quote (ES): "no era con chrome es con firefox con la pwa que se crea al Progressive Web Apps for Firefox" |
 | toolchain | covered | pnpm + tsc + eslint + smoke script; `pnpm i && pnpm lint && pnpm build && pnpm smoke` (standard: TS 2026 setup — community preset) (derived solo) |
 | datastore | covered | Local filesystem JSON `.agent/snapshot.json`, no DB in MVP (derived solo) |
 | data-model | covered | Snapshot {snapshotId, url, title, elements[{ref, role, name, value, disabled}]}; refs invalidated after each mutation (standard: Playwright snapshot refs — https://playwright.dev/mcp/snapshots) (derived solo) |
 | interface | covered | CLI (snapshot/click/fill/extract) + MCP stdio adapter + SKILL.md (derived solo) |
-| identity | covered | Reuse local logged-in Chrome profile, no credential storage (derived solo) |
+| identity | covered | CORRECTED 2026-10-01: reuse the PWAsForFirefox profile of the user's logged-in app (e.g. Sigestran Web), no credential storage; sensitive fields are never filled by the agent |
 | hosting | covered | Local-only for MVP, no prod deploy (derived solo) |
 | ci | covered | tsc + eslint + smoke script must pass (derived solo) |
 | env-secrets | covered | .env + env vars, never committed (derived solo) |
 | verification | covered | Snapshot assertions + smoke run on demo page + 1 own web page (derived solo) |
-| third-party | covered | playwright, @playwright/mcp, chrome-devtools-mcp (derived solo) |
+| third-party | covered | CORRECTED 2026-10-01: none at runtime (Node global WebSocket); dev-only: ajv (schema validation), ws (BiDi test double). Reference tooling: firefoxpwa, mozilla/firefox-devtools-mcp |
 | observability | covered | File logs `.specloop/logs` + per-run evidence (snapshot JSON + notes) (derived solo) |
 | helper-skills | covered | Playwright CLI skill via `playwright-cli install --skills`, installed on demand with confirmation (derived solo) |
 | worker-cli | covered | opencode (current session) (derived solo) |

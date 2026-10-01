@@ -11,7 +11,7 @@ Dev team driving autonomous navigation; consumes 001's snapshot, serves 003's QA
 ## Hard constraints
 
 - Interaction only via `snapshotId + ref`; stale refs fail fast with a re-snapshot instruction, never act on the wrong element _(standard: Playwright snapshot refs — https://playwright.dev/mcp/snapshots)_.
-- Reuse Playwright actionability (visible, enabled, stable) via the MCP backend.
+- Actionability (visible, enabled, stable) is enforced by the live backend before any pointer/key input _(spec 004; standard: Playwright actionability checks — https://playwright.dev/docs/actionability)_.
 - Lawful use only; no CAPTCHA/bot-wall bypass.
 - Token-efficient: actions return a short result + new snapshot path, not the full tree inline.
 

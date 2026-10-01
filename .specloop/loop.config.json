@@ -1,7 +1,22 @@
 {
   "workers": [
-    { "cli": "opencode", "args": ["run"] }
+    {
+      "cli": "claude",
+      "args": [
+        "-p"
+      ]
+    },
+    {
+      "cli": "opencode",
+      "args": [
+        "run"
+      ]
+    }
   ],
   "logDir": ".specloop/logs",
-  "contextFiles": ["AGENTS.md", "planning/architecture.md", "planning/styles.md"]
+  "contextFiles": [
+    "AGENTS.md",
+    "planning/architecture.md",
+    "planning/styles.md"
+  ]
 }

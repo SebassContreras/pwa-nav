@@ -13,6 +13,6 @@ Owner: `agent` (loop-runnable) · `human` (skipped by the loop)
       └─ mcp.json parses OK, docs/mcp.md written.
 - [x] T005 [agent] [status:done] Add smoke script verifying open + snapshot on demo page and own web URL
       └─ Smoke passes offline (demo + own URL, fresh snapshotId).
-- [ ] T006 [human] [status:todo] Log in to test sites in Chrome and approve test URLs
+- [ ] T006 [human] [status:todo] Log in to test sites in the Firefox PWA and approve test URLs
 - [x] T007 [agent] [status:done] Verify acceptance criteria 001 (snapshot file, refs, fresh snapshotId)
       └─ File/refs/fresh-id pass; criterion 1 (live navigation) gap noted, needs human login + live backend.

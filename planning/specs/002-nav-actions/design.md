@@ -2,7 +2,7 @@
 
 ## Approach
 
-Extend the same CLI with `click`, `fill`, `extract`, `act` (bulk). Each action takes `--snapshot <id>` + `ref`, resolves the ref via the stored refMap, executes via Playwright, then immediately invalidates the old snapshot and writes a new one. Stale `snapshotId+ref` returns `stale_ref` error telling the agent to re-snapshot. `extract` reuses Playwright text/link collection.
+Extend the same CLI with `click`, `fill`, `extract`, `act` (bulk). Each action takes `--snapshot <id>` + `ref`, resolves the ref via the stored refMap, executes via the browser backend (as shipped: intent log only; live execution via BiDi in spec 004), then immediately invalidates the old snapshot and writes a new one. Stale `snapshotId+ref` returns `stale_ref` error telling the agent to re-snapshot. `extract` reuses the snapshot's text/link elements.
 
 ## Deliverables
 

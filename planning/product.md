@@ -2,7 +2,7 @@
 
 ## What this is
 
-A stable CLI + PWA bridge for fluid QA of the user's web app and assisted, lawful browsing automation on login-walled sites where classic bots are blocked, including LLM notebooks. MVP = autonomous navigation + nav JSON snapshot (`snapshot` / `click` / `fill` + re-snapshot loop).
+A stable CLI + PWA bridge for fluid QA of the user's web app and assisted, lawful browsing automation on login-walled sites where classic bots are blocked, including LLM notebooks. MVP = autonomous navigation + nav JSON snapshot (`snapshot` / `click` / `fill` + re-snapshot loop). The browser is the user's own logged-in Firefox PWA (PWAsForFirefox) driven over WebDriver BiDi; a per-app screen map tells agents what each screen offers.
 
 ## Who uses it
 
