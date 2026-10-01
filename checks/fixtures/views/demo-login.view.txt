@@ -1,0 +1,5 @@
+login /login public fp:40288a29
+fields: @email textbox "Email" | @password textbox "Password" SENSITIVE(human)
+actions: @show-password button "Show password" | @sign-in button "Sign in" needs(@email,@password) submit
+links: @forgot-password -> /forgot-password | @help-center -> external help.example.com
+flows: login HUMAN-ONLY
