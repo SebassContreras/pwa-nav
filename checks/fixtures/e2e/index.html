@@ -1,0 +1,73 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <title>E2E Login</title>
+    <style>
+      .stack { position: relative; width: 160px; height: 40px; }
+      .stack button { position: absolute; inset: 0; }
+      .overlay { position: absolute; inset: 0; background: rgba(255, 0, 0, 0.3); }
+      .tiny { width: 0; height: 0; padding: 0; border: 0; overflow: hidden; }
+    </style>
+  </head>
+  <body>
+    <div id="app">
+      <main id="login">
+        <h1>E2E Login</h1>
+        <label for="email">Email</label>
+        <input id="email" name="email" type="text" autocomplete="username" />
+        <label for="note">Note</label>
+        <input id="note" name="note" type="text" />
+        <p id="echo"></p>
+        <label for="mask">Masked</label>
+        <input id="mask" name="mask" type="text" />
+        <label for="password">Password</label>
+        <input id="password" name="password" type="password" autocomplete="current-password" />
+        <button type="button" id="toggle" aria-label="Show password"></button>
+        <button type="button" id="signin">Sign in</button>
+        <a href="/other.html">Other page</a>
+        <button type="button" disabled>Disabled action</button>
+        <button type="button" style="display: none">Hidden action</button>
+        <button type="button" class="tiny">Zero size</button>
+        <div class="stack">
+          <button type="button" id="covered">Covered action</button>
+          <div class="overlay"></div>
+        </div>
+        <div id="rich" role="textbox" aria-label="Rich" contenteditable="true"></div>
+        <button type="button" id="far" style="margin-top: 3000px"
+          onclick="document.body.dataset.far = String(Math.round(window.scrollY))">Far button</button>
+        <p id="unicode">Caf&eacute; &mdash; &#x1F600; &Uuml;n&iuml;c&ouml;d&eacute;</p>
+      </main>
+    </div>
+    <script>
+      // React-style controlled input: JS owns the value and re-renders it on every input event.
+      let note = "";
+      const noteInput = document.getElementById("note");
+      const echo = document.getElementById("echo");
+      function renderNote() {
+        noteInput.value = note;
+        echo.textContent = note;
+      }
+      noteInput.addEventListener("input", (e) => {
+        note = e.target.value;
+        renderNote();
+      });
+
+      // Mask applied one frame after the input event (typical debounced/deferred formatter).
+      const mask = document.getElementById("mask");
+      mask.addEventListener("input", () => {
+        requestAnimationFrame(() => {
+          mask.value = mask.value.slice(0, 3);
+        });
+      });
+
+      // "Sign in" is a client-side route change: pushState + re-render, no page load.
+      document.getElementById("signin").addEventListener("click", () => {
+        history.pushState({}, "", "/welcome");
+        document.title = "E2E Welcome";
+        document.getElementById("app").innerHTML =
+          "<main><h1>Welcome back</h1><button type=\"button\">Sign out</button></main>";
+      });
+    </script>
+  </body>
+</html>
