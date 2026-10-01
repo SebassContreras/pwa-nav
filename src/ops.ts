@@ -2,30 +2,40 @@
 // Single source of truth for open/snapshot/click/fill/extract/act behavior.
 // Both src/cli.ts (command handlers) and src/qa.ts (check runner) call these
 // functions; no logic is duplicated between the two entry points.
-// MVP has no live browser engine: click/fill log intent + supersede the
-// snapshot, snapshot input comes from a caller-supplied ARIA tree, and
-// extract is read-only (never supersedes).
-import { appendFile, mkdir, readFile, writeFile } from "node:fs/promises";
-import { randomUUID } from "node:crypto";
-import { dirname, resolve } from "node:path";
+// Default backend is OfflineBackend (click/fill log intent + supersede the snapshot,
+// snapshot input from a caller-supplied ARIA tree); BidiBackend drives a live browser.
+// extract is read-only (never supersedes) and never calls the backend.
+import { writeFile } from "node:fs/promises";
 import { normalize } from "./snapshot.js";
 import type { Snapshot } from "./snapshot.js";
 import {
+  agentPath,
+  ensureParentDir,
+  isHttpUrl,
+  loadSession,
+  OfflineBackend,
+  parseSession,
+  type ActOp,
+  type ActionResult,
+  type Backend,
+  type Session,
+} from "./backend.js";
+import type { RawElement } from "./browser/collector.js";
+import { buildLiveSnapshot } from "./browser/live-snapshot.js";
+import {
   load as loadSnapshot,
-  resolve as resolveRef,
   save as saveSnapshot,
+  saveLive,
   StaleRefError,
 } from "./refs.js";
+
+// Re-exported so existing callers keep their imports.
+export { ensureParentDir, isHttpUrl, loadSession, parseSession };
+export type { ActOp, Backend, Session };
 
 export const DEFAULT_SESSION_PATH = ".agent/session.json";
 export const DEFAULT_SNAPSHOT_PATH = ".agent/snapshot.json";
 export const DEFAULT_ACTIONS_PATH = ".agent/actions.log";
-
-export interface Session {
-  url: string;
-  title: string;
-  openedAt: string;
-}
 
 export interface SnapshotPerformOptions {
   url: string;
@@ -34,54 +44,84 @@ export interface SnapshotPerformOptions {
   quiet?: boolean;
 }
 
-export type ActOp = { kind: "click"; ref: string } | { kind: "fill"; ref: string; text: string };
-
 export type ExtractMode = "text" | "links";
 
-export function isHttpUrl(value: string): boolean {
-  try {
-    const parsed = new URL(value);
-    return parsed.protocol === "http:" || parsed.protocol === "https:";
-  } catch {
-    return false;
-  }
+// Optional trailing argument of every perform*: omitted = OfflineBackend (fixture behavior).
+export interface OpOptions {
+  backend?: Backend;
+  /** Live backends: perform the action. Default false = dry-run. Offline ignores it. */
+  armed?: boolean;
+  /** open: add the URL origin to the allow-list. */
+  allowOrigin?: boolean;
+  /** Live backends: fallback for snapshots whose sidecar predates the includeAll record. */
+  includeAll?: boolean;
 }
 
-export async function ensureParentDir(filePath: string): Promise<void> {
-  await mkdir(dirname(resolve(filePath)), { recursive: true });
+function backendOf(options: OpOptions): Backend {
+  return options.backend ?? new OfflineBackend();
 }
 
-export function parseSession(raw: unknown): Session | null {
-  if (typeof raw !== "object" || raw === null) {
-    return null;
-  }
-  const record = raw as Record<string, unknown>;
-  if (typeof record["url"] !== "string") {
-    return null;
-  }
-  const title = typeof record["title"] === "string" ? record["title"] : "";
-  const openedAt = typeof record["openedAt"] === "string" ? record["openedAt"] : "";
-  return { url: record["url"], title, openedAt };
+function actionContext(options: OpOptions): { armed?: boolean; includeAll?: boolean } {
+  return {
+    ...(options.armed === undefined ? {} : { armed: options.armed }),
+    ...(options.includeAll === undefined ? {} : { includeAll: options.includeAll }),
+  };
 }
 
-export async function loadSession(sessionPath: string): Promise<Session | null> {
-  try {
-    const text = await readFile(sessionPath, "utf8");
-    return parseSession(JSON.parse(text) as unknown);
-  } catch {
-    return null;
+// "click ok: <plan> -> <snapshot path> (id X)" / "click dry-run: <plan>".
+function reportLine(kind: ActOp["kind"], result: ActionResult, agentDir: string): string {
+  if (result.kind === "dry-run") {
+    return `${kind} dry-run: ${result.plan}`;
   }
+  const head = `${kind} ok: ${result.plan}`;
+  return result.interim === true
+    ? head
+    : `${head} -> ${agentPath(agentDir, "snapshot.json")} (id ${result.snapshotId})`;
 }
 
-export async function performOpen(url: string): Promise<Session> {
-  if (url.length === 0 || !isHttpUrl(url)) {
-    throw new Error(`invalid URL (expected http/https): ${url}`);
-  }
-  const session: Session = { url, title: "", openedAt: new Date().toISOString() };
-  await ensureParentDir(DEFAULT_SESSION_PATH);
-  await writeFile(DEFAULT_SESSION_PATH, JSON.stringify(session, null, 2) + "\n", "utf8");
-  console.log(`open ok: ${url} -> ${DEFAULT_SESSION_PATH}`);
+export async function performOpen(url: string, options: OpOptions = {}): Promise<Session> {
+  const backend = backendOf(options);
+  const session = await backend.open(url, { allowOrigin: options.allowOrigin === true });
+  console.log(`open ok: ${url} -> ${agentPath(backend.agentDir, "session.json")}`);
   return session;
+}
+
+export interface LiveSnapshotOptions {
+  /** Extra copy of snapshot.json; the store under backend.agentDir is always written. */
+  outPath?: string;
+  quiet?: boolean;
+}
+
+// Live snapshot: collect from the backend's DOM, store snapshot + locator sidecar (+ extras).
+// Returns the collected raw elements too, so `snapshot --learn` never collects twice.
+export async function captureLiveSnapshot(
+  backend: Backend,
+  options: LiveSnapshotOptions & { includeAll?: boolean } = {},
+): Promise<{ snapshot: Snapshot; raw: RawElement[] }> {
+  const live = await backend.collect({ includeAll: options.includeAll === true });
+  const built = buildLiveSnapshot(live.raw, { url: live.url, title: live.title });
+  await saveLive(built.snapshot, built.locators, built.extras, {
+    agentDir: backend.agentDir,
+    includeAll: options.includeAll === true,
+  });
+  const stored = agentPath(backend.agentDir, "snapshot.json");
+  if (options.outPath !== undefined && options.outPath !== stored) {
+    await ensureParentDir(options.outPath);
+    await writeFile(options.outPath, JSON.stringify(built.snapshot, null, 2) + "\n", "utf8");
+  }
+  if (options.quiet !== true) {
+    console.log(
+      `snapshot ok: ${built.snapshot.elements.length.toString()} elements -> ${options.outPath ?? stored} (id ${built.snapshot.snapshotId})`,
+    );
+  }
+  return { snapshot: built.snapshot, raw: live.raw };
+}
+
+export async function performLiveSnapshot(
+  backend: Backend,
+  options: LiveSnapshotOptions & { includeAll?: boolean } = {},
+): Promise<Snapshot> {
+  return (await captureLiveSnapshot(backend, options)).snapshot;
 }
 
 export async function performSnapshot(
@@ -102,79 +142,29 @@ export async function performSnapshot(
   return snapshot;
 }
 
-export async function performClick(snapshotId: string, ref: string): Promise<string> {
-  // Shared click handler: resolve, log intent, supersede, return next id.
+export async function performClick(
+  snapshotId: string,
+  ref: string,
+  options: OpOptions = {},
+): Promise<string> {
   // Throws StaleRefError on unknown/superseded snapshotId or ref.
-  const element = await resolveRef(snapshotId, ref);
-  const snapshot = await loadSnapshot(snapshotId);
-  // MVP has no live browser backend: record the click as an intent log.
-  const intent = {
-    snapshotId,
-    ref: element.ref,
-    role: element.role,
-    name: element.name,
-    at: new Date().toISOString(),
-  };
-  await ensureParentDir(DEFAULT_ACTIONS_PATH);
-  await appendFile(DEFAULT_ACTIONS_PATH, JSON.stringify(intent) + "\n", "utf8");
-  // Invalidate: supersede the old snapshot with a fresh id so its refs fail fast.
-  const current = snapshot ?? {
-    snapshotId,
-    url: "",
-    title: "",
-    elements: [element],
-  };
-  const next = {
-    snapshotId: randomUUID(),
-    url: current.url,
-    title: current.title,
-    elements: current.elements,
-  };
-  await saveSnapshot(next);
-  console.log(
-    `click ok: ${element.ref} (${element.role} "${element.name}") -> ${DEFAULT_SNAPSHOT_PATH} (id ${next.snapshotId})`,
-  );
-  return next.snapshotId;
+  const backend = backendOf(options);
+  const result = await backend.click(snapshotId, ref, actionContext(options));
+  console.log(reportLine("click", result, backend.agentDir));
+  return result.snapshotId;
 }
 
 export async function performFill(
   snapshotId: string,
   ref: string,
   text: string,
+  options: OpOptions = {},
 ): Promise<string> {
-  // Shared fill handler: resolve, log intent, supersede, return next id.
   // Throws StaleRefError on unknown/superseded snapshotId or ref.
-  const element = await resolveRef(snapshotId, ref);
-  const snapshot = await loadSnapshot(snapshotId);
-  // MVP has no live browser backend: record the fill as an intent log.
-  const intent = {
-    snapshotId,
-    ref: element.ref,
-    role: element.role,
-    name: element.name,
-    text,
-    at: new Date().toISOString(),
-  };
-  await ensureParentDir(DEFAULT_ACTIONS_PATH);
-  await appendFile(DEFAULT_ACTIONS_PATH, JSON.stringify(intent) + "\n", "utf8");
-  // Invalidate: supersede the old snapshot with a fresh id so its refs fail fast.
-  const current = snapshot ?? {
-    snapshotId,
-    url: "",
-    title: "",
-    elements: [element],
-  };
-  const next = {
-    snapshotId: randomUUID(),
-    url: current.url,
-    title: current.title,
-    elements: current.elements,
-  };
-  await saveSnapshot(next);
-  console.log(
-    `fill ok: ${element.ref} (${element.role} "${element.name}") -> ${DEFAULT_SNAPSHOT_PATH} (id ${next.snapshotId})`,
-  );
-  return next.snapshotId;
+  const backend = backendOf(options);
+  const result = await backend.fill(snapshotId, ref, text, actionContext(options));
+  console.log(reportLine("fill", result, backend.agentDir));
+  return result.snapshotId;
 }
 
 export function parseActOp(token: string): ActOp {
@@ -201,19 +191,26 @@ export function parseActOp(token: string): ActOp {
   throw new Error(`invalid act op: ${token} (expected fill:<ref>=<text> or click:<ref>).`);
 }
 
-export async function performAct(snapshotId: string, ops: ActOp[]): Promise<string> {
-  // Sequential delegation to the same click/fill handlers. Each mutating op
-  // supersedes, so later refs resolve against the evolving snapshotId.
-  // First StaleRefError aborts the sequence (non-zero exit via caller).
-  let currentId = snapshotId;
-  for (const op of ops) {
-    if (op.kind === "click") {
-      currentId = await performClick(currentId, op.ref);
-    } else {
-      currentId = await performFill(currentId, op.ref, op.text);
-    }
+export async function performAct(
+  snapshotId: string,
+  ops: ActOp[],
+  options: OpOptions = {},
+): Promise<string> {
+  // Offline: sequential click/fill on the evolving snapshot id. Live: one session, one new
+  // snapshot at the end. First error aborts the sequence (non-zero exit via caller).
+  const backend = backendOf(options);
+  const act = await backend.act(snapshotId, ops, {
+    ...actionContext(options),
+    onResult: (op, result) => {
+      console.log(reportLine(op.kind, result, backend.agentDir));
+    },
+  });
+  if (act.results.some((r) => r.interim === true)) {
+    console.log(
+      `act ok: ${act.results.length.toString()} ops -> ${agentPath(backend.agentDir, "snapshot.json")} (id ${act.snapshotId})`,
+    );
   }
-  return currentId;
+  return act.snapshotId;
 }
 
 function formatExtractLine(element: {
@@ -234,10 +231,13 @@ function formatExtractLine(element: {
 export async function performExtract(
   snapshotId: string,
   mode: ExtractMode,
+  options: OpOptions = {},
 ): Promise<string[]> {
   // Read-only: load the stored snapshot, never supersede/invalidate it.
   // Unknown snapshotId fails fast with the same stale_ref format as click/fill.
-  const snapshot = await loadSnapshot(snapshotId);
+  const snapshot = await loadSnapshot(snapshotId, {
+    agentDir: options.backend?.agentDir ?? ".agent",
+  });
   if (snapshot === null) {
     throw new StaleRefError(snapshotId, `unknown snapshotId "${snapshotId}"`);
   }
