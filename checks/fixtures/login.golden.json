@@ -1,0 +1,46 @@
+[
+  {
+    "role": "textbox",
+    "name": "Email",
+    "nameSource": "label",
+    "occurrence": 0,
+    "inputType": "text",
+    "autocomplete": "username"
+  },
+  {
+    "role": "textbox",
+    "name": "Password",
+    "nameSource": "label",
+    "occurrence": 0,
+    "inputType": "password",
+    "autocomplete": "current-password"
+  },
+  {
+    "role": "button",
+    "name": "Show password",
+    "nameSource": "aria-label",
+    "occurrence": 0,
+    "buttonType": "button"
+  },
+  {
+    "role": "button",
+    "name": "Sign in",
+    "nameSource": "content",
+    "occurrence": 0,
+    "buttonType": "submit"
+  },
+  {
+    "role": "link",
+    "name": "Forgot password?",
+    "nameSource": "content",
+    "occurrence": 0,
+    "href": "/forgot-password"
+  },
+  {
+    "role": "link",
+    "name": "Help center",
+    "nameSource": "content",
+    "occurrence": 0,
+    "href": "https://help.example.com/articles/42?ref=login#top"
+  }
+]
