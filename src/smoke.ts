@@ -94,6 +94,8 @@ async function runCli(args: string[]): Promise<string> {
   try {
     const { stdout } = await execFileAsync(process.execPath, [cliPath(), ...args], {
       cwd: resolve("."),
+      // Smoke is fixture-driven: live (bidi) is the CLI default, so pin offline.
+      env: { ...process.env, PWA_NAV_BACKEND: "offline" },
     });
     return stdout;
   } catch (error) {

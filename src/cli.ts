@@ -1,13 +1,18 @@
 #!/usr/bin/env node
-// CLI surface for spec 001-nav-snapshot (T003) + spec 003-qa-loop (T001).
-// Commands: `open <url>` persists target URL to .agent/session.json;
-// `snapshot [-i] [--json]` normalizes an ARIA tree (via src/snapshot.ts)
-// and writes .agent/snapshot.json with a fresh snapshotId;
-// `qa run <check-file>` executes a JSON check via src/qa.ts.
-// MVP has no live browser engine: snapshot input comes from --input or stdin.
-// The Playwright MCP backend wiring lands later; this file is the command surface.
+// CLI surface for specs 001 (nav-snapshot), 003 (qa-loop) and 004 (firefox-bidi-backend, T011).
+// Commands: `open <url>`, `snapshot`, `click`, `fill`, `extract`, `act`, `qa run <check-file>`.
+// Verb surface stays at the 5 verbs + act/qa; live capability is flags (--backend, --port,
+// --context, --armed, open --launch/--site/--allow-origin, snapshot --all).
+// Backend: live (`bidi`) is the default; `snapshot --input`/piped stdin and `qa run` stay offline.
 // Action behavior lives in src/ops.ts (shared with the qa runner).
+// Option parsing: node:util parseArgs (strict, per-command tables); every usage error
+// is PwaNavError("invalid_args") -> exit 2.
+import { fstatSync } from "node:fs";
 import { readFile } from "node:fs/promises";
+import { parseArgs, type ParseArgsOptionsConfig } from "node:util";
+import { createBackend, DEFAULT_PORT } from "./backend-factory.js";
+import type { Backend } from "./backend.js";
+import { exitCodeOf, PwaNavError } from "./errors.js";
 import {
   DEFAULT_SESSION_PATH,
   DEFAULT_SNAPSHOT_PATH,
@@ -17,84 +22,236 @@ import {
   performClick,
   performExtract,
   performFill,
+  performLiveSnapshot,
   performOpen,
   performSnapshot,
 } from "./ops.js";
 import type { ActOp, ExtractMode } from "./ops.js";
 import { runCheck } from "./qa.js";
+import {
+  runLearn,
+  runScreenView,
+  runSemanticAct,
+  runSemanticClick,
+  runSemanticFill,
+  validateLearnFlags,
+  NO_INPUT_LINE,
+  type ScreenSource,
+} from "./cli-screens.js";
+import { isSemanticToken } from "./screen-resolve.js";
 
-interface SnapshotArgs {
-  interactiveOnly: boolean;
-  asJson: boolean;
-  inputPath: string | null;
-  urlOverride: string | null;
-  titleOverride: string | null;
-  outPath: string;
-  sessionPath: string;
-}
-
-interface ClickArgs {
-  snapshotId: string;
-  ref: string;
-}
-
-interface FillArgs {
-  snapshotId: string;
-  ref: string;
-  text: string;
-}
-
-interface ActArgs {
-  snapshotId: string;
-  ops: ActOp[];
-}
-
-interface ExtractArgs {
-  snapshotId: string;
-  mode: ExtractMode;
-}
+const SITE_ULID = /^[0-9A-HJKMNP-TV-Z]{26}$/i;
 
 function usage(): string {
   return [
-    "pwa-nav — fluid QA CLI (spec 001-nav-snapshot)",
+    "pwa-nav — fluid QA CLI (specs 001-nav-snapshot, 004-firefox-bidi-backend)",
     "",
     "Usage:",
-    "  pwa-nav open <url>",
-    "  pwa-nav snapshot [-i] [--json] [--input <file>] [--url <url>] [--title <title>] [--out <path>]",
-    "  pwa-nav click --snapshot <id> <ref>",
-    "  pwa-nav fill --snapshot <id> <ref> <text>",
+    "  pwa-nav open <url> [--launch] [--site <ULID>] [--allow-origin]",
+    "  pwa-nav snapshot [-i | --all] [--json] [--input <file>] [--url <url>] [--title <title>] [--out <path>]",
+    "  pwa-nav snapshot --screen [--screen-map <file>] [--screens-dir <dir>]",
+    "  pwa-nav snapshot --learn [--prune] [--locale <bcp47>] [--access public|authenticated|unknown]",
+    "                   [--app-id <slug>] [--app-name <text>] [--screen-map <file>] [--screens-dir <dir>]",
+    "  pwa-nav click --snapshot <id> [--armed] <ref>   |   click [--armed] @<id>",
+    "  pwa-nav fill --snapshot <id> [--armed] <ref> <text>   |   fill [--armed] @<id> <text>",
     "  pwa-nav extract --snapshot <id> --mode text|links",
-    "  pwa-nav act --snapshot <id> <op>...",
+    "  pwa-nav act --snapshot <id> [--armed] <op>...   |   act [--armed] <semantic-op>...",
     "  pwa-nav qa run <check-file>",
     "",
+    "Global options (open, snapshot, click, fill, act):",
+    "  --backend offline|bidi  Default bidi (live Firefox PWA); env PWA_NAV_BACKEND.",
+    "  --port <n>              BiDi port 1024-65535 (default 9222); env PWA_NAV_PORT.",
+    "  --context <id>          Browsing context id (required when the PWA has several top-level contexts).",
+    "  -h, --help              Show this help.",
+    "",
     "Commands:",
-    "  open <url>      Persist target URL to .agent/session.json (no browser launch in MVP).",
-    "  snapshot        Read ARIA tree from --input file or stdin, write .agent/snapshot.json.",
-    "  click           Resolve snapshotId + ref, log intent, supersede snapshot (no live backend in MVP).",
-    "  fill            Resolve snapshotId + ref, log text intent, supersede snapshot (no live backend in MVP).",
+    "  open <url>      Live: navigate the PWA window. Offline: persist URL to .agent/session.json.",
+    "  snapshot        Live (no --input, no piped stdin): collect the DOM, write .agent/snapshot.json.",
+    "                  With --input <file> or piped stdin: normalize an ARIA tree offline.",
+    "  click           Live: dry-run unless --armed. Offline: log intent, supersede snapshot.",
+    "  fill            Same as click; typed text of password/sensitive fields is never printed.",
     "  extract         Read-only narrow extraction (text|links) from stored snapshot (never supersedes).",
-    "  act             Run bulk ops sequentially (fill:<ref>=<text> click:<ref>), superseding per op.",
-    "  qa run          Execute a JSON check file (open/snapshot/click/fill/act/extract/assert-text),",
-    "                  save per-step snapshots to .agent/evidence/<run-id>/ + result.json, exit 0/1.",
+    "  act             Run bulk ops (fill:<ref>=<text> click:<ref>); live: one session, one new snapshot.",
+    "  qa run          Execute a JSON check file (offline backend; open/snapshot/click/fill/act/extract/",
+    "                  assert-text), save evidence to .agent/evidence/<run-id>/ + result.json, exit 0/1.",
+    "",
+    "Open options:",
+    "  --launch        Start the PWA runtime with the debugging port if nothing listens (never edits the profile).",
+    "  --site <ULID>   Pick the firefoxpwa site when several share the origin (bidi only).",
+    "  --allow-origin  Consent to navigate to this origin: required unless it is already in .agent/allow.json.",
+    "                  Added to the allow-list only after a successful navigation. Without it: origin_blocked (6),",
+    "                  checked before any browser connection. An active kill-switch also blocks open (7).",
+    "",
+    "Snapshot options:",
+    "  -i, --interactive   Interactive elements only (live default; offline input assumed pre-filtered).",
+    "  --all               Live: full tree (headings, images) instead of interactive-only.",
+    "  --json              Print normalized snapshot JSON to stdout (file is always written).",
+    "  --input <file>      Read raw ARIA tree from file instead of the live DOM (offline).",
+    "  --url <url>         Offline: override URL meta (default: .agent/session.json url).",
+    "  --title <title>     Offline: override title meta (default: .agent/session.json title).",
+    "  --out <path>        Snapshot output path (default: .agent/snapshot.json).",
+    "",
+    "Screen-map options (spec 005; live backend unless noted):",
+    "  --screen            Print the compact view of the mapped screen matching the CURRENT page URL",
+    "                      (reads the URL only: no DOM collection, writes no snapshot; offline: URL from",
+    "                      .agent/session.json). No map/screen: unmapped_screen (13). Exclusive with",
+    "                      --input, --learn, -i, --all, --json.",
+    "  --learn             Live snapshot (usual `snapshot ok` line), then learn the screen from that same",
+    "                      collection into a screen map; prints the diff and `screen map: <path> (written|unchanged)`.",
+    "                      Map file: --screen-map, else the existing map for the page origin in the screens",
+    "                      dir, else a NEW <screens-dir>/<app-id>.screens.json. Never writes field values.",
+    "  --prune             With --learn: remove entries no longer on the page (default: keep and flag missing).",
+    "  --locale <bcp47>    With --learn: UI language of the app. REQUIRED for a NEW map (page lang is not",
+    "                      trusted); ignored for an existing map (stored locale is kept).",
+    "  --access <a>        With --learn: public|authenticated|unknown (default unknown).",
+    "  --app-id <slug>     With --learn, new map: app id (default: slug of host[-port], e.g. localhost-5173).",
+    "  --app-name <text>   With --learn, new map: app name (default: page title).",
+    "  --screen-map <file> Explicit map file (--screen, --learn, @id targets). Default: the map whose app.origin",
+    "                      equals the current origin, searched in the screens dir.",
+    "  --screens-dir <dir> Screens directory (default ./screens); env PWA_NAV_SCREENS_DIR.",
+    "",
+    "Action options (click, fill, act):",
+    "  --armed             Actually send input. Without it live actions are dry-run. Only this flag arms:",
+    "                      no env var does. Kill-switch (PWA_NAV_KILL_SWITCH or .agent/kill) and the",
+    "                      origin allow-list still apply.",
     "",
     "Bulk op format:",
     "  fill:<ref>=<text>  Fill ref with text (split on first =).",
     "  click:<ref>        Click ref.",
+    "",
+    "Semantic @id targets (click, fill, act; live backend only; no --snapshot):",
+    "  click @sign-in | fill @email <text> | act click:@id fill:@id=<text> flow:<id> [key=value ...]",
+    "  The current URL selects the mapped screen; @id is resolved on a FRESH snapshot by role+name+occurrence",
+    "  (not found live: stale_ref 3). Sensitive fields and human-only flows are refused before any input",
+    "  (sensitive_target 11); unknown id/flow: unknown_target 12; no map/screen: unmapped_screen 13.",
+    "  Dry-run unless --armed; an armed action prints the compact view of the resulting screen, never a",
+    "  full snapshot. Do not mix semantic tokens with plain refs in one act.",
     "",
     "Check file format (JSON):",
     '  {"steps":[{"op":"open","url":"https://..."}, {"op":"snapshot","input":"tree.txt"},',
     '            {"op":"click","ref":"e5"}, {"op":"assert-text","text":"Log in"}]}',
     "  Snapshot steps take an optional input file (default: latest stored snapshot).",
     "",
-    "Snapshot options:",
-    "  -i, --interactive   Accept interactive-only tree (input assumed pre-filtered by MCP backend).",
-    "  --json              Print normalized snapshot JSON to stdout (file is always written).",
-    "  --input <file>      Read raw ARIA tree from file instead of stdin.",
-    "  --url <url>         Override URL meta (default: .agent/session.json url).",
-    "  --title <title>     Override title meta (default: .agent/session.json title).",
-    "  --out <path>        Snapshot output path (default: .agent/snapshot.json).",
+    "Exit codes:",
+    "  0 ok | 1 failure (qa fail, other) | 2 invalid_args | 3 stale_ref | 4 no_browser | 5 session_busy",
+    "  6 origin_blocked | 7 kill_switch | 8 not_actionable | 9 timeout | 10 protocol",
+    "  11 sensitive_target (sensitive field / human-only flow) | 12 unknown_target (@id or flow not in map)",
+    "  13 unmapped_screen (no map for the origin, or no screen for the route)",
     "",
   ].join("\n");
+}
+
+function invalid(message: string): PwaNavError {
+  return new PwaNavError("invalid_args", message + "\n\n" + usage());
+}
+
+// Value hints for "missing value" messages (same text as the pre-parseArgs CLI).
+const VALUE_HINT: Readonly<Record<string, string>> = {
+  "--input": "<file>",
+  "--url": "<url>",
+  "--title": "<title>",
+  "--out": "<path>",
+  "--snapshot": "<id>",
+  "--mode": "text|links",
+  "--port": "<n>",
+  "--context": "<id>",
+  "--backend": "offline|bidi",
+  "--site": "<ULID>",
+  "--screen-map": "<file>",
+  "--screens-dir": "<dir>",
+  "--locale": "<bcp47>",
+  "--access": "public|authenticated|unknown",
+  "--app-id": "<slug>",
+  "--app-name": "<text>",
+};
+
+function missingValue(name: string): PwaNavError {
+  const hint = VALUE_HINT[name];
+  return invalid(`missing value for ${name}${hint === undefined ? "" : ` ${hint}`}.`);
+}
+
+function translateParseError(command: string, error: unknown): PwaNavError {
+  const text = error instanceof Error ? error.message : String(error);
+  const unknown = /Unknown option '([^']+)'/.exec(text);
+  if (unknown !== null) {
+    return invalid(`unknown ${command} option: ${unknown[1] ?? ""}`);
+  }
+  const name = /Option '(?:-\w, )?(--[\w-]+)/.exec(text)?.[1] ?? "option";
+  if (text.includes("does not take an argument")) {
+    return invalid(`option ${name} does not take a value.`);
+  }
+  return missingValue(name);
+}
+
+function strictParse<const O extends ParseArgsOptionsConfig>(command: string, args: string[], options: O) {
+  try {
+    return parseArgs({ args, options, allowPositionals: true, strict: true });
+  } catch (error) {
+    throw translateParseError(command, error);
+  }
+}
+
+function requireNonEmpty(name: string, value: string | undefined): string | undefined {
+  if (value !== undefined && value.length === 0) {
+    throw missingValue(name);
+  }
+  return value;
+}
+
+function printHelpAndExit(help: boolean | undefined): void {
+  if (help === true) {
+    console.log(usage());
+    process.exit(0);
+  }
+}
+
+const LIVE_OPTIONS = {
+  backend: { type: "string" },
+  port: { type: "string" },
+  context: { type: "string" },
+  help: { type: "boolean", short: "h" },
+} as const satisfies ParseArgsOptionsConfig;
+
+const SCREEN_OPTIONS = {
+  "screen-map": { type: "string" },
+  "screens-dir": { type: "string" },
+} as const satisfies ParseArgsOptionsConfig;
+
+interface LiveConfig {
+  mode: "offline" | "bidi";
+  port: number;
+  contextId?: string;
+}
+
+function resolveLive(values: { backend?: string; port?: string; context?: string }): LiveConfig {
+  const rawBackend = requireNonEmpty("--backend", values.backend) ?? process.env["PWA_NAV_BACKEND"] ?? "bidi";
+  if (rawBackend !== "offline" && rawBackend !== "bidi") {
+    throw invalid(`invalid --backend: ${rawBackend} (expected offline|bidi).`);
+  }
+  const rawPort = requireNonEmpty("--port", values.port) ?? process.env["PWA_NAV_PORT"];
+  let port = DEFAULT_PORT;
+  if (rawPort !== undefined) {
+    port = /^\d+$/.test(rawPort) ? Number(rawPort) : Number.NaN;
+    if (!(port >= 1024 && port <= 65535)) {
+      throw invalid(`invalid port: ${rawPort} (expected an integer 1024-65535).`);
+    }
+  }
+  const contextId = requireNonEmpty("--context", values.context);
+  return { mode: rawBackend, port, ...(contextId === undefined ? {} : { contextId }) };
+}
+
+function makeBackend(
+  live: LiveConfig,
+  extra: { armed?: boolean; launch?: boolean; siteId?: string } = {},
+): Backend {
+  return createBackend({
+    mode: live.mode,
+    port: live.port,
+    ...(live.contextId === undefined ? {} : { contextId: live.contextId }),
+    ...(extra.armed === undefined ? {} : { armed: extra.armed }),
+    ...(extra.launch === undefined ? {} : { launch: extra.launch }),
+    ...(extra.siteId === undefined ? {} : { siteId: extra.siteId }),
+  });
 }
 
 async function readStdin(): Promise<string> {
@@ -105,277 +262,317 @@ async function readStdin(): Promise<string> {
   return Buffer.concat(chunks).toString("utf8");
 }
 
-async function cmdOpen(url: string | undefined): Promise<void> {
+// True only for a real pipe or redirected file (not a TTY, /dev/null or a socket).
+function stdinHasPipe(): boolean {
+  try {
+    const stat = fstatSync(0);
+    return stat.isFIFO() || stat.isFile();
+  } catch {
+    return false;
+  }
+}
+
+async function cmdOpen(rest: string[]): Promise<void> {
+  const { values, positionals } = strictParse("open", rest, {
+    ...LIVE_OPTIONS,
+    launch: { type: "boolean" },
+    site: { type: "string" },
+    "allow-origin": { type: "boolean" },
+  });
+  printHelpAndExit(values.help);
+  const url = positionals[0];
   if (url === undefined || url.length === 0) {
-    throw new Error("missing <url>.\n\n" + usage());
+    throw invalid("missing <url>.");
   }
-  await performOpen(url);
-}
-
-function parseSnapshotArgs(rest: string[]): SnapshotArgs {
-  const args: SnapshotArgs = {
-    interactiveOnly: false,
-    asJson: false,
-    inputPath: null,
-    urlOverride: null,
-    titleOverride: null,
-    outPath: DEFAULT_SNAPSHOT_PATH,
-    sessionPath: DEFAULT_SESSION_PATH,
-  };
-  for (let i = 0; i < rest.length; i += 1) {
-    const token = rest[i] ?? "";
-    if (token === "-i" || token === "--interactive") {
-      args.interactiveOnly = true;
-    } else if (token === "--json") {
-      args.asJson = true;
-    } else if (token === "--input") {
-      const value = rest[i + 1];
-      if (value === undefined || value.startsWith("-")) {
-        throw new Error("missing value for --input <file>.");
-      }
-      args.inputPath = value;
-      i += 1;
-    } else if (token === "--url") {
-      const value = rest[i + 1];
-      if (value === undefined || value.length === 0) {
-        throw new Error("missing value for --url <url>.");
-      }
-      args.urlOverride = value;
-      i += 1;
-    } else if (token === "--title") {
-      const value = rest[i + 1];
-      if (value === undefined) {
-        throw new Error("missing value for --title <title>.");
-      }
-      args.titleOverride = value;
-      i += 1;
-    } else if (token === "--out") {
-      const value = rest[i + 1];
-      if (value === undefined || value.length === 0) {
-        throw new Error("missing value for --out <path>.");
-      }
-      args.outPath = value;
-      i += 1;
-    } else if (token === "-h" || token === "--help") {
-      console.log(usage());
-      process.exit(0);
-    } else {
-      throw new Error(`unknown snapshot option: ${token}\n\n` + usage());
-    }
+  if (positionals.length > 1) {
+    throw invalid(`unexpected open argument: ${positionals[1] ?? ""}`);
   }
-  return args;
-}
-
-async function readRawTree(inputPath: string | null): Promise<string> {
-  if (inputPath !== null) {
-    return readFile(inputPath, "utf8");
+  const live = resolveLive(values);
+  const siteId = requireNonEmpty("--site", values.site);
+  if (siteId !== undefined && !SITE_ULID.test(siteId)) {
+    throw invalid(`invalid --site: ${siteId} (expected a 26-char ULID).`);
   }
-  if (process.stdin.isTTY) {
-    throw new Error(
-      "no ARIA-tree input: pipe the tree via stdin or pass --input <file>.\n" +
-        "Example: pwa-nav snapshot -i --json --input tree.txt",
-    );
+  if (live.mode === "offline" && (values.launch === true || siteId !== undefined || values["allow-origin"] === true)) {
+    throw invalid("--launch, --site and --allow-origin require --backend bidi.");
   }
-  return readStdin();
+  const backend = makeBackend(live, {
+    ...(values.launch === true ? { launch: true } : {}),
+    ...(siteId === undefined ? {} : { siteId }),
+  });
+  await performOpen(url, { backend, allowOrigin: values["allow-origin"] === true });
 }
 
 async function cmdSnapshot(rest: string[]): Promise<void> {
-  const args = parseSnapshotArgs(rest);
-  const rawTree = await readRawTree(args.inputPath);
-  const session = await loadSession(args.sessionPath);
-  const url = args.urlOverride ?? session?.url ?? "";
-  const title = args.titleOverride ?? session?.title ?? "";
+  const { values, positionals } = strictParse("snapshot", rest, {
+    ...LIVE_OPTIONS,
+    interactive: { type: "boolean", short: "i" },
+    all: { type: "boolean" },
+    json: { type: "boolean" },
+    input: { type: "string" },
+    url: { type: "string" },
+    title: { type: "string" },
+    out: { type: "string" },
+    ...SCREEN_OPTIONS,
+    screen: { type: "boolean" },
+    learn: { type: "boolean" },
+    prune: { type: "boolean" },
+    locale: { type: "string" },
+    access: { type: "string" },
+    "app-id": { type: "string" },
+    "app-name": { type: "string" },
+  });
+  printHelpAndExit(values.help);
+  if (positionals.length > 0) {
+    throw invalid(`unknown snapshot option: ${positionals[0] ?? ""}`);
+  }
+  const inputPath = requireNonEmpty("--input", values.input);
+  const urlOverride = requireNonEmpty("--url", values.url);
+  const outPath = requireNonEmpty("--out", values.out) ?? DEFAULT_SNAPSHOT_PATH;
+  if (values.interactive === true && values.all === true) {
+    throw invalid("--interactive and --all are mutually exclusive.");
+  }
+  const live = resolveLive(values);
+  const asJson = values.json === true;
+
+  if (values.learn !== true) {
+    const learnOnly = [
+      ["--prune", values.prune === true],
+      ["--locale", values.locale !== undefined],
+      ["--access", values.access !== undefined],
+      ["--app-id", values["app-id"] !== undefined],
+      ["--app-name", values["app-name"] !== undefined],
+    ] as const;
+    const stray = learnOnly.find(([, present]) => present);
+    if (stray !== undefined) throw invalid(`${stray[0]} requires --learn.`);
+  }
+  if (values.screen === true || values.learn === true) {
+    const screenSource = screenSourceOf(values);
+    if (values.screen === true && values.learn === true) {
+      throw invalid("--screen and --learn are mutually exclusive.");
+    }
+    const mode = values.screen === true ? "--screen" : "--learn";
+    if (inputPath !== undefined || asJson || values.all === true || (values.screen === true && values.interactive === true)) {
+      throw invalid(`${mode} cannot be combined with --input, --json${values.screen === true ? ", -i" : ""} or --all.`);
+    }
+    if (values.screen === true) {
+      await runScreenView(makeBackend(live), screenSource);
+      return;
+    }
+    if (live.mode === "offline") {
+      throw invalid("--learn needs the live backend (--backend bidi).");
+    }
+    const locale = requireNonEmpty("--locale", values.locale);
+    const access = requireNonEmpty("--access", values.access);
+    const appId = requireNonEmpty("--app-id", values["app-id"]);
+    const appName = requireNonEmpty("--app-name", values["app-name"]);
+    validateLearnFlags({ locale, access, appId });
+    await runLearn(makeBackend(live), {
+      ...screenSource,
+      outPath,
+      prune: values.prune === true,
+      ...(locale === undefined ? {} : { locale }),
+      ...(access === undefined ? {} : { access }),
+      ...(appId === undefined ? {} : { appId }),
+      ...(appName === undefined ? {} : { appName }),
+    });
+    return;
+  }
+
+  // Offline normalizer path: explicit --input, piped stdin, or --backend offline.
+  let rawTree: string | null = null;
+  if (inputPath !== undefined) {
+    rawTree = await readFile(inputPath, "utf8");
+  } else if (live.mode === "offline") {
+    if (process.stdin.isTTY) {
+      throw new PwaNavError(
+        "invalid_args",
+        "no ARIA-tree input: pipe the tree via stdin or pass --input <file>.\n" +
+          "Example: pwa-nav snapshot -i --json --input tree.txt",
+      );
+    }
+    rawTree = await readStdin();
+  } else if (stdinHasPipe()) {
+    const piped = await readStdin();
+    rawTree = piped.trim().length > 0 ? piped : null;
+  }
+
+  if (rawTree === null) {
+    const snapshot = await performLiveSnapshot(makeBackend(live), {
+      outPath,
+      quiet: asJson,
+      includeAll: values.all === true,
+    });
+    if (asJson) {
+      console.log(JSON.stringify(snapshot));
+    }
+    return;
+  }
+
+  const session = await loadSession(DEFAULT_SESSION_PATH);
+  const url = urlOverride ?? session?.url ?? "";
+  const title = values.title ?? session?.title ?? "";
   // -i is accepted for contract compatibility: the MCP backend supplies an
   // interactive-only tree; file/stdin input is assumed pre-filtered.
-  const snapshot = await performSnapshot(rawTree, {
-    url,
-    title,
-    outPath: args.outPath,
-    quiet: args.asJson,
-  });
-  if (args.asJson) {
+  const snapshot = await performSnapshot(rawTree, { url, title, outPath, quiet: asJson });
+  if (asJson) {
     console.log(JSON.stringify(snapshot));
   }
 }
 
-function parseClickArgs(rest: string[]): ClickArgs {
-  let snapshotId: string | null = null;
-  const positionals: string[] = [];
-  for (let i = 0; i < rest.length; i += 1) {
-    const token = rest[i] ?? "";
-    if (token === "--snapshot") {
-      const value = rest[i + 1];
-      if (value === undefined || value.length === 0) {
-        throw new Error("missing value for --snapshot <id>.");
-      }
-      snapshotId = value;
-      i += 1;
-    } else if (token === "-h" || token === "--help") {
-      console.log(usage());
-      process.exit(0);
-    } else if (token.startsWith("-")) {
-      throw new Error(`unknown click option: ${token}\n\n` + usage());
-    } else {
-      positionals.push(token);
-    }
+// Shared by click/fill/act. `--armed` is deliberately flag-only: an environment variable is
+// never honored for it, so a stray env can never silently arm a live action.
+const ACTION_OPTIONS = {
+  ...LIVE_OPTIONS,
+  ...SCREEN_OPTIONS,
+  snapshot: { type: "string" },
+  armed: { type: "boolean" },
+} as const satisfies ParseArgsOptionsConfig;
+
+function screenSourceOf(values: { "screen-map"?: string; "screens-dir"?: string }): ScreenSource {
+  const screenMap = requireNonEmpty("--screen-map", values["screen-map"]);
+  const screensDir = requireNonEmpty("--screens-dir", values["screens-dir"]);
+  return {
+    ...(screenMap === undefined ? {} : { screenMap }),
+    ...(screensDir === undefined ? {} : { screensDir }),
+  };
+}
+
+// Common guard for @id targets: live backend only, no --snapshot.
+function semanticContext(values: {
+  snapshot?: string;
+  armed?: boolean;
+  "screen-map"?: string;
+  "screens-dir"?: string;
+  backend?: string;
+  port?: string;
+  context?: string;
+}): Parameters<typeof runSemanticClick>[0] {
+  if (values.snapshot !== undefined) {
+    throw invalid("--snapshot is not used with @id targets (they resolve on a fresh snapshot).");
   }
-  if (snapshotId === null) {
-    throw new Error("missing --snapshot <id>.\n\n" + usage());
+  const live = resolveLive(values);
+  if (live.mode === "offline") {
+    throw invalid("@id targets need the live backend (--backend bidi).");
   }
-  const ref = positionals[0];
-  if (ref === undefined || positionals.length !== 1) {
-    throw new Error("missing <ref>.\n\n" + usage());
+  const armed = values.armed === true;
+  return { ...screenSourceOf(values), backend: makeBackend(live, { armed }), armed };
+}
+
+function noInputNote(live: LiveConfig, armed: boolean): void {
+  if (live.mode === "bidi" && !armed) {
+    console.log(NO_INPUT_LINE);
   }
-  return { snapshotId, ref };
+}
+
+function requireSnapshotId(value: string | undefined): string {
+  const snapshotId = requireNonEmpty("--snapshot", value);
+  if (snapshotId === undefined) {
+    throw invalid("missing --snapshot <id>.");
+  }
+  return snapshotId;
 }
 
 async function cmdClick(rest: string[]): Promise<void> {
-  const args = parseClickArgs(rest);
-  await performClick(args.snapshotId, args.ref);
-}
-
-function parseFillArgs(rest: string[]): FillArgs {
-  let snapshotId: string | null = null;
-  const positionals: string[] = [];
-  for (let i = 0; i < rest.length; i += 1) {
-    const token = rest[i] ?? "";
-    if (token === "--snapshot") {
-      const value = rest[i + 1];
-      if (value === undefined || value.length === 0) {
-        throw new Error("missing value for --snapshot <id>.");
-      }
-      snapshotId = value;
-      i += 1;
-    } else if (token === "-h" || token === "--help") {
-      console.log(usage());
-      process.exit(0);
-    } else if (token.startsWith("-")) {
-      throw new Error(`unknown fill option: ${token}\n\n` + usage());
-    } else {
-      positionals.push(token);
-    }
+  const { values, positionals } = strictParse("click", rest, ACTION_OPTIONS);
+  printHelpAndExit(values.help);
+  const semanticRef = positionals[0];
+  if (semanticRef?.startsWith("@") === true) {
+    if (positionals.length !== 1) throw invalid("missing <ref>.");
+    await runSemanticClick(semanticContext(values), semanticRef.slice(1));
+    return;
   }
-  if (snapshotId === null) {
-    throw new Error("missing --snapshot <id>.\n\n" + usage());
-  }
+  const snapshotId = requireSnapshotId(values.snapshot);
   const ref = positionals[0];
-  const text = positionals[1];
-  if (ref === undefined || text === undefined || positionals.length !== 2) {
-    throw new Error("missing <ref> <text>.\n\n" + usage());
+  if (ref === undefined || positionals.length !== 1) {
+    throw invalid("missing <ref>.");
   }
-  return { snapshotId, ref, text };
+  const live = resolveLive(values);
+  const armed = values.armed === true;
+  await performClick(snapshotId, ref, { backend: makeBackend(live, { armed }), armed });
+  noInputNote(live, armed);
 }
 
 async function cmdFill(rest: string[]): Promise<void> {
-  const args = parseFillArgs(rest);
-  await performFill(args.snapshotId, args.ref, args.text);
-}
-
-function parseActArgs(rest: string[]): ActArgs {
-  let snapshotId: string | null = null;
-  const positionals: string[] = [];
-  for (let i = 0; i < rest.length; i += 1) {
-    const token = rest[i] ?? "";
-    if (token === "--snapshot") {
-      const value = rest[i + 1];
-      if (value === undefined || value.length === 0) {
-        throw new Error("missing value for --snapshot <id>.");
-      }
-      snapshotId = value;
-      i += 1;
-    } else if (token === "-h" || token === "--help") {
-      console.log(usage());
-      process.exit(0);
-    } else if (token.startsWith("-")) {
-      throw new Error(`unknown act option: ${token}\n\n` + usage());
-    } else {
-      positionals.push(token);
-    }
+  const { values, positionals } = strictParse("fill", rest, ACTION_OPTIONS);
+  printHelpAndExit(values.help);
+  const semanticRef = positionals[0];
+  if (semanticRef?.startsWith("@") === true) {
+    const semanticText = positionals[1];
+    if (semanticText === undefined || positionals.length !== 2) throw invalid("missing <ref> <text>.");
+    await runSemanticFill(semanticContext(values), semanticRef.slice(1), semanticText);
+    return;
   }
-  if (snapshotId === null) {
-    throw new Error("missing --snapshot <id>.\n\n" + usage());
+  const snapshotId = requireSnapshotId(values.snapshot);
+  const ref = positionals[0];
+  const text = positionals[1];
+  if (ref === undefined || text === undefined || positionals.length !== 2) {
+    throw invalid("missing <ref> <text>.");
   }
-  if (positionals.length === 0) {
-    throw new Error("missing <op>... (expected fill:<ref>=<text> or click:<ref>).\n\n" + usage());
-  }
-  const ops = positionals.map((token) => {
-    try {
-      return parseActOp(token);
-    } catch (error) {
-      const message = error instanceof Error ? error.message : String(error);
-      throw new Error(message + "\n\n" + usage());
-    }
-  });
-  return { snapshotId, ops };
+  const live = resolveLive(values);
+  const armed = values.armed === true;
+  await performFill(snapshotId, ref, text, { backend: makeBackend(live, { armed }), armed });
+  noInputNote(live, armed);
 }
 
 async function cmdAct(rest: string[]): Promise<void> {
-  const args = parseActArgs(rest);
-  await performAct(args.snapshotId, args.ops);
+  const { values, positionals } = strictParse("act", rest, ACTION_OPTIONS);
+  printHelpAndExit(values.help);
+  if (positionals.some(isSemanticToken)) {
+    await runSemanticAct(semanticContext(values), positionals);
+    return;
+  }
+  const snapshotId = requireSnapshotId(values.snapshot);
+  if (positionals.length === 0) {
+    throw invalid("missing <op>... (expected fill:<ref>=<text> or click:<ref>).");
+  }
+  const ops: ActOp[] = positionals.map((token) => {
+    try {
+      return parseActOp(token);
+    } catch (error) {
+      throw invalid(error instanceof Error ? error.message : String(error));
+    }
+  });
+  const live = resolveLive(values);
+  const armed = values.armed === true;
+  await performAct(snapshotId, ops, { backend: makeBackend(live, { armed }), armed });
+  noInputNote(live, armed);
 }
 
-function parseExtractArgs(rest: string[]): ExtractArgs {
-  let snapshotId: string | null = null;
-  let mode: string | null = null;
-  const positionals: string[] = [];
-  for (let i = 0; i < rest.length; i += 1) {
-    const token = rest[i] ?? "";
-    if (token === "--snapshot") {
-      const value = rest[i + 1];
-      if (value === undefined || value.length === 0) {
-        throw new Error("missing value for --snapshot <id>.");
-      }
-      snapshotId = value;
-      i += 1;
-    } else if (token === "--mode") {
-      const value = rest[i + 1];
-      if (value === undefined || value.length === 0) {
-        throw new Error("missing value for --mode text|links.");
-      }
-      mode = value;
-      i += 1;
-    } else if (token === "-h" || token === "--help") {
-      console.log(usage());
-      process.exit(0);
-    } else if (token.startsWith("-")) {
-      throw new Error(`unknown extract option: ${token}\n\n` + usage());
-    } else {
-      positionals.push(token);
-    }
-  }
-  if (snapshotId === null) {
-    throw new Error("missing --snapshot <id>.\n\n" + usage());
-  }
+async function cmdExtract(rest: string[]): Promise<void> {
+  const { values, positionals } = strictParse("extract", rest, {
+    snapshot: { type: "string" },
+    mode: { type: "string" },
+    help: { type: "boolean", short: "h" },
+  });
+  printHelpAndExit(values.help);
+  const snapshotId = requireSnapshotId(values.snapshot);
+  let mode: string | null = requireNonEmpty("--mode", values.mode) ?? null;
   if (mode === null) {
     if (positionals.length === 1) {
       mode = positionals[0] ?? null;
     }
   } else if (positionals.length > 0) {
-    throw new Error(`unexpected extract argument: ${positionals[0] ?? ""}\n\n` + usage());
+    throw invalid(`unexpected extract argument: ${positionals[0] ?? ""}`);
   }
   if (mode !== "text" && mode !== "links") {
-    throw new Error("missing --mode text|links.\n\n" + usage());
+    throw invalid("missing --mode text|links.");
   }
-  return { snapshotId, mode };
-}
-
-async function cmdExtract(rest: string[]): Promise<void> {
-  const args = parseExtractArgs(rest);
-  const lines = await performExtract(args.snapshotId, args.mode);
+  const lines = await performExtract(snapshotId, mode satisfies ExtractMode);
   for (const line of lines) {
     console.log(line);
   }
 }
 
 async function cmdQa(rest: string[]): Promise<void> {
-  const [subcommand, checkFile, extra] = rest;
-  if (subcommand === "-h" || subcommand === "--help") {
-    console.log(usage());
-    return;
-  }
+  const { values, positionals } = strictParse("qa", rest, {
+    help: { type: "boolean", short: "h" },
+  });
+  printHelpAndExit(values.help);
+  const [subcommand, checkFile, extra] = positionals;
   if (subcommand !== "run" || checkFile === undefined || extra !== undefined) {
-    throw new Error("missing <check-file>.\n\n" + usage());
+    throw invalid("missing <check-file>.");
   }
+  // Explicit: checks are fixture-driven and always run on the offline backend.
   const result = await runCheck(checkFile);
   if (!result.pass) {
     throw new Error(
@@ -390,35 +587,24 @@ async function main(): Promise<void> {
     console.log(usage());
     return;
   }
-  if (command === "open") {
-    await cmdOpen(rest[0]);
-    return;
+  switch (command) {
+    case "open":
+      return cmdOpen(rest);
+    case "snapshot":
+      return cmdSnapshot(rest);
+    case "click":
+      return cmdClick(rest);
+    case "fill":
+      return cmdFill(rest);
+    case "extract":
+      return cmdExtract(rest);
+    case "act":
+      return cmdAct(rest);
+    case "qa":
+      return cmdQa(rest);
+    default:
+      throw invalid(`unknown command: ${command}`);
   }
-  if (command === "snapshot") {
-    await cmdSnapshot(rest);
-    return;
-  }
-  if (command === "click") {
-    await cmdClick(rest);
-    return;
-  }
-  if (command === "fill") {
-    await cmdFill(rest);
-    return;
-  }
-  if (command === "extract") {
-    await cmdExtract(rest);
-    return;
-  }
-  if (command === "act") {
-    await cmdAct(rest);
-    return;
-  }
-  if (command === "qa") {
-    await cmdQa(rest);
-    return;
-  }
-  throw new Error(`unknown command: ${command}\n\n` + usage());
 }
 
 try {
@@ -426,5 +612,8 @@ try {
 } catch (error) {
   const message = error instanceof Error ? error.message : String(error);
   console.error(`error: ${message}`);
-  process.exit(1);
+  if (error instanceof PwaNavError && error.hint !== undefined) {
+    console.error(`hint: ${error.hint}`);
+  }
+  process.exit(exitCodeOf(error));
 }
