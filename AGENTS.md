@@ -6,18 +6,22 @@ Stable CLI + PWA bridge for fluid QA of your web app and assisted, lawful browsi
 
 ## Doc map
 
+This file is the single agent-instructions file; there is no `CLAUDE.md`. Every harness reads `AGENTS.md`.
+
 - `planning/product.md` — what this is, who uses it, out of scope.
 - `planning/architecture.md` — stack decisions with reasons.
 - `planning/styles.md` — style rules.
 - `planning/roadmap.md` — spec index. Read this table first.
 - `planning/handoff.md` — current state, open work, safety rules, next steps.
+- `README.md` — user-facing overview, commands, exit codes. `SKILL.md` — one-page agent guide for the CLI/MCP loop.
+- `docs/{firefox-pwa,screen-map,mcp,notebook-pilot}.md` — live PWA launch, screen map, MCP setup, notebook pilot.
 - `planning/specs/NNN-name/{requirements,design,tasks}.md` — one folder per spec.
 - `.specloop/interview.md` — interview ledger.
 
 ## Stack & conventions
 
 - Runtime: Node 22 LTS, ESM (`module: nodenext`), TypeScript strict.
-- Package manager: pnpm 11. Commands: `pnpm i`, `pnpm lint`, `pnpm build`, `pnpm smoke`.
+- Package manager: pnpm 11. Commands: `pnpm i`, `pnpm lint`, `pnpm build`, `pnpm test`, `pnpm smoke`.
 - Browser: attach to the user's own logged-in **Firefox PWA** (PWAsForFirefox runtime) over **W3C WebDriver BiDi** (`--remote-debugging-port`). No Playwright/Chromium. No custom WebSocket bridge between CLI and daemon in MVP.
 - Screen map: `screens/<app>.screens.json` (JSON Schema 2020-12) lists what each screen offers (fields, actions, links, flows). Agents read it before snapshotting; stable `@id` targets resolve at action time.
 - Snapshots: accessibility-tree JSON `{snapshotId, url, title, elements[{ref, role, name, value, disabled}]}`. `eN` refs are valid for one snapshot only; re-snapshot after every mutation. Screen-map `@id` targets are stable semantic ids, re-resolved by role+name at action time.

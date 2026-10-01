@@ -29,6 +29,6 @@
 | agent-rules | covered | Docs in English, chat in Spanish; lawful use only; never commit secrets; never bypass CAPTCHA/blocks (derived solo) |
 | visual-surface | covered | No visual surface in MVP — CLI only (derived solo) |
 | tone | covered | Docs EN, chat ES (user instruction) |
-| code-conventions | covered | TS strict, ESM (nodenext), pnpm, prettier/eslint (derived solo) |
+| code-conventions | covered | TS strict, ESM (nodenext), pnpm, eslint, no formatter configured (derived solo) |
 | anti-preferences | covered | No bot evasion, no secrets in repo, no inline snapshots in context — write to disk (derived solo) |
 | preference-strength | covered | Lawful-use + language rules are hard rules; rest are defaults (derived solo) |

@@ -1,3 +1,0 @@
-# pwa-nav
-
-@AGENTS.md

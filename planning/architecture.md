@@ -23,7 +23,7 @@ Local-only CLI + MCP adapter driving the user's own logged-in Firefox PWA (PWAsF
 
 ## Conventions
 
-TypeScript `strict: true`, `module/moduleResolution: nodenext`, `target: es2025`. ESLint + Prettier. All docs in English.
+TypeScript `strict: true`, `module/moduleResolution: nodenext`, `target: es2024` (the pinned TypeScript 5.x accepts at most es2024; see `tsconfig.json`). ESLint; no formatter is configured. All docs in English.
 
 ## Fixed rules
 
@@ -35,7 +35,6 @@ TypeScript `strict: true`, `module/moduleResolution: nodenext`, `target: es2025`
 ## Still to define
 
 - PWA SDK shape (v2 custom bridge).
-- Whether node references survive across BiDi sessions (spec 004 spike decides the ref locator strategy).
 - Notebook adapter beyond text extract (post-MVP).
 
 ## Declined
