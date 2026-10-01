@@ -65,7 +65,8 @@ test("stdio: stdout carries only protocol frames; clean exit when stdin closes",
     send({ jsonrpc: "2.0", id: 2, method: "tools/call", params: { name: "pwa_open", arguments: { url: "http://localhost:8080/" } } });
     send({ jsonrpc: "2.0", id: 3, method: "tools/list" });
     const deadline = Date.now() + 15_000;
-    while (!stdout.includes('"id":3') && Date.now() < deadline) {
+    // tools/list (id 3) answers before the mutex-serialized tools/call (id 2): wait for both.
+    while (!(stdout.includes('"id":2') && stdout.includes('"id":3')) && Date.now() < deadline) {
       await new Promise((r) => setTimeout(r, 50));
     }
     child.stdin.end();
