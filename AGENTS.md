@@ -10,6 +10,7 @@ Stable CLI + PWA bridge for fluid QA of your web app and assisted, lawful browsi
 - `planning/architecture.md` — stack decisions with reasons.
 - `planning/styles.md` — style rules.
 - `planning/roadmap.md` — spec index. Read this table first.
+- `planning/handoff.md` — current state, open work, safety rules, next steps.
 - `planning/specs/NNN-name/{requirements,design,tasks}.md` — one folder per spec.
 - `.specloop/interview.md` — interview ledger.
 
