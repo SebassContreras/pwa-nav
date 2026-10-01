@@ -1,0 +1,163 @@
+{
+  "$schema": "../../schemas/screen-map.schema.json",
+  "schemaVersion": "1.0.0",
+  "app": {
+    "id": "demo-app",
+    "name": "Demo App",
+    "origin": "http://localhost:8080",
+    "locale": "en",
+    "learnedAt": "2026-10-01T10:40:36Z"
+  },
+  "screens": [
+    {
+      "id": "login",
+      "route": "/login",
+      "title": "Demo App",
+      "access": "public",
+      "fingerprint": "sha256:40288a290be0537d13cc91210fc8f166a246a1f8367d1ada708f76db8f1f725c",
+      "observedAt": "2026-10-01T10:40:36Z",
+      "fields": [
+        {
+          "id": "email",
+          "role": "textbox",
+          "name": "Email",
+          "nameSource": "label",
+          "inputType": "text",
+          "required": false,
+          "sensitive": false,
+          "agentFillable": true,
+          "locator": {
+            "role": "textbox",
+            "name": "Email",
+            "occurrence": 0
+          }
+        },
+        {
+          "id": "password",
+          "role": "textbox",
+          "name": "Password",
+          "nameSource": "label",
+          "inputType": "password",
+          "required": false,
+          "sensitive": true,
+          "agentFillable": false,
+          "locator": {
+            "role": "textbox",
+            "name": "Password",
+            "occurrence": 0
+          }
+        }
+      ],
+      "actions": [
+        {
+          "id": "show-password",
+          "role": "button",
+          "name": "Show password",
+          "nameSource": "aria-label",
+          "kind": "toggle",
+          "effect": "ui-state",
+          "locator": {
+            "role": "button",
+            "name": "Show password",
+            "occurrence": 0
+          }
+        },
+        {
+          "id": "sign-in",
+          "role": "button",
+          "name": "Sign in",
+          "nameSource": "content",
+          "kind": "submit",
+          "effect": "submit",
+          "requires": [
+            "email",
+            "password"
+          ],
+          "locator": {
+            "role": "button",
+            "name": "Sign in",
+            "occurrence": 0
+          }
+        }
+      ],
+      "links": [
+        {
+          "id": "forgot-password",
+          "name": "Forgot password?",
+          "href": "/forgot-password",
+          "external": false,
+          "locator": {
+            "role": "link",
+            "name": "Forgot password?",
+            "occurrence": 0
+          }
+        },
+        {
+          "id": "help-center",
+          "name": "Help center",
+          "href": "https://help.example.com",
+          "external": true,
+          "locator": {
+            "role": "link",
+            "name": "Help center",
+            "occurrence": 0
+          }
+        }
+      ],
+      "flows": [
+        {
+          "id": "login",
+          "description": "Sign in with email and password. Touches a sensitive field, so the user performs it by hand.",
+          "humanOnly": true,
+          "inputSchema": {
+            "type": "object",
+            "required": [
+              "email",
+              "password"
+            ],
+            "properties": {
+              "email": {
+                "type": "string",
+                "minLength": 1
+              },
+              "password": {
+                "type": "string",
+                "minLength": 1,
+                "writeOnly": true
+              }
+            },
+            "additionalProperties": false
+          },
+          "steps": [
+            {
+              "op": "fill",
+              "target": "@email",
+              "from": "email"
+            },
+            {
+              "op": "fill",
+              "target": "@password",
+              "from": "password"
+            },
+            {
+              "op": "click",
+              "target": "@sign-in"
+            }
+          ]
+        }
+      ]
+    }
+  ],
+  "unmapped": [
+    {
+      "route": "/forgot-password",
+      "reason": "link-only",
+      "discoveredFrom": "login",
+      "note": "Link target seen on the login screen; the screen itself was not observed."
+    },
+    {
+      "reason": "requires-login",
+      "note": "All authenticated screens."
+    }
+  ]
+}

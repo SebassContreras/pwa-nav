@@ -1,0 +1,217 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://pwa-nav.local/schemas/screen-map.schema.json",
+  "title": "pwa-nav screen map",
+  "description": "What a web app offers on each screen: fields, actions, links and named flows. Learned from live accessibility snapshots, committed per app, read by agents instead of snapshotting known screens.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schemaVersion", "app", "screens"],
+  "properties": {
+    "$schema": { "type": "string" },
+    "schemaVersion": {
+      "description": "SemVer; consumers accept any 1.x.y.",
+      "type": "string",
+      "pattern": "^1\\.\\d+\\.\\d+$"
+    },
+    "app": { "$ref": "#/$defs/app" },
+    "screens": {
+      "type": "array",
+      "minItems": 1,
+      "items": { "$ref": "#/$defs/screen" }
+    },
+    "unmapped": {
+      "description": "Known gaps: routes seen but never observed, and areas not yet visited. Never invented content.",
+      "type": "array",
+      "items": { "$ref": "#/$defs/unmapped" }
+    }
+  },
+  "$defs": {
+    "slug": {
+      "type": "string",
+      "pattern": "^[a-z0-9]+(-[a-z0-9]+)*$"
+    },
+    "timestamp": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "app": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "name", "origin", "locale", "learnedAt"],
+      "properties": {
+        "id": { "$ref": "#/$defs/slug" },
+        "name": { "type": "string", "minLength": 1 },
+        "origin": {
+          "description": "Scheme + host + port only. Actions run only on allow-listed origins.",
+          "type": "string",
+          "pattern": "^https?://[^/\\s]+$"
+        },
+        "version": { "description": "App version shown by the UI when observable.", "type": "string" },
+        "locale": {
+          "description": "BCP 47 language tag of the UI; accessible names are locale-bound.",
+          "type": "string",
+          "pattern": "^[a-z]{2,3}(-[A-Za-z0-9]+)*$"
+        },
+        "learnedAt": { "$ref": "#/$defs/timestamp" }
+      }
+    },
+    "locator": {
+      "description": "How to re-find an element in a fresh DOM. Never a node handle; never a CSS class.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["role", "name"],
+      "properties": {
+        "role": { "type": "string", "minLength": 1 },
+        "name": { "type": "string" },
+        "occurrence": {
+          "description": "Zero-based index among elements sharing role+name.",
+          "type": "integer",
+          "minimum": 0,
+          "default": 0
+        }
+      }
+    },
+    "nameSource": {
+      "description": "Where the accessible name came from; anything other than label/aria-label/content is an accessibility smell.",
+      "enum": ["label", "aria-labelledby", "aria-label", "content", "alt", "title", "placeholder"]
+    },
+    "field": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "role", "name", "nameSource", "sensitive", "agentFillable", "locator"],
+      "properties": {
+        "id": { "$ref": "#/$defs/slug" },
+        "role": { "type": "string", "minLength": 1 },
+        "name": { "type": "string" },
+        "nameSource": { "$ref": "#/$defs/nameSource" },
+        "inputType": { "type": "string" },
+        "required": { "type": "boolean", "default": false },
+        "sensitive": {
+          "description": "Credentials or secrets. Values are never read into snapshots.",
+          "type": "boolean"
+        },
+        "agentFillable": {
+          "description": "False means the user fills it by hand; the agent must refuse.",
+          "type": "boolean"
+        },
+        "locator": { "$ref": "#/$defs/locator" }
+      }
+    },
+    "action": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "role", "name", "kind", "effect", "locator"],
+      "properties": {
+        "id": { "$ref": "#/$defs/slug" },
+        "role": { "type": "string", "minLength": 1 },
+        "name": { "type": "string" },
+        "nameSource": { "$ref": "#/$defs/nameSource" },
+        "kind": { "enum": ["submit", "toggle", "button"] },
+        "effect": {
+          "description": "none: nothing observable; ui-state: local UI only; submit: sends data and usually navigates or mutates server state.",
+          "enum": ["none", "ui-state", "submit"]
+        },
+        "requires": {
+          "description": "Field ids that must be filled first.",
+          "type": "array",
+          "items": { "$ref": "#/$defs/slug" },
+          "uniqueItems": true
+        },
+        "locator": { "$ref": "#/$defs/locator" }
+      }
+    },
+    "link": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "name", "href", "external", "locator"],
+      "properties": {
+        "id": { "$ref": "#/$defs/slug" },
+        "name": { "type": "string" },
+        "href": { "description": "As written in the DOM: relative path or absolute URL.", "type": "string", "minLength": 1 },
+        "external": { "description": "True when the target origin differs from app.origin. External hrefs are stored as origin only (no path, query or fragment): paths often carry form ids or tokens.", "type": "boolean" },
+        "locator": { "$ref": "#/$defs/locator" }
+      }
+    },
+    "step": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["op", "target"],
+      "properties": {
+        "op": { "enum": ["fill", "click"] },
+        "target": {
+          "description": "`@<id>` of a field, action or link on the same screen.",
+          "type": "string",
+          "pattern": "^@[a-z0-9]+(-[a-z0-9]+)*$"
+        },
+        "from": {
+          "description": "For fill: name of the flow input that supplies the text.",
+          "type": "string"
+        }
+      }
+    },
+    "flow": {
+      "description": "Named, parameterised sequence. Shaped like an MCP tool descriptor: name + description + JSON Schema inputSchema.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "description", "humanOnly", "inputSchema", "steps"],
+      "properties": {
+        "id": { "$ref": "#/$defs/slug" },
+        "description": { "type": "string", "minLength": 1 },
+        "humanOnly": {
+          "description": "True when any step touches a sensitive field: the agent must stop and ask the user to do it by hand.",
+          "type": "boolean"
+        },
+        "inputSchema": { "type": "object" },
+        "steps": { "type": "array", "minItems": 1, "items": { "$ref": "#/$defs/step" } }
+      }
+    },
+    "a11yFinding": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["code", "target", "detail"],
+      "properties": {
+        "code": { "enum": ["name-from-placeholder-only", "missing-accessible-name", "duplicate-name"] },
+        "target": { "type": "string", "pattern": "^@[a-z0-9]+(-[a-z0-9]+)*$" },
+        "detail": { "type": "string", "minLength": 1 },
+        "wcag": { "description": "Success criterion, e.g. 4.1.2.", "type": "string" }
+      }
+    },
+    "screen": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "route", "title", "access", "fingerprint", "observedAt", "fields", "actions", "links", "flows"],
+      "properties": {
+        "id": { "$ref": "#/$defs/slug" },
+        "route": {
+          "description": "Pathname matched against location.pathname. Subset of URLPattern pathname syntax: literal segments and :name segments, e.g. /app/login or /app/orders/:id. No wildcards or regex groups, so it matches identically on Node 22 (no global URLPattern) and later.",
+          "type": "string",
+          "pattern": "^/"
+        },
+        "title": { "type": "string" },
+        "access": { "enum": ["public", "authenticated", "unknown"] },
+        "fingerprint": {
+          "description": "sha256 over the sorted `role<TAB>name` lines of the interactive elements, joined by LF, UTF-8. A mismatch on re-learn means the screen drifted.",
+          "type": "string",
+          "pattern": "^sha256:[0-9a-f]{64}$"
+        },
+        "observedAt": { "$ref": "#/$defs/timestamp" },
+        "fields": { "type": "array", "items": { "$ref": "#/$defs/field" } },
+        "actions": { "type": "array", "items": { "$ref": "#/$defs/action" } },
+        "links": { "type": "array", "items": { "$ref": "#/$defs/link" } },
+        "flows": { "type": "array", "items": { "$ref": "#/$defs/flow" } },
+        "a11y": { "type": "array", "items": { "$ref": "#/$defs/a11yFinding" } }
+      }
+    },
+    "unmapped": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["reason"],
+      "properties": {
+        "route": { "type": "string", "pattern": "^/" },
+        "reason": { "enum": ["link-only", "requires-login", "not-visited"] },
+        "discoveredFrom": { "$ref": "#/$defs/slug" },
+        "note": { "type": "string" }
+      }
+    }
+  }
+}
