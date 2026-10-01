@@ -3,6 +3,9 @@
 // Pure logic + file IO, no browser calls. Reuses the Snapshot contract.
 import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { join, resolve as resolvePath } from "node:path";
+import { PwaNavError } from "./errors.js";
+import type { LiveExtras } from "./browser/live-snapshot.js";
+import type { Locator } from "./screen-map.js";
 import type { Snapshot, SnapshotElement } from "./snapshot.js";
 
 export const STALE_REF_CODE = "stale_ref" as const;
@@ -17,12 +20,15 @@ export interface RefStoreOptions {
   agentDir?: string;
 }
 
-export class StaleRefError extends Error {
-  readonly code: typeof STALE_REF_CODE = STALE_REF_CODE;
+export class StaleRefError extends PwaNavError {
+  declare readonly code: typeof STALE_REF_CODE;
   readonly snapshotId: string;
 
   constructor(snapshotId: string, detail: string) {
-    super(`${detail} (code: ${STALE_REF_CODE}, snapshotId: ${snapshotId}). Re-snapshot to get a fresh snapshotId + ref.`);
+    super(
+      STALE_REF_CODE,
+      `${detail} (code: ${STALE_REF_CODE}, snapshotId: ${snapshotId}). Re-snapshot to get a fresh snapshotId + ref.`,
+    );
     this.name = "StaleRefError";
     this.snapshotId = snapshotId;
   }
@@ -169,4 +175,78 @@ export async function resolve(
     throw new StaleRefError(snapshotId, `unknown ref "${ref}" for snapshotId "${snapshotId}"`);
   }
   return element;
+}
+
+// --- Live locators (spec 004, T008): sidecar `refs/<snapshotId>.locators.json`. ---
+
+export interface LocatorSidecar {
+  snapshotId: string;
+  url: string;
+  locators: Record<string, Locator>;
+  extras?: Record<string, LiveExtras>;
+  /** Collection mode of this snapshot; actions must re-collect the same way. Absent = false. */
+  includeAll?: boolean;
+}
+
+function locatorsPath(agentDir: string, snapshotId: string): string {
+  return resolvePath(join(agentDir, REFS_DIR, `${snapshotId}.locators.json`));
+}
+
+export async function saveLive(
+  snapshot: Snapshot,
+  locators: Record<string, Locator>,
+  extras?: Record<string, LiveExtras>,
+  options: RefStoreOptions & { includeAll?: boolean } = {},
+): Promise<string> {
+  await save(snapshot, options);
+  const sidecar: LocatorSidecar = { snapshotId: snapshot.snapshotId, url: snapshot.url, locators };
+  if (extras !== undefined) sidecar.extras = extras;
+  if (options.includeAll !== undefined) sidecar.includeAll = options.includeAll;
+  await writeFile(
+    locatorsPath(agentDirOf(options), snapshot.snapshotId),
+    JSON.stringify(sidecar, null, 2) + "\n",
+    "utf8",
+  );
+  return snapshot.snapshotId;
+}
+
+function isLocatorSidecar(raw: unknown, snapshotId: string): raw is LocatorSidecar {
+  if (typeof raw !== "object" || raw === null) return false;
+  const r = raw as Record<string, unknown>;
+  return (
+    r["snapshotId"] === snapshotId &&
+    typeof r["url"] === "string" &&
+    typeof r["locators"] === "object" &&
+    r["locators"] !== null
+  );
+}
+
+// Sidecar for a snapshot; null for offline MVP snapshots (no sidecar).
+export async function loadLocators(
+  snapshotId: string,
+  options: RefStoreOptions = {},
+): Promise<LocatorSidecar | null> {
+  if (!isValidSnapshotId(snapshotId)) return null;
+  const raw = await readJsonFile(locatorsPath(agentDirOf(options), snapshotId));
+  return isLocatorSidecar(raw, snapshotId) ? raw : null;
+}
+
+// Same stale checks as resolve(), plus the element's locator.
+export async function resolveLocator(
+  snapshotId: string,
+  ref: string,
+  options: RefStoreOptions = {},
+): Promise<{ element: SnapshotElement; locator: Locator }> {
+  const element = await resolve(snapshotId, ref, options);
+  const sidecar = await loadLocators(snapshotId, options);
+  const stored = sidecar !== null && Object.hasOwn(sidecar.locators, ref) ? sidecar.locators[ref] : undefined;
+  if (stored !== undefined) return { element, locator: stored };
+  // Fallback: occurrence among same role+name in snapshot order.
+  const snapshot = await load(snapshotId, options);
+  let occurrence = 0;
+  for (const entry of snapshot?.elements ?? []) {
+    if (entry.ref === ref) break;
+    if (entry.role === element.role && entry.name === element.name) occurrence++;
+  }
+  return { element, locator: { role: element.role, name: element.name, occurrence } };
 }
