@@ -4,7 +4,8 @@
   "description": "CLI + bridge for fluid QA on login-walled sites (spec 001: nav-snapshot)",
   "type": "module",
   "bin": {
-    "pwa-nav": "./dist/cli.js"
+    "pwa-nav": "./dist/cli.js",
+    "pwa-nav-mcp": "./dist/mcp.js"
   },
   "engines": {
     "node": ">=22"
@@ -12,12 +13,22 @@
   "scripts": {
     "build": "tsc -p tsconfig.json",
     "lint": "eslint .",
-    "smoke": "node ./dist/smoke.js"
+    "smoke": "node ./dist/smoke.js",
+    "test": "node --test \"dist/**/*.test.js\""
+  },
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "1.31.0",
+    "ajv": "^8.20.0",
+    "ajv-formats": "^3.0.1"
   },
   "devDependencies": {
+    "@types/jsdom": "^30.0.0",
     "@types/node": "^22.13.0",
+    "@types/ws": "^8.18.2",
     "eslint": "^9.23.0",
+    "jsdom": "^30.1.1",
     "typescript": "^5.8.2",
-    "typescript-eslint": "^8.27.0"
+    "typescript-eslint": "^8.27.0",
+    "ws": "^8.22.0"
   }
 }

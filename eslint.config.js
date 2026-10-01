@@ -17,6 +17,13 @@ export default tseslint.config(
     }
   },
   {
+    // node:test registers suites/cases whose returned promises the runner awaits itself.
+    files: ["src/**/*.test.ts"],
+    rules: {
+      "@typescript-eslint/no-floating-promises": "off"
+    }
+  },
+  {
     files: ["**/*.js"],
     extends: [tseslint.configs.disableTypeChecked]
   }
