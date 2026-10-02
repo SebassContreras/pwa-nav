@@ -141,4 +141,5 @@ In PowerShell, the `@` symbol is reserved for array sub-expressions and variable
 | **12** | `unknown_target` | Semantic `@id`, flow, or journey not in map. | Run `pwa-nav snapshot --screen` to inspect the available targets in the current screen map. |
 | **13** | `unmapped_screen` | Route is not covered by current screen map. | Fall back to Raw Accessibility Loop (`snapshot -i`). Suggest `snapshot --learn` if stable. |
 | **14** | `journey_step_failed` | Multi-screen journey step assertion failed. | Check route transition, parameters, or if the application UI deviated from journey spec. |
-| **15** | `file_upload_blocked` | File upload outside allowed paths or targeting sensitive files. | Ensure file is within workspace root or `.agent/` and is not sensitive. |
+| **15** | `file_upload_blocked` | File upload outside safe directory or sensitive file. | Ensure uploaded file is within workspace root or `.agent/`, with no path traversal. |
+

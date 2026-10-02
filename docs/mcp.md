@@ -94,8 +94,10 @@ Schemas are in `tools/list`. All results are `content` text plus `structuredCont
 | `pwa_learn` | `locale?`, `appId?`, `appName?`, `access?`, `prune?` | idempotent | Learn and persist the current screen into `screens/<app>.screens.json`. Returns diff and sets up permanent `@id` targets. |
 | `pwa_click` | `snapshotId` + `ref`, or `target` (`@id`) | destructive, open-world | `{dryRun, snapshotId, path, url}`. |
 | `pwa_fill` | `snapshotId` + `ref`, or `target`; `text` (required) | destructive, open-world | Same. Sensitive fields (passwords) refused. |
+| `pwa_upload` | `files[]` (required), `snapshotId` + `ref`, or `target` (`@id`) | destructive, open-world | `{dryRun, snapshotId, path, files}`. Sets files on file inputs. Safe paths only. |
+| `pwa_screenshot` | `path?`, `format?` (`png\|jpeg\|webp`) | read-only, not destructive | `{path, width, height}`. Saves binary PNG/image to disk; never leaks base64 into context. |
 | `pwa_extract` | `snapshotId`, `mode` `text\|links` (required), `limit?` (1-100) | read-only, idempotent | Up to 100 lines inline; `{total, returned, omitted}`, rest stays in the snapshot file. |
-| `pwa_act` | `ops[]` (required), `snapshotId?`, `inputs?` | destructive, open-world | Same as click. Plain ops need `snapshotId`: `click:<ref>`, `fill:<ref>=<text>`. Semantic ops (no `snapshotId`): `click:@id`, `fill:@id=<text>`, `flow:<id>` with `inputs`. Do not mix. |
+| `pwa_act` | `ops[]` (required), `snapshotId?`, `inputs?` | destructive, open-world | Same as click. Plain ops need `snapshotId`: `click:<ref>`, `fill:<ref>=<text>`, `upload:<ref>=<path>`. Semantic ops (no `snapshotId`): `click:@id`, `fill:@id=<text>`, `upload:@id=<path>`, `flow:<id>` with `inputs`. Do not mix. |
 
 `snapshotId` + `ref` and `target` are mutually exclusive. `@id` targets need a screen map and the live backend ([`screen-map.md`](screen-map.md)).
 
@@ -108,13 +110,14 @@ Screen learning is available both via CLI (`pwa-nav snapshot --learn`) and via M
 - `pwa_snapshot` with `screen: true` and `@id` targets are implemented (see tool table).
 - Map source, loaded once at startup: `--screen-map <file>`, else the single map in the screens dir (`--screens-dir` / `PWA_NAV_SCREENS_DIR` / `./screens`). Zero maps, several maps or an invalid map: one line on stderr, no flow tools and no map resource, the server still starts. Restart the server after changing the map.
 - Flow tools: `flow_<screenId>_<flowId>` (`-` becomes `_`) for every flow with `humanOnly: false`; the input schema is the flow's own JSON Schema. A name collision or a name over 64 characters gets a stable `_<8 hex>` suffix (logged on stderr). The page must already be on that flow's screen, otherwise the call fails with `unmapped_screen`; the server never navigates.
-- Human-only flows are never registered as tools. Their names (with screen id, no inputs) appear in the server `instructions` and in the screens resource description, so the model knows to ask the user.
+- Journey tools: `journey_<journeyId>` (`-` becomes `_`) for every user journey declared in the map (`journeys[]`) with `humanOnly: false`. Journeys orchestrate multi-screen route transitions with network settling and `expectScreen` assertions.
+- Human-only flows and journeys are never registered as tools. Their names appear in the server `instructions` and in the screens resource description, so the model knows to ask the user.
 - Resources (read-only, `application/json`): `pwa-nav://screens/<app-id>` (the validated map, when one is loaded) and `pwa-nav://snapshot/latest` (read from `<agent-dir>/snapshot.json` at read time; `-32002` when no snapshot exists yet). No subscriptions.
 - Dry-run and armed plans echo non-sensitive fill text on purpose; sensitive fields are redacted.
 
 ## Armed mode
 
-- Default: every write (`pwa_click`, `pwa_fill`, `pwa_act`) is a dry-run: it returns the plan with `dryRun: true`, sends no input.
+- Default: every write (`pwa_click`, `pwa_fill`, `pwa_upload`, `pwa_act`, dynamic flow and journey tools) is a dry-run: it returns the plan with `dryRun: true`, sends no input.
 - Arm with `--armed` or `PWA_NAV_ARMED=1` on the server process. Tools have no `armed` argument, so the model (or a prompt-injected page) cannot arm itself.
 - Recommended: leave it off. For supervised sessions register a second entry (e.g. `pwa-nav-armed` with `--armed`) and enable it only while you are watching.
 - Armed actions still pass the safety gate below. The CLI differs here: `PWA_NAV_ARMED` is read only by the MCP server.
@@ -123,8 +126,10 @@ Screen learning is available both via CLI (`pwa-nav snapshot --learn`) and via M
 
 - Origin allow-list `.agent/allow.json`: armed actions and `pwa_open` need the origin listed. Consent via `pwa_open` with `allowOrigin: true` (only with the user's OK). Refused otherwise with `origin_blocked`.
 - Kill-switch: file `.agent/kill` or path in `PWA_NAV_KILL_SWITCH`. Present = `kill_switch`, also blocks `pwa_open`. Only the user removes it.
+- File upload security boundary: `pwa_upload` is strictly restricted to files within allowed safe directories (workspace root or `.agent/`). Traversals (`..`) and sensitive files (`.env*`, private keys) are blocked immediately (exit 15 `file_upload_blocked`).
+- Visual screenshot storage: `pwa_screenshot` writes binary images directly to disk and returns metadata `{path, width, height}`. Raw image bytes or base64 strings are never dumped into context.
 - Dry-run: unarmed writes return `dryRun: true`; no input is sent.
-- Reads (`pwa_snapshot`, `pwa_extract`) need none of this.
+- Reads (`pwa_snapshot`, `pwa_screenshot`, `pwa_extract`) need none of this.
 
 ## Errors
 
@@ -142,8 +147,10 @@ Failures are tool results, not protocol errors: `isError: true`, text `<code>: <
 | 9 | `timeout` | Re-snapshot, retry once, then report. |
 | 10 | `protocol` | Unexpected BiDi error (also unknown errors). Report the message. |
 | 11 | `sensitive_target` | Sensitive field or human-only flow. The user does it by hand. |
-| 12 | `unknown_target` | `@id` or flow not in the map. Run `pwa_snapshot` with `screen: true`. |
+| 12 | `unknown_target` | `@id`, flow, or journey not in the map. Run `pwa_snapshot` with `screen: true`. |
 | 13 | `unmapped_screen` | No map for this origin/route. Use `pwa_learn` (or `pwa_snapshot` with `learn: true`) to map the screen, or use `pwa_snapshot` and `eN` refs. |
+| 14 | `journey_step_failed` | Multi-screen journey step assertion failed or expected route not reached. |
+| 15 | `file_upload_blocked` | File path is outside allowed safe directories or targets sensitive files. |
 
 ## One BiDi session
 

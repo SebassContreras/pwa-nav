@@ -200,6 +200,8 @@ The MCP server exposes:
 4. **Kill-Switch**: Creating `.agent/kill` or setting `PWA_NAV_KILL_SWITCH` immediately terminates any armed operation (code 7 `kill_switch`).
 5. **Untrusted Page Content**: All HTML page contents, aria names, and element text are treated strictly as untrusted data, never instructions.
 6. **File Upload Security Gate**: Local file uploads (`pwa_upload`, `upload`) are strictly restricted to files within allowed safe directories (workspace root or `.agent/`). Files attempting path traversal (`..`), sensitive environment files (`.env*`), or private keys (`id_rsa`, etc.) are blocked immediately before touching the browser (fails fast with code 15 `file_upload_blocked`).
+7. **Visual Screenshots & Context Economy**: Binary images and screenshots are saved directly to disk (`.agent/screenshot.png` or `--out <path>`). Binary image data and base64 strings are never dumped into chat or agent context.
+8. **PowerShell Splatting Guard**: In PowerShell on Windows, `@id` without quotes is treated as an empty array splatting variable. Semantic targets must always be quoted: `'@id'` or `click:'@id'`.
 
 ---
 

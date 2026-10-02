@@ -46,8 +46,8 @@ This file is the single agent-instructions entrypoint; there is no `CLAUDE.md`. 
   - `src/core/`: Domain models, snapshot contracts, error types (`PwaNavError`), security gate, stable ref store.
   - `src/screens/`: Screen map subsystem (validation, routing, compact view rendering, screen learn/merge, semantic target resolution, journey models).
   - `src/bidi/`: Low-level W3C WebDriver BiDi WebSocket client, protocol serialization, and session lifecycle.
-  - `src/browser/`: Firefox PWA automation (runtime discovery/spawn, DOM collector, actions with network-idle settle, backend implementation).
-  - `src/backend/`: Abstract backend interfaces (`Backend`, `BackendFactory`, `OfflineBackend`).
+  - `src/browser/`: Cross-platform Firefox PWA automation (runtime discovery across Windows, Linux, macOS; DOM collector; actions with network-idle settle; backend implementation).
+  - `src/backend/`: Abstract backend interfaces (`Backend`, `BackendFactory`, `OfflineBackend`, `BidiBackend`).
   - `src/ops/`: High-level operational use cases (`ops.ts`, `qa.ts`, `journey.ts`).
   - `src/cli/`: CLI adapters, screens subcommand handlers, and CLI integration tests.
   - `src/mcp/`: MCP stdio adapter, server lifecycle, tool definitions, dynamic flow and journey tools.
@@ -64,8 +64,10 @@ Agents operate through two complementary navigation layers:
 2. **Execute Semantic Action**: Use semantic `@id` targets:
    - `pwa-nav click '@sign-in'` (dry-run preview).
    - `pwa-nav fill '@email' "user@example.com"` (dry-run preview).
+   - `pwa-nav upload '@resume' ./file.pdf` (dry-run preview; safe paths only).
    - `pwa-nav act flow:login-flow username="alice"` (single-screen flow).
    - `pwa-nav journey checkout-journey term="shoes"` (multi-screen declarative user journey across route transitions).
+   - `pwa-nav screenshot` (captures visual PNG to `.agent/screenshot.png` directly).
 3. **Execute Armed**: Only after presenting the dry-run plan to the user and receiving explicit permission, run with `--armed`.
 4. **Transition Verification**: Multi-screen journeys automatically wait for network-idle and DOM quiescence (`settle`), and assert the destination screen matches `expectScreen` (fails fast with code 14 if route drifts).
 
