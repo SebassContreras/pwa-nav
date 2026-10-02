@@ -4,19 +4,19 @@
 // any DOM collection or input), then mapped onto a FRESH snapshot's refs so the tested
 // eN paths (stale check, gate, dry-run, kill-switch) do the actual work.
 import { join } from "node:path";
-import type { Backend } from "./backend.js";
-import { PwaNavError } from "./errors.js";
-import { captureLiveSnapshot, performAct, performClick, performFill, performLiveSnapshot } from "./ops.js";
-import type { ActOp } from "./ops.js";
-import { load as loadSnapshot, loadLocators, StaleRefError } from "./refs.js";
-import type { LocatorSidecar } from "./refs.js";
-import type { Locator, Screen, ScreenMap } from "./screen-map.js";
-import { findScreen, loadExplicitMap, loadScreenMapsFromDir, resolveScreensDir, selectMap } from "./screen-match.js";
-import { learnScreen, slugify } from "./screen-learn.js";
-import { describeResolved, isSemanticToken, parseFlowInputs, parseSemanticAct, parseTarget, resolveFlow, resolveTarget } from "./screen-resolve.js";
-import type { Intent, ResolvedTarget } from "./screen-resolve.js";
-import { learnIntoFile, renderDiff } from "./screen-store.js";
-import { renderScreenView, renderUnmappedHint } from "./screen-view.js";
+import type { Backend } from "../backend/backend.js";
+import { PwaNavError } from "../core/errors.js";
+import { captureLiveSnapshot, performAct, performClick, performFill, performLiveSnapshot } from "../ops/ops.js";
+import type { ActOp } from "../ops/ops.js";
+import { load as loadSnapshot, loadLocators, StaleRefError } from "../core/refs.js";
+import type { LocatorSidecar } from "../core/refs.js";
+import type { Locator, Screen, ScreenMap } from "../screens/screen-map.js";
+import { findScreen, loadExplicitMap, loadScreenMapsFromDir, resolveScreensDir, selectMap } from "../screens/screen-match.js";
+import { learnScreen, slugify } from "../screens/screen-learn.js";
+import { describeResolved, isSemanticToken, parseFlowInputs, parseSemanticAct, parseTarget, resolveFlow, resolveTarget } from "../screens/screen-resolve.js";
+import type { Intent, ResolvedTarget } from "../screens/screen-resolve.js";
+import { learnIntoFile, renderDiff } from "../screens/screen-store.js";
+import { renderScreenView, renderUnmappedHint } from "../screens/screen-view.js";
 
 export { isSemanticToken };
 

@@ -7,7 +7,7 @@ import { fileURLToPath } from "node:url";
 import { fingerprintOf, loadScreenMap, ScreenMapError, validateScreenMap } from "./screen-map.js";
 import type { ScreenMap } from "./screen-map.js";
 
-const EXAMPLE = fileURLToPath(new URL("../examples/screens/demo-app.screens.json", import.meta.url));
+const EXAMPLE = fileURLToPath(new URL("../../examples/screens/demo-app.screens.json", import.meta.url));
 
 async function example(): Promise<ScreenMap> {
   return JSON.parse(await readFile(EXAMPLE, "utf8")) as ScreenMap;
@@ -36,7 +36,7 @@ describe("screen map", () => {
 
   it("accepts every *.screens.json under examples/ and screens/", async () => {
     let checked = 0;
-    for (const folder of ["../examples/screens/", "../screens/"]) {
+    for (const folder of ["../../examples/screens/", "../../screens/"]) {
       const dir = fileURLToPath(new URL(folder, import.meta.url));
       const names = await readdir(dir).catch(() => [] as string[]);
       for (const name of names.filter((entry) => entry.endsWith(".screens.json"))) {

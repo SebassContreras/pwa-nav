@@ -10,7 +10,7 @@ import { fileURLToPath } from "node:url";
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { StdioClientTransport } from "@modelcontextprotocol/sdk/client/stdio.js";
 
-const MCP = join(dirname(fileURLToPath(import.meta.url)), "mcp.js");
+const MCP = join(dirname(fileURLToPath(import.meta.url)), "..", "mcp.js");
 
 test("stdio: lists tools, calls an offline tool, exits cleanly on close", async () => {
   const dir = await mkdtemp(join(tmpdir(), "pwa-nav-mcp-stdio-"));

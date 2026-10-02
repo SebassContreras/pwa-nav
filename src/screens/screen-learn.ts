@@ -2,7 +2,7 @@
 // Pure functions, no IO, no globals. Merge/diff/prune against an existing map (T007) will
 // live in this file as separate functions that consume `learnScreen` output.
 // Flows are never invented: `flows` is always [] and flow authoring stays manual.
-import type { RawElement } from "./browser/collector.js";
+import type { RawElement } from "../browser/collector.js";
 import {
   fingerprintOf,
   screenElements,

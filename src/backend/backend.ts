@@ -3,9 +3,9 @@
 import { appendFile, mkdir, readFile, writeFile } from "node:fs/promises";
 import { randomUUID } from "node:crypto";
 import { dirname, resolve } from "node:path";
-import { PwaNavError } from "./errors.js";
-import type { RawElement } from "./browser/collector.js";
-import { load as loadSnapshot, resolve as resolveRef, save as saveSnapshot } from "./refs.js";
+import { PwaNavError } from "../core/errors.js";
+import type { RawElement } from "../browser/collector.js";
+import { load as loadSnapshot, resolve as resolveRef, save as saveSnapshot } from "../core/refs.js";
 
 export const DEFAULT_PORT = 9222;
 export const DEFAULT_HOST = "127.0.0.1";

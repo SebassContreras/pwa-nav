@@ -5,7 +5,7 @@ import { spawn, type ChildProcess } from "node:child_process";
 import { readFile } from "node:fs/promises";
 import { connect } from "node:net";
 import { join } from "node:path";
-import { PwaNavError } from "../errors.js";
+import { PwaNavError } from "../core/errors.js";
 
 export const DIR_ENV = "PWA_NAV_FIREFOXPWA_DIR";
 export const MIN_PORT = 1024;

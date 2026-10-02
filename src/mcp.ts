@@ -5,10 +5,10 @@
 // --agent-dir, --backend offline|bidi. Armed is never a tool argument.
 import { parseArgs } from "node:util";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
-import { createBackend, DEFAULT_PORT } from "./backend-factory.js";
-import { exitCodeOf, PwaNavError } from "./errors.js";
-import { loadFlowSource } from "./mcp-flows.js";
-import { createMcpServer } from "./mcp-server.js";
+import { createBackend, DEFAULT_PORT } from "./backend/backend-factory.js";
+import { exitCodeOf, PwaNavError } from "./core/errors.js";
+import { loadFlowSource } from "./mcp/mcp-flows.js";
+import { createMcpServer } from "./mcp/mcp-server.js";
 
 const stderrLog = (...parts: unknown[]): void => {
   console.error(...parts);

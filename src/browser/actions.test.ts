@@ -4,9 +4,9 @@ import { JSDOM } from "jsdom";
 import { startFakeBidiServer, type FakeBidiServer, type ReceivedCommand } from "../bidi/fake-server.js";
 import { BidiClient } from "../bidi/protocol.js";
 import { BidiTransport } from "../bidi/transport.js";
-import { PwaNavError } from "../errors.js";
-import { StaleRefError } from "../refs.js";
-import type { Snapshot } from "../snapshot.js";
+import { PwaNavError } from "../core/errors.js";
+import { StaleRefError } from "../core/refs.js";
+import type { Snapshot } from "../core/snapshot.js";
 import type { RawElement } from "./collector.js";
 import {
   buildFillKeyActions,

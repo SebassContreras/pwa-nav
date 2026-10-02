@@ -1,11 +1,11 @@
 // MCP tool table (spec 006, T001-T003). Thin adapter: every handler calls the shared ops layer
 // (src/ops.ts, src/cli-screens.ts); no browser, gate or ref logic lives here.
 // Page content is untrusted: descriptions are static strings, results echo only what ops prints.
-import type { Backend } from "./backend.js";
-import { agentPath } from "./backend.js";
-import { NO_INPUT_LINE, runScreenView, runSemanticAct, runSemanticClick, runSemanticFill } from "./cli-screens.js";
-import type { ScreenSource, SemanticContext } from "./cli-screens.js";
-import { PwaNavError } from "./errors.js";
+import type { Backend } from "../backend/backend.js";
+import { agentPath } from "../backend/backend.js";
+import { NO_INPUT_LINE, runScreenView, runSemanticAct, runSemanticClick, runSemanticFill } from "../cli/cli-screens.js";
+import type { ScreenSource, SemanticContext } from "../cli/cli-screens.js";
+import { PwaNavError } from "../core/errors.js";
 import {
   parseActOp,
   performAct,
@@ -14,10 +14,10 @@ import {
   performFill,
   performLiveSnapshot,
   performOpen,
-} from "./ops.js";
-import type { ActOp } from "./ops.js";
-import { latestSnapshotId, load as loadSnapshot } from "./refs.js";
-import { isSemanticToken } from "./screen-resolve.js";
+} from "../ops/ops.js";
+import type { ActOp } from "../ops/ops.js";
+import { latestSnapshotId, load as loadSnapshot } from "../core/refs.js";
+import { isSemanticToken } from "../screens/screen-resolve.js";
 
 /** Max extract lines returned inline; the rest stays in the snapshot file. */
 export const EXTRACT_INLINE_CAP = 100;

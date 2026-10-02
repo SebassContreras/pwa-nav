@@ -10,18 +10,18 @@ import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { InMemoryTransport } from "@modelcontextprotocol/sdk/inMemory.js";
 import { McpError } from "@modelcontextprotocol/sdk/types.js";
 import { Ajv2020 } from "ajv/dist/2020.js";
-import { startFakeBidiServer, type FakeBidiServer } from "./bidi/fake-server.js";
-import { createBackend } from "./backend-factory.js";
-import type { RawElement } from "./browser/collector.js";
-import { EXIT_CODES, PwaNavError, type ErrorCode } from "./errors.js";
+import { startFakeBidiServer, type FakeBidiServer } from "../bidi/fake-server.js";
+import { createBackend } from "../backend/backend-factory.js";
+import type { RawElement } from "../browser/collector.js";
+import { EXIT_CODES, PwaNavError, type ErrorCode } from "../core/errors.js";
 import { buildFlowTools, flowToolNames, loadFlowSource, MAX_FLOW_DESCRIPTION } from "./mcp-flows.js";
 import { createMcpServer, toolError } from "./mcp-server.js";
 import { EXTRACT_INLINE_CAP } from "./mcp-tools.js";
-import { learnScreen } from "./screen-learn.js";
-import type { ScreenFlow, ScreenMap } from "./screen-map.js";
+import { learnScreen } from "../screens/screen-learn.js";
+import type { ScreenFlow, ScreenMap } from "../screens/screen-map.js";
 
 const HERE = dirname(fileURLToPath(import.meta.url));
-const ROOT = join(HERE, "..");
+const ROOT = join(HERE, "..", "..");
 const ORIGIN = "http://localhost:8080";
 const SECRET = "hunter2-SECRET";
 

@@ -4,14 +4,14 @@
 // Descriptions use only slugs plus a capped, control-stripped flow.description (map data, human-authored).
 // Handlers reuse the `act flow:<id>` code path of the CLI (runSemanticAct); they never navigate.
 import { createHash } from "node:crypto";
-import { PwaNavError } from "./errors.js";
-import { runSemanticAct } from "./cli-screens.js";
-import type { ScreenSource } from "./cli-screens.js";
+import { PwaNavError } from "../core/errors.js";
+import { runSemanticAct } from "../cli/cli-screens.js";
+import type { ScreenSource } from "../cli/cli-screens.js";
 import { ACTION_HINTS, actionOutcome, invalid, semanticContext } from "./mcp-tools.js";
 import type { ToolDef } from "./mcp-tools.js";
-import { isSemanticToken } from "./screen-resolve.js";
-import { findScreen, loadExplicitMap, loadScreenMapsFromDir, resolveScreensDir } from "./screen-match.js";
-import type { ScreenMap } from "./screen-map.js";
+import { isSemanticToken } from "../screens/screen-resolve.js";
+import { findScreen, loadExplicitMap, loadScreenMapsFromDir, resolveScreensDir } from "../screens/screen-match.js";
+import type { ScreenMap } from "../screens/screen-map.js";
 
 export const MAX_TOOL_NAME = 64;
 export const MAX_FLOW_DESCRIPTION = 200;

@@ -6,8 +6,8 @@
 // snapshot input from a caller-supplied ARIA tree); BidiBackend drives a live browser.
 // extract is read-only (never supersedes) and never calls the backend.
 import { writeFile } from "node:fs/promises";
-import { normalize } from "./snapshot.js";
-import type { Snapshot } from "./snapshot.js";
+import { normalize } from "../core/snapshot.js";
+import type { Snapshot } from "../core/snapshot.js";
 import {
   agentPath,
   ensureParentDir,
@@ -19,15 +19,15 @@ import {
   type ActionResult,
   type Backend,
   type Session,
-} from "./backend.js";
-import type { RawElement } from "./browser/collector.js";
-import { buildLiveSnapshot } from "./browser/live-snapshot.js";
+} from "../backend/backend.js";
+import type { RawElement } from "../browser/collector.js";
+import { buildLiveSnapshot } from "../browser/live-snapshot.js";
 import {
   load as loadSnapshot,
   save as saveSnapshot,
   saveLive,
   StaleRefError,
-} from "./refs.js";
+} from "../core/refs.js";
 
 // Re-exported so existing callers keep their imports.
 export { ensureParentDir, isHttpUrl, loadSession, parseSession };

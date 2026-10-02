@@ -1,6 +1,6 @@
 // Typed subset of WebDriver BiDi (https://w3c.github.io/webdriver-bidi/) over BidiTransport.
 // Only the commands pwa-nav needs; everything else is deliberately absent.
-import { PwaNavError } from "../errors.js";
+import { PwaNavError } from "../core/errors.js";
 import { type BidiTransport } from "./transport.js";
 
 export type WaitState = "none" | "interactive" | "complete";

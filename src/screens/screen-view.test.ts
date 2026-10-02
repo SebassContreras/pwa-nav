@@ -5,9 +5,9 @@ import { fileURLToPath } from "node:url";
 import { loadScreenMap, type Screen, type ScreenMap } from "./screen-map.js";
 import { renderMapSummary, renderScreenView, renderUnmappedHint } from "./screen-view.js";
 
-const demoMapPath = fileURLToPath(new URL("../examples/screens/demo-app.screens.json", import.meta.url));
+const demoMapPath = fileURLToPath(new URL("../../examples/screens/demo-app.screens.json", import.meta.url));
 // Compiled to dist/, so the fixtures resolve from the repo root.
-const viewsDir = new URL("../checks/fixtures/views/", import.meta.url);
+const viewsDir = new URL("../../checks/fixtures/views/", import.meta.url);
 
 async function demo(): Promise<{ map: ScreenMap; login: Screen }> {
   const map = await loadScreenMap(demoMapPath);

@@ -8,10 +8,10 @@ import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { test } from "node:test";
 import { fileURLToPath } from "node:url";
-import { startFakeBidiServer, type FakeBidiServer } from "./bidi/fake-server.js";
-import type { RawElement } from "./browser/collector.js";
+import { startFakeBidiServer, type FakeBidiServer } from "../bidi/fake-server.js";
+import type { RawElement } from "../browser/collector.js";
 
-const CLI = join(dirname(fileURLToPath(import.meta.url)), "cli.js");
+const CLI = join(dirname(fileURLToPath(import.meta.url)), "..", "cli.js");
 const URL_A = "https://app.test/login";
 
 // A port that was just released: nothing listens on it, so a command that forgets

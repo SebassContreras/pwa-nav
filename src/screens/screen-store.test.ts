@@ -3,14 +3,14 @@ import { mkdtemp, readdir, readFile, rm, stat, utimes, writeFile } from "node:fs
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { test } from "node:test";
-import type { RawElement } from "./browser/collector.js";
+import type { RawElement } from "../browser/collector.js";
 import { learnScreen } from "./screen-learn.js";
 import { ScreenMapError, type ScreenMap } from "./screen-map.js";
 import { diffScreens as diffFor, isEmptyDiff } from "./screen-merge.js";
 import { learnIntoFile, renderDiff, writeScreenMap } from "./screen-store.js";
 import { readFileSync } from "node:fs";
 
-const readJson = (rel: string): unknown => JSON.parse(readFileSync(new URL(`../${rel}`, import.meta.url), "utf8"));
+const readJson = (rel: string): unknown => JSON.parse(readFileSync(new URL(`../../${rel}`, import.meta.url), "utf8"));
 const golden = readJson("checks/fixtures/login.golden.json") as RawElement[];
 const demo = readJson("examples/screens/demo-app.screens.json") as ScreenMap;
 const PAGE = { url: "http://localhost:8080/login", title: "Demo App", appOrigin: "http://localhost:8080" };

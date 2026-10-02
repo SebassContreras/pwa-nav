@@ -1,6 +1,6 @@
 // WebDriver BiDi transport over the Node global WebSocket (no runtime deps).
 // Spec: https://w3c.github.io/webdriver-bidi/ (commands, responses, events).
-import { PwaNavError } from "../errors.js";
+import { PwaNavError } from "../core/errors.js";
 
 export const DEFAULT_COMMAND_TIMEOUT_MS = 10_000;
 export const DEFAULT_CONNECT_TIMEOUT_MS = 5_000;

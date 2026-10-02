@@ -10,9 +10,9 @@
 import { fstatSync } from "node:fs";
 import { readFile } from "node:fs/promises";
 import { parseArgs, type ParseArgsOptionsConfig } from "node:util";
-import { createBackend, DEFAULT_PORT } from "./backend-factory.js";
-import type { Backend } from "./backend.js";
-import { exitCodeOf, PwaNavError } from "./errors.js";
+import { createBackend, DEFAULT_PORT } from "./backend/backend-factory.js";
+import type { Backend } from "./backend/backend.js";
+import { exitCodeOf, PwaNavError } from "./core/errors.js";
 import {
   DEFAULT_SESSION_PATH,
   DEFAULT_SNAPSHOT_PATH,
@@ -25,9 +25,9 @@ import {
   performLiveSnapshot,
   performOpen,
   performSnapshot,
-} from "./ops.js";
-import type { ActOp, ExtractMode } from "./ops.js";
-import { runCheck } from "./qa.js";
+} from "./ops/ops.js";
+import type { ActOp, ExtractMode } from "./ops/ops.js";
+import { runCheck } from "./ops/qa.js";
 import {
   runLearn,
   runScreenView,
@@ -37,8 +37,8 @@ import {
   validateLearnFlags,
   NO_INPUT_LINE,
   type ScreenSource,
-} from "./cli-screens.js";
-import { isSemanticToken } from "./screen-resolve.js";
+} from "./cli/cli-screens.js";
+import { isSemanticToken } from "./screens/screen-resolve.js";
 
 const SITE_ULID = /^[0-9A-HJKMNP-TV-Z]{26}$/i;
 

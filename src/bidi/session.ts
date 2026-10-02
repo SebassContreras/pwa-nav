@@ -1,6 +1,6 @@
 // One short-lived BiDi session per command. session.end is mandatory: Firefox keeps
 // the single session slot alive after a bare socket close (see design, Measured facts).
-import { PwaNavError } from "../errors.js";
+import { PwaNavError } from "../core/errors.js";
 import { BidiClient } from "./protocol.js";
 import { BidiTransport, type BidiTransportOptions } from "./transport.js";
 

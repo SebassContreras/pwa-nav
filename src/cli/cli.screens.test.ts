@@ -8,14 +8,14 @@ import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { test } from "node:test";
 import { fileURLToPath } from "node:url";
-import { startFakeBidiServer, type FakeBidiServer } from "./bidi/fake-server.js";
-import type { RawElement } from "./browser/collector.js";
-import { learnScreen } from "./screen-learn.js";
-import type { ScreenMap } from "./screen-map.js";
+import { startFakeBidiServer, type FakeBidiServer } from "../bidi/fake-server.js";
+import type { RawElement } from "../browser/collector.js";
+import { learnScreen } from "../screens/screen-learn.js";
+import type { ScreenMap } from "../screens/screen-map.js";
 
 const HERE = dirname(fileURLToPath(import.meta.url));
-const CLI = join(HERE, "cli.js");
-const ROOT = join(HERE, "..");
+const CLI = join(HERE, "..", "cli.js");
+const ROOT = join(HERE, "..", "..");
 const ORIGIN = "http://localhost:8080";
 const SECRET = "hunter2-SECRET";
 

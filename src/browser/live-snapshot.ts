@@ -1,8 +1,8 @@
 // RawElement[] -> public Snapshot + per-ref locators (spec 004, T008). Pure.
 // Node handles do not survive BiDi sessions, so each ref keeps a role+name+occurrence locator.
 import { randomUUID } from "node:crypto";
-import type { Locator } from "../screen-map.js";
-import type { Snapshot, SnapshotElement } from "../snapshot.js";
+import type { Locator } from "../screens/screen-map.js";
+import type { Snapshot, SnapshotElement } from "../core/snapshot.js";
 import type { NameSource, RawElement } from "./collector.js";
 
 export interface LiveExtras {

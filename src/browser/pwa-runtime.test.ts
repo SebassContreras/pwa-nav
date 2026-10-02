@@ -4,7 +4,7 @@ import { mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { test } from "node:test";
-import { PwaNavError } from "../errors.js";
+import { PwaNavError } from "../core/errors.js";
 import {
   buildLaunchArgs,
   findSite,

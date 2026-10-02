@@ -15,7 +15,7 @@ import { fileURLToPath } from "node:url";
 import { withTopLevelContext } from "./bidi/session.js";
 import { endpointFor } from "./browser/bidi-backend.js";
 import { tcpProbe, waitForPort } from "./browser/pwa-runtime.js";
-import type { Snapshot } from "./snapshot.js";
+import type { Snapshot } from "./core/snapshot.js";
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const CLI = join(HERE, "cli.js");

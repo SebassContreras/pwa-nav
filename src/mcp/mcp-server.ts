@@ -17,13 +17,13 @@ import {
 import type { CallToolResult } from "@modelcontextprotocol/sdk/types.js";
 import { Ajv2020 } from "ajv/dist/2020.js";
 import type { ValidateFunction } from "ajv/dist/2020.js";
-import type { ScreenSource } from "./cli-screens.js";
+import type { ScreenSource } from "../cli/cli-screens.js";
 import { readFile } from "node:fs/promises";
-import { isPwaNavError, PwaNavError } from "./errors.js";
-import { agentPath } from "./backend.js";
+import { isPwaNavError, PwaNavError } from "../core/errors.js";
+import { agentPath } from "../backend/backend.js";
 import { buildFlowTools, humanOnlyNote } from "./mcp-flows.js";
 import { TOOLS } from "./mcp-tools.js";
-import type { ScreenMap } from "./screen-map.js";
+import type { ScreenMap } from "../screens/screen-map.js";
 import type { BackendFactory, ToolDef } from "./mcp-tools.js";
 
 export const SERVER_NAME = "pwa-nav";

@@ -1,13 +1,13 @@
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { test } from "node:test";
-import type { RawElement } from "./browser/collector.js";
-import { PwaNavError } from "./errors.js";
+import type { RawElement } from "../browser/collector.js";
+import { PwaNavError } from "../core/errors.js";
 import { learnScreen } from "./screen-learn.js";
 import { diffScreens, isEmptyDiff, mergeIntoMap, mergeScreen } from "./screen-merge.js";
 import { validateScreenMap, type Screen, type ScreenMap } from "./screen-map.js";
 
-const readJson = (rel: string): unknown => JSON.parse(readFileSync(new URL(`../${rel}`, import.meta.url), "utf8"));
+const readJson = (rel: string): unknown => JSON.parse(readFileSync(new URL(`../../${rel}`, import.meta.url), "utf8"));
 const golden = readJson("checks/fixtures/login.golden.json") as RawElement[];
 const demo = readJson("examples/screens/demo-app.screens.json") as ScreenMap;
 const PAGE = { url: "http://localhost:8080/login", title: "Demo App", appOrigin: "http://localhost:8080" };

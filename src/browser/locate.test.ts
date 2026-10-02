@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { StaleRefError } from "../refs.js";
-import type { Snapshot } from "../snapshot.js";
+import { StaleRefError } from "../core/refs.js";
+import type { Snapshot } from "../core/snapshot.js";
 import type { RawElement } from "./collector.js";
 import { assertFresh, findByLocator, sameDocumentUrl } from "./locate.js";
 

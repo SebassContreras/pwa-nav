@@ -4,12 +4,12 @@
 // collect -> match locator -> get node handle -> act. The caller wraps this in withSession.
 // The in-page functions below are shipped as source text (toString) and must stay
 // self-contained: no imports, no outer-scope references.
-import { PwaNavError } from "../errors.js";
+import { PwaNavError } from "../core/errors.js";
 import type { BidiClient, NavigationWatch, NodeArgument } from "../bidi/protocol.js";
 import { SETTLE_EVENTS } from "../bidi/protocol.js";
-import { StaleRefError } from "../refs.js";
-import type { Locator } from "../screen-map.js";
-import type { Snapshot } from "../snapshot.js";
+import { StaleRefError } from "../core/refs.js";
+import type { Locator } from "../screens/screen-map.js";
+import type { Snapshot } from "../core/snapshot.js";
 import { COLLECT_NODES_SOURCE, COLLECTOR_SOURCE, type RawElement } from "./collector.js";
 import { assertFresh } from "./locate.js";
 

@@ -5,7 +5,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { describe, it } from "node:test";
 import { fileURLToPath } from "node:url";
-import { PwaNavError } from "./errors.js";
+import { PwaNavError } from "../core/errors.js";
 import { ScreenMapError } from "./screen-map.js";
 import type { Screen, ScreenMap } from "./screen-map.js";
 import {
@@ -21,7 +21,7 @@ import {
   selectMap,
 } from "./screen-match.js";
 
-const EXAMPLE = fileURLToPath(new URL("../examples/screens/demo-app.screens.json", import.meta.url));
+const EXAMPLE = fileURLToPath(new URL("../../examples/screens/demo-app.screens.json", import.meta.url));
 
 function screen(id: string, route: string): Screen {
   return {

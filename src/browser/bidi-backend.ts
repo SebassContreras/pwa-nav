@@ -1,7 +1,7 @@
 // BidiBackend (spec 004, T010): the Backend port over WebDriver BiDi.
 // Every operation is ONE withTopLevelContext session (connect -> work -> session.end);
 // a session is never reused (Firefox allows a single active session).
-import { addAllowedOrigin, assertArmedAllowed, assertNavigationAllowed, DEFAULT_AGENT_DIR } from "../gate.js";
+import { addAllowedOrigin, assertArmedAllowed, assertNavigationAllowed, DEFAULT_AGENT_DIR } from "../core/gate.js";
 import { withTopLevelContext, type SessionOptions } from "../bidi/session.js";
 import type { BidiClient } from "../bidi/protocol.js";
 import {
@@ -17,11 +17,11 @@ import {
   type Backend,
   type OpenOptions,
   type Session,
-} from "../backend.js";
-import { PwaNavError } from "../errors.js";
-import { load as loadSnapshot, loadLocators, resolveLocator, saveLive } from "../refs.js";
-import type { Locator } from "../screen-map.js";
-import type { Snapshot } from "../snapshot.js";
+} from "../backend/backend.js";
+import { PwaNavError } from "../core/errors.js";
+import { load as loadSnapshot, loadLocators, resolveLocator, saveLive } from "../core/refs.js";
+import type { Locator } from "../screens/screen-map.js";
+import type { Snapshot } from "../core/snapshot.js";
 import { clickLocator, collectLive, describeTarget, fillLocator, type LiveCollect } from "./actions.js";
 import type { RawElement } from "./collector.js";
 import { buildLiveSnapshot, type LiveExtras } from "./live-snapshot.js";

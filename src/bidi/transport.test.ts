@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { PwaNavError } from "../errors.js";
+import { PwaNavError } from "../core/errors.js";
 import { FakeBidiError, NO_REPLY, startFakeBidiServer, type FakeBidiServer } from "./fake-server.js";
 import { BidiTransport } from "./transport.js";
 

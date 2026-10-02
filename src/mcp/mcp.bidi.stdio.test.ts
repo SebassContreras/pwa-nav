@@ -10,12 +10,12 @@ import { test } from "node:test";
 import { fileURLToPath } from "node:url";
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { StdioClientTransport } from "@modelcontextprotocol/sdk/client/stdio.js";
-import { startFakeBidiServer, type FakeBidiServer } from "./bidi/fake-server.js";
-import type { RawElement } from "./browser/collector.js";
-import { learnScreen } from "./screen-learn.js";
-import type { ScreenMap } from "./screen-map.js";
+import { startFakeBidiServer, type FakeBidiServer } from "../bidi/fake-server.js";
+import type { RawElement } from "../browser/collector.js";
+import { learnScreen } from "../screens/screen-learn.js";
+import type { ScreenMap } from "../screens/screen-map.js";
 
-const MCP = join(dirname(fileURLToPath(import.meta.url)), "mcp.js");
+const MCP = join(dirname(fileURLToPath(import.meta.url)), "..", "mcp.js");
 const ORIGIN = "http://localhost:8080";
 
 function remote(value: unknown): unknown {

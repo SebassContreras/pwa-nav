@@ -8,7 +8,7 @@ import { fileURLToPath } from "node:url";
 import { Ajv2020 } from "ajv/dist/2020.js";
 import addFormats from "ajv-formats";
 
-export const SCREEN_MAP_SCHEMA_URL = new URL("../schemas/screen-map.schema.json", import.meta.url);
+export const SCREEN_MAP_SCHEMA_URL = new URL("../../schemas/screen-map.schema.json", import.meta.url);
 
 export interface Locator {
   role: string;

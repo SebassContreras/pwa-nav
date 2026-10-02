@@ -52,12 +52,15 @@ Gate at handoff: `pnpm lint && pnpm build && pnpm test` (285 tests) `&& pnpm smo
 
 | Area | Files |
 |---|---|
-| Contract + store | `src/snapshot.ts`, `src/refs.ts`, `src/errors.ts`, `src/gate.ts` |
+| Core domain | `src/core/{errors,snapshot,refs,gate}.ts` |
 | BiDi stack | `src/bidi/{transport,protocol,session,fake-server}.ts` |
-| Browser layer | `src/browser/{pwa-runtime,collector,live-snapshot,locate,actions,bidi-backend}.ts`, `src/backend*.ts`, `src/ops.ts` |
-| Screen map | `schemas/screen-map.schema.json`, `src/screen-{map,match,view,learn,merge,store,resolve}.ts`, `src/cli-screens.ts`, `examples/screens/` |
-| CLI / MCP | `src/cli.ts`, `src/mcp{,-server,-tools,-flows}.ts`, `mcp.json` |
-| Tests | `src/*.test.ts` (node:test), E2E `src/e2e.test.ts` + `checks/fixtures/e2e/`, goldens `checks/fixtures/{login.golden.json,views/}` |
+| Browser layer | `src/browser/{pwa-runtime,collector,live-snapshot,locate,actions,bidi-backend}.ts` |
+| Backend ports | `src/backend/{backend,backend-factory}.ts` |
+| Operations | `src/ops/{ops,qa}.ts` |
+| Screen map | `schemas/screen-map.schema.json`, `src/screens/screen-{map,match,view,learn,merge,store,resolve}.ts`, `examples/screens/` |
+| CLI adapter | `src/cli.ts` (entry), `src/cli/cli-screens.ts` |
+| MCP adapter | `src/mcp.ts` (entry), `src/mcp/{mcp-server,mcp-tools,mcp-flows}.ts`, `mcp.json` |
+| Tests | `src/**/*.test.ts` (node:test), E2E `src/e2e.test.ts` + `checks/fixtures/e2e/`, goldens `checks/fixtures/{login.golden.json,views/}` |
 | Docs | `README.md`, `SKILL.md`, `docs/{firefox-pwa,screen-map,mcp,notebook-pilot}.md` |
 
 Loop logs per spec: `.specloop/logs/<id>.log` (git-ignored). Worker config: `.specloop/loop.config.json` (`claude` first).

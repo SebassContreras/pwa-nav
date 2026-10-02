@@ -2,7 +2,7 @@
 // Pure logic + directory IO. No browser calls.
 import { readdir } from "node:fs/promises";
 import { join } from "node:path";
-import { PwaNavError } from "./errors.js";
+import { PwaNavError } from "../core/errors.js";
 import { loadScreenMap, ScreenMapError } from "./screen-map.js";
 import type { Screen, ScreenMap } from "./screen-map.js";
 

@@ -10,7 +10,7 @@
 import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { randomUUID } from "node:crypto";
 import { join, resolve } from "node:path";
-import { load as loadSnapshot, latestSnapshotId } from "./refs.js";
+import { load as loadSnapshot, latestSnapshotId } from "../core/refs.js";
 import {
   DEFAULT_SESSION_PATH,
   DEFAULT_SNAPSHOT_PATH,

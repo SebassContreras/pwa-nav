@@ -2,7 +2,7 @@
 // `@id` -> locator, `flow:<id>` -> ordered steps, with the sensitive-field gate.
 // Pure logic. Error messages and hints NEVER contain provided text values.
 import { Ajv2020 } from "ajv/dist/2020.js";
-import { PwaNavError } from "./errors.js";
+import { PwaNavError } from "../core/errors.js";
 import type { Locator, Screen } from "./screen-map.js";
 
 export type TargetKind = "field" | "action" | "link";

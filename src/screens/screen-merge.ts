@@ -1,7 +1,7 @@
 // Learn diff/merge for spec 005-screen-map (T007): existing screen + live-learned screen.
 // Pure logic, no IO. Ids of existing elements never change; removal only with `prune`.
 import { isDeepStrictEqual } from "node:util";
-import { PwaNavError } from "./errors.js";
+import { PwaNavError } from "../core/errors.js";
 import { deriveIds } from "./screen-learn.js";
 import { matchRoute } from "./screen-match.js";
 import {

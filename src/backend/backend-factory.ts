@@ -1,6 +1,6 @@
 // Backend selection for the CLI (task T011 wires flags to this).
 import { DEFAULT_HOST, DEFAULT_PORT, OfflineBackend, type Backend } from "./backend.js";
-import { BidiBackend } from "./browser/bidi-backend.js";
+import { BidiBackend } from "../browser/bidi-backend.js";
 
 export { DEFAULT_HOST, DEFAULT_PORT };
 

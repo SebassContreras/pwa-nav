@@ -3,13 +3,13 @@ import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { test } from "node:test";
-import { OfflineBackend, type ActionResult } from "../backend.js";
-import { createBackend, DEFAULT_HOST, DEFAULT_PORT } from "../backend-factory.js";
+import { OfflineBackend, type ActionResult } from "../backend/backend.js";
+import { createBackend, DEFAULT_HOST, DEFAULT_PORT } from "../backend/backend-factory.js";
 import { startFakeBidiServer, type FakeBidiServer, type ReceivedCommand } from "../bidi/fake-server.js";
-import { PwaNavError } from "../errors.js";
-import { addAllowedOrigin, loadAllowList } from "../gate.js";
-import { performAct, performClick, performFill, performLiveSnapshot, performOpen } from "../ops.js";
-import { latestSnapshotId, loadLocators, load, StaleRefError } from "../refs.js";
+import { PwaNavError } from "../core/errors.js";
+import { addAllowedOrigin, loadAllowList } from "../core/gate.js";
+import { performAct, performClick, performFill, performLiveSnapshot, performOpen } from "../ops/ops.js";
+import { latestSnapshotId, loadLocators, load, StaleRefError } from "../core/refs.js";
 import type { RawElement } from "./collector.js";
 import { BidiBackend, endpointFor, type BidiBackendOptions } from "./bidi-backend.js";
 
@@ -579,7 +579,7 @@ test("offline path: ops default behavior unchanged (intent log, supersede, same 
     const { out: openOut } = await captureLog(() => performOpen("https://x.test/", { backend }));
     assert.equal(openOut, `open ok: https://x.test/ -> ${dir}/session.json`);
     assert.equal(await backend.currentUrl(), "https://x.test/");
-    const { save } = await import("../refs.js");
+    const { save } = await import("../core/refs.js");
     await save(
       { snapshotId: "o1", url: "https://x.test/", title: "t", elements: [{ ref: "e1", role: "button", name: "Go" }] },
       { agentDir: dir },

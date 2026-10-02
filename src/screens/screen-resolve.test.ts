@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
 import { test } from "node:test";
 import { fileURLToPath } from "node:url";
-import { PwaNavError } from "./errors.js";
+import { PwaNavError } from "../core/errors.js";
 import type { Screen, ScreenMap } from "./screen-map.js";
 import {
   describeResolved,
@@ -70,7 +70,7 @@ const search: Screen = {
 };
 
 async function demoScreen(): Promise<Screen> {
-  const path = fileURLToPath(new URL("../examples/screens/demo-app.screens.json", import.meta.url));
+  const path = fileURLToPath(new URL("../../examples/screens/demo-app.screens.json", import.meta.url));
   const map = JSON.parse(await readFile(path, "utf8")) as ScreenMap;
   const screen = map.screens[0];
   assert.ok(screen);

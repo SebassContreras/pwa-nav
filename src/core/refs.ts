@@ -4,8 +4,8 @@
 import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { join, resolve as resolvePath } from "node:path";
 import { PwaNavError } from "./errors.js";
-import type { LiveExtras } from "./browser/live-snapshot.js";
-import type { Locator } from "./screen-map.js";
+import type { LiveExtras } from "../browser/live-snapshot.js";
+import type { Locator } from "../screens/screen-map.js";
 import type { Snapshot, SnapshotElement } from "./snapshot.js";
 
 export const STALE_REF_CODE = "stale_ref" as const;

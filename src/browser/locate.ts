@@ -1,7 +1,7 @@
 // Pure live matching of a stored Locator against a fresh collector run (spec 004, T008).
-import { StaleRefError } from "../refs.js";
-import type { Locator } from "../screen-map.js";
-import type { Snapshot } from "../snapshot.js";
+import { StaleRefError } from "../core/refs.js";
+import type { Locator } from "../screens/screen-map.js";
+import type { Snapshot } from "../core/snapshot.js";
 import type { RawElement } from "./collector.js";
 
 export function findByLocator(
