@@ -122,7 +122,7 @@ export function createMcpServer(options: McpServerOptions): Server {
       log(`pwa-nav-mcp: flow tool ${tool.name} skipped: inputSchema rejected by Ajv 2020 strict (${first})`);
     }
   }
-  const humanNote = humanOnlyNote(flows.humanOnly);
+  const humanNote = humanOnlyNote(flows.humanOnly, flows.humanOnlyJourneys ?? []);
   const screens: ScreenSource = {
     ...(options.screenMap === undefined ? {} : { screenMap: options.screenMap }),
     ...(options.screensDir === undefined ? {} : { screensDir: options.screensDir }),

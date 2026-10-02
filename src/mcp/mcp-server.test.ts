@@ -667,3 +667,61 @@ test("resources: list/read the screens map and the latest snapshot; errors for m
     }
   });
 });
+
+test("journey tools: listed with journey_<id>, destructiveHint: true, and callable", async () => {
+  const screen = learnScreen(SEARCH_RAW, { url: `${ORIGIN}/search`, title: "Search", appOrigin: ORIGIN }, { access: "public" });
+  screen.flows = [SEARCH_FLOW];
+  const mapWithJourney: ScreenMap = {
+    schemaVersion: "1.0.0",
+    app: { id: "synthetic", name: "Synthetic", origin: ORIGIN, locale: "en", learnedAt: "2026-10-01T00:00:00Z" },
+    screens: [screen],
+    journeys: [
+      {
+        id: "search-item",
+        description: "Search for an item journey",
+        inputSchema: {
+          type: "object",
+          required: ["q"],
+          properties: { q: { type: "string" } },
+          additionalProperties: false,
+        },
+        steps: [
+          {
+            screenId: "search",
+            action: "flow:search",
+            inputs: { q: "${inputs.q}" },
+            expectScreen: "search",
+          },
+        ],
+      },
+      {
+        id: "human-checkout",
+        description: "Human checkout",
+        humanOnly: true,
+        steps: [{ screenId: "search", action: "@search" }],
+      },
+    ],
+  };
+
+  const maps = { "synthetic.screens.json": JSON.stringify(mapWithJourney) };
+  await withMcp({ maps }, async ({ client }) => {
+    const { tools } = await client.listTools();
+    const journeyTool = tools.find((t) => t.name === "journey_search_item");
+    assert.ok(journeyTool !== undefined, tools.map((t) => t.name).join(", "));
+    assert.equal(journeyTool.annotations?.destructiveHint, true);
+    assert.match(journeyTool.description ?? "", /Run multi-screen user journey "search-item"/);
+    const firstJourney = mapWithJourney.journeys?.[0];
+    assert.ok(firstJourney !== undefined);
+    assert.deepEqual(journeyTool.inputSchema, firstJourney.inputSchema);
+
+    // Human-only journey is omitted from tools, but instructions note it
+    assert.ok(!tools.some((t) => t.name === "journey_human_checkout"));
+    assert.match(client.getInstructions() ?? "", /Human-only journeys exist: human-checkout/);
+
+    // Dry-run call
+    const result = await call(client, "journey_search_item", { q: "headphones" });
+    assert.equal(result.isError, false, result.text);
+    assert.match(result.text, /journey "search-item"/);
+    assert.match(result.text, /no input sent \(pass --armed to execute\)/);
+  });
+});

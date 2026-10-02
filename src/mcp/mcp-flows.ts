@@ -12,6 +12,7 @@ import type { ToolDef } from "./mcp-tools.js";
 import { isSemanticToken } from "../screens/screen-resolve.js";
 import { findScreen, loadExplicitMap, loadScreenMapsFromDir, resolveScreensDir } from "../screens/screen-match.js";
 import type { ScreenMap } from "../screens/screen-map.js";
+import { performJourney } from "../ops/journey.js";
 
 export const MAX_TOOL_NAME = 64;
 export const MAX_FLOW_DESCRIPTION = 200;
@@ -29,6 +30,12 @@ export interface FlowRef {
 export interface FlowTools {
   tools: ToolDef[];
   humanOnly: FlowRef[];
+  humanOnlyJourneys?: string[];
+}
+
+export interface JourneyTools {
+  tools: ToolDef[];
+  humanOnly: string[];
 }
 
 /** Map source rule: --screen-map wins; else the screens dir must hold exactly one map. Never throws. */
@@ -104,7 +111,87 @@ interface Candidate extends FlowRef {
   schema: Record<string, unknown>;
 }
 
-/** Builds the callable flow tools (humanOnly excluded). Schema validity under Ajv is checked by the caller. */
+export function journeyToolNames(journeyIds: readonly string[], log: Log): Map<string, string> {
+  const base = journeyIds.map((id) => `journey_${snake(id)}`);
+  const uses = new Map<string, number>();
+  for (const name of base) uses.set(name, (uses.get(name) ?? 0) + 1);
+  const out = new Map<string, string>();
+  const taken = new Set<string>();
+  journeyIds.forEach((id, index) => {
+    let name = base[index] ?? "";
+    if ((uses.get(name) ?? 0) > 1 || name.length > MAX_TOOL_NAME) {
+      const suffix = `_${createHash("sha256").update(id).digest("hex").slice(0, 8)}`;
+      name = `${name.slice(0, MAX_TOOL_NAME - suffix.length)}${suffix}`;
+      log(`pwa-nav-mcp: journey ${id} registered as ${name} (name collision or length)`);
+    }
+    if (!NAME_PATTERN.test(name) || taken.has(name)) {
+      log(`pwa-nav-mcp: journey ${id} skipped: no valid unique tool name`);
+      return;
+    }
+    taken.add(name);
+    out.set(id, name);
+  });
+  return out;
+}
+
+export function buildJourneyTools(map: ScreenMap, log: Log): JourneyTools {
+  const tools: ToolDef[] = [];
+  const humanOnly: string[] = [];
+  const candidates: { id: string; description: string; schema: Record<string, unknown> }[] = [];
+
+  for (const journey of map.journeys ?? []) {
+    if (journey.humanOnly === true) {
+      humanOnly.push(journey.id);
+    } else if (journey.inputSchema === undefined) {
+      candidates.push({
+        id: journey.id,
+        description: journey.description,
+        schema: { type: "object", additionalProperties: false },
+      });
+    } else if (isObjectSchema(journey.inputSchema)) {
+      candidates.push({
+        id: journey.id,
+        description: journey.description,
+        schema: journey.inputSchema,
+      });
+    } else {
+      log(`pwa-nav-mcp: journey ${journey.id} skipped: inputSchema is not an object schema`);
+    }
+  }
+
+  const names = journeyToolNames(candidates.map((c) => c.id), log);
+  for (const candidate of candidates) {
+    const name = names.get(candidate.id);
+    if (name === undefined) continue;
+    const note = sanitizeDescription(candidate.description);
+    tools.push({
+      name,
+      description:
+        `Run multi-screen user journey "${candidate.id}" on app "${map.app.id}". ` +
+        `${note === "" ? "" : `Description: ${note} `}Dry-run unless the server operator armed it.`,
+      inputSchema: candidate.schema,
+      annotations: {
+        readOnlyHint: false,
+        destructiveHint: true,
+        idempotentHint: false,
+        openWorldHint: true,
+      },
+      async handler(args, ctx) {
+        const backend = ctx.backendFactory({ armed: ctx.armed });
+        await performJourney(candidate.id, args, {
+          backend,
+          armed: ctx.armed,
+          map,
+        });
+        return actionOutcome(ctx, backend, null);
+      },
+    });
+  }
+
+  return { tools, humanOnly };
+}
+
+/** Builds the callable flow and journey tools (humanOnly excluded). Schema validity under Ajv is checked by the caller. */
 export function buildFlowTools(map: ScreenMap, log: Log): FlowTools {
   const candidates: Candidate[] = [];
   const humanOnly: FlowRef[] = [];
@@ -148,12 +235,27 @@ export function buildFlowTools(map: ScreenMap, log: Log): FlowTools {
       },
     });
   }
-  return { tools, humanOnly };
+
+  const journeyResult = buildJourneyTools(map, log);
+  tools.push(...journeyResult.tools);
+
+  return { tools, humanOnly, humanOnlyJourneys: journeyResult.humanOnly };
 }
 
-export function humanOnlyNote(humanOnly: readonly FlowRef[]): string {
-  if (humanOnly.length === 0) return "";
-  return `Human-only flows exist and must be performed by the user, never by the agent: ${humanOnly
-    .map((h) => `${h.flowId} (screen ${h.screenId})`)
-    .join(", ")}.`;
+export function humanOnlyNote(
+  humanOnly: readonly FlowRef[],
+  humanOnlyJourneys: readonly string[] = [],
+): string {
+  const parts: string[] = [];
+  if (humanOnly.length > 0) {
+    parts.push(
+      `Human-only flows exist and must be performed by the user, never by the agent: ${humanOnly
+        .map((h) => `${h.flowId} (screen ${h.screenId})`)
+        .join(", ")}.`,
+    );
+  }
+  if (humanOnlyJourneys.length > 0) {
+    parts.push(`Human-only journeys exist: ${humanOnlyJourneys.join(", ")}.`);
+  }
+  return parts.join(" ");
 }
