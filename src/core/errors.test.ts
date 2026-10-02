@@ -16,6 +16,7 @@ const ALL_CODES: ErrorCode[] = [
   "sensitive_target",
   "unknown_target",
   "unmapped_screen",
+  "journey_step_failed",
 ];
 
 test("every code has a positive exit code", () => {
@@ -37,6 +38,7 @@ test("table values match the spec", () => {
   assert.equal(EXIT_CODES.sensitive_target, 11);
   assert.equal(EXIT_CODES.unknown_target, 12);
   assert.equal(EXIT_CODES.unmapped_screen, 13);
+  assert.equal(EXIT_CODES.journey_step_failed, 14);
 });
 
 test("PwaNavError carries code, hint, cause and exitCode", () => {

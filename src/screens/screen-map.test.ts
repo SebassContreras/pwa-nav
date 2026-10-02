@@ -123,6 +123,52 @@ describe("screen map", () => {
     submit.name = "Log in";
     assert.match(await issuesOf(map), /fingerprint: does not match/);
   });
+
+  it("accepts a valid journey", async () => {
+    const map = clone(await example());
+    map.journeys = [
+      {
+        id: "login-journey",
+        description: "Test login flow",
+        steps: [
+          {
+            screenId: "login",
+            action: "@sign-in",
+          },
+        ],
+      },
+    ];
+    assert.equal(await issuesOf(map), "");
+  });
+
+  it("rejects duplicate journey ids", async () => {
+    const map = clone(await example());
+    map.journeys = [
+      { id: "j1", description: "First", steps: [{ screenId: "login", action: "@sign-in" }] },
+      { id: "j1", description: "Duplicate", steps: [{ screenId: "login", action: "@sign-in" }] },
+    ];
+    assert.match(await issuesOf(map), /duplicate journey id "j1"/);
+  });
+
+  it("rejects journey steps with unknown screenId or expectScreen", async () => {
+    const map = clone(await example());
+    map.journeys = [
+      {
+        id: "j-bad",
+        description: "Bad journey",
+        steps: [
+          {
+            screenId: "nonexistent-screen",
+            action: "@click-me",
+            expectScreen: "also-missing",
+          },
+        ],
+      },
+    ];
+    const issues = await issuesOf(map);
+    assert.match(issues, /screenId "nonexistent-screen" does not exist in screens/);
+    assert.match(issues, /expectScreen "also-missing" does not exist in screens/);
+  });
 });
 
 describe("fingerprintOf", () => {

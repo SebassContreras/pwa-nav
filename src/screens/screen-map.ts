@@ -82,6 +82,21 @@ export interface Screen {
   a11y?: A11yFinding[];
 }
 
+export interface JourneyStep {
+  screenId: string;
+  action: string;
+  inputs?: Record<string, unknown>;
+  expectScreen?: string;
+}
+
+export interface Journey {
+  id: string;
+  description: string;
+  humanOnly?: boolean;
+  inputSchema?: Record<string, unknown>;
+  steps: JourneyStep[];
+}
+
 export interface ScreenMap {
   $schema?: string;
   schemaVersion: string;
@@ -94,6 +109,7 @@ export interface ScreenMap {
     learnedAt: string;
   };
   screens: Screen[];
+  journeys?: Journey[];
   unmapped?: {
     route?: string;
     reason: "link-only" | "requires-login" | "not-visited";
@@ -283,6 +299,27 @@ export function crossCheck(map: ScreenMap): ScreenMapIssue[] {
       });
     }
   });
+
+  if (map.journeys) {
+    for (const repeated of duplicates(map.journeys.map((j) => j.id))) {
+      issues.push({ path: "/journeys", message: `duplicate journey id "${repeated}"` });
+    }
+    const screenMap = new Map(map.screens.map((s) => [s.id, s]));
+    map.journeys.forEach((journey, jIndex) => {
+      const jBase = `/journeys/${jIndex.toString()}`;
+      journey.steps.forEach((step, sIndex) => {
+        const sBase = `${jBase}/steps/${sIndex.toString()}`;
+        const screen = screenMap.get(step.screenId);
+        if (!screen) {
+          issues.push({ path: sBase, message: `screenId "${step.screenId}" does not exist in screens` });
+        }
+        if (step.expectScreen && !screenMap.has(step.expectScreen)) {
+          issues.push({ path: sBase, message: `expectScreen "${step.expectScreen}" does not exist in screens` });
+        }
+      });
+    });
+  }
+
   return issues;
 }
 
