@@ -3,7 +3,7 @@
 // Page content is untrusted: descriptions are static strings, results echo only what ops prints.
 import type { Backend } from "../backend/backend.js";
 import { agentPath } from "../backend/backend.js";
-import { NO_INPUT_LINE, runScreenView, runSemanticAct, runSemanticClick, runSemanticFill } from "../cli/cli-screens.js";
+import { NO_INPUT_LINE, runLearn, runScreenView, runSemanticAct, runSemanticClick, runSemanticFill } from "../cli/cli-screens.js";
 import type { ScreenSource, SemanticContext } from "../cli/cli-screens.js";
 import { PwaNavError } from "../core/errors.js";
 import {
@@ -173,14 +173,21 @@ const open: ToolDef = {
 const snapshot: ToolDef = {
   name: "pwa_snapshot",
   description:
-    "MANDATORY FIRST STEP: Inspect the current state of the active PWA window. " +
-    "Call with screen: true first to get the compact screen view with semantic @id targets, available flows, and journeys. " +
-    "If unmapped (code 13), call with interactive elements only (omit screen) to collect elements into .agent/snapshot.json and return its count.",
+    "MANDATORY FIRST STEP: Inspect the active PWA window. Three modes:\n" +
+    "- { screen: true } -> Return compact screen-map view with semantic @id targets, flows, and journeys.\n" +
+    "- { learn: true } -> Learn the current screen into screens/<app>.screens.json (generates permanent @id targets).\n" +
+    "- default (no flags) -> Collect raw interactive elements into .agent/snapshot.json and return its count.",
   inputSchema: {
     type: "object",
     properties: {
       all: { type: "boolean", description: "Full tree (headings, images) instead of interactive elements only." },
       screen: { type: "boolean", description: "Return the compact screen-map view inline instead of collecting a snapshot." },
+      learn: { type: "boolean", description: "Learn current screen into screens/<app>.screens.json (eliminates expiring eN refs)." },
+      locale: { type: "string", description: "BCP 47 tag (e.g. 'es' or 'en') for new map. Defaults to 'es'." },
+      appId: { type: "string", description: "Optional lowercase app ID slug (e.g. 'mercadona')." },
+      appName: { type: "string", description: "Optional human-readable app name." },
+      access: { enum: ["public", "authenticated", "unknown"], description: "Screen access level (default: public)." },
+      prune: { type: "boolean", description: "Prune missing elements from existing map (default: false)." },
     },
     additionalProperties: false,
   },
@@ -188,8 +195,28 @@ const snapshot: ToolDef = {
   async handler(args, ctx) {
     const all = flag(args, "all");
     const screen = flag(args, "screen");
-    if (all && screen) throw invalid("screen and all are mutually exclusive.");
+    const learn = flag(args, "learn");
+    if ([all, screen, learn].filter(Boolean).length > 1) {
+      throw invalid("screen, learn, and all are mutually exclusive.");
+    }
     const backend = ctx.backendFactory({ armed: false });
+    if (learn) {
+      const locale = str(args, "locale") ?? "es";
+      const appId = str(args, "appId");
+      const appName = str(args, "appName");
+      const access = str(args, "access");
+      const prune = flag(args, "prune");
+      await runLearn(backend, {
+        outPath: agentPath(backend.agentDir, "snapshot.json"),
+        prune,
+        locale,
+        ...(appId === undefined ? {} : { appId }),
+        ...(appName === undefined ? {} : { appName }),
+        ...(access === undefined ? {} : { access }),
+        ...ctx.screens,
+      });
+      return { structured: { learned: true, path: agentPath(backend.agentDir, "snapshot.json") } };
+    }
     if (screen) {
       await runScreenView(backend, ctx.screens);
       return { structured: { screen: true } };
@@ -357,4 +384,42 @@ const extract: ToolDef = {
   },
 };
 
-export const TOOLS: readonly ToolDef[] = [open, snapshot, click, fill, extract, act];
+const learnTool: ToolDef = {
+  name: "pwa_learn",
+  description:
+    "Learn and register/update the active page into the persistent screen map (screens/<app>.screens.json). " +
+    "This generates stable semantic @id targets (e.g. @search-input, @cart-btn) and eliminates expiring eN refs. " +
+    "Call this whenever you encounter an unmapped screen (exit code 13) or when page structure changes.",
+  inputSchema: {
+    type: "object",
+    properties: {
+      locale: { type: "string", description: "BCP 47 language tag (e.g. 'es' or 'en'). Defaults to 'es' for new maps." },
+      appId: { type: "string", description: "Optional lowercase app slug (e.g. 'mercadona'). Defaults to hostname." },
+      appName: { type: "string", description: "Optional human-readable app name." },
+      access: { enum: ["public", "authenticated", "unknown"], description: "Access level (default: public)." },
+      prune: { type: "boolean", description: "Prune missing elements from existing map (default: false)." },
+    },
+    additionalProperties: false,
+  },
+  annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: true, openWorldHint: false },
+  async handler(args, ctx) {
+    const locale = str(args, "locale") ?? "es";
+    const appId = str(args, "appId");
+    const appName = str(args, "appName");
+    const access = str(args, "access");
+    const prune = flag(args, "prune");
+    const backend = ctx.backendFactory({ armed: false });
+    await runLearn(backend, {
+      outPath: agentPath(backend.agentDir, "snapshot.json"),
+      prune,
+      locale,
+      ...(appId === undefined ? {} : { appId }),
+      ...(appName === undefined ? {} : { appName }),
+      ...(access === undefined ? {} : { access }),
+      ...ctx.screens,
+    });
+    return { structured: { learned: true, path: agentPath(backend.agentDir, "snapshot.json") } };
+  },
+};
+
+export const TOOLS: readonly ToolDef[] = [open, snapshot, click, fill, extract, act, learnTool];

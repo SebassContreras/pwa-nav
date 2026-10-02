@@ -74,7 +74,7 @@ Agents operate through two complementary navigation layers:
 2. **Inspect Elements**: Grep or search `.agent/snapshot.json` for targets (`e1`, `e2`, ...). **Never paste full snapshot trees inline into context**.
 3. **Mutate**: `pwa-nav click --snapshot <id> <ref>` or `pwa-nav fill --snapshot <id> <ref> "text"`.
 4. **Invalidation**: Every armed mutation invalidates the old snapshot. Stale refs fail fast (exit 3) — re-snapshot immediately after any mutation.
-5. **Learn Screen**: When on a stable, new screen, run `pwa-nav snapshot --learn --locale <bcp47>` to register it into `screens/<app>.screens.json`.
+5. **Learn Screen**: When on a stable, new screen, run `pwa-nav snapshot --learn --locale <bcp47>` (or in MCP call `pwa_learn` / `pwa_snapshot(learn: true)`) to register it into `screens/<app>.screens.json` and generate permanent `@id` targets.
 
 ---
 
@@ -108,7 +108,7 @@ Agents operate through two complementary navigation layers:
 | `10` | `protocol` | Low-level WebDriver BiDi protocol mismatch. Check connection parameters. |
 | `11` | `sensitive_target` | Sensitive field or human-only flow requested. Request the user to perform this action manually in the browser. |
 | `12` | `unknown_target` | Target `@id` does not exist in the screen map. Run `snapshot --screen` to inspect available semantic IDs. |
-| `13` | `unmapped_screen` | Current URL is not mapped to any known screen. Use `snapshot -i` or run `snapshot --learn --locale <bcp47>`. |
+| `13` | `unmapped_screen` | Current URL is not mapped to any known screen. Call `pwa_learn` (or `snapshot --learn --locale <bcp47>`) to register it, or use `snapshot -i`. |
 | `14` | `journey_step_failed` | Multi-screen journey step failed or route transition expectation mismatch. Verify screen state and transition. |
 
 ---

@@ -23,7 +23,7 @@ Choose the interface based on your environment:
 | **Read page content** | `pwa-nav extract --mode text\|links` | `pwa_extract` (`mode`) | Read-only; does not invalidate snapshots. |
 | **Multi-screen journey** | `pwa-nav journey <name> [k=v] [--armed]` | `journey_<name>` (`params`) | Executes multi-route journeys with screen validation. |
 | **Single-screen flow** | `pwa-nav act flow:<id> [k=v] [--armed]` | `flow_<screen>_<id>` (`params`) | Reusable parameterized screen flow. |
-| **Learn / update map** | `pwa-nav snapshot --learn --locale <code>` | *CLI only* | Generates or updates `screens/<app>.screens.json`. |
+| **Learn / update map** | `pwa-nav snapshot --learn [--locale <code>]` | `pwa_learn` / `pwa_snapshot(learn: true)` | Generates/updates `screens/<app>.screens.json` with `@id` targets. |
 | **QA offline suite** | `pwa-nav qa run <check-file>` | *CLI only* | Executes offline check suites against fixtures. |
 
 ---

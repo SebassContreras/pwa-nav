@@ -90,7 +90,8 @@ Schemas are in `tools/list`. All results are `content` text plus `structuredCont
 | Tool | Args | Annotations | Returns |
 |---|---|---|---|
 | `pwa_open` | `url` (required), `launch?`, `allowOrigin?` | not read-only, not destructive, open-world | `structuredContent {url, path}`. `launch` starts the PWA runtime if nothing listens; `allowOrigin` adds the origin to the allow-list after navigating. |
-| `pwa_snapshot` | `all?`, `screen?` (mutually exclusive) | read-only, idempotent | Snapshot path + `elementCount` + `snapshotId` + `url`; never the elements. `screen: true`: compact screen-map view of the current URL inline instead. |
+| `pwa_snapshot` | `all?`, `screen?`, `learn?` (mutually exclusive), `locale?`, `appId?`, `appName?`, `access?`, `prune?` | read-only (unless `learn`), idempotent | Snapshot path + `elementCount` + `snapshotId` + `url`. `screen: true`: compact screen-map view. `learn: true`: learns screen into `screens/<app>.screens.json`. |
+| `pwa_learn` | `locale?`, `appId?`, `appName?`, `access?`, `prune?` | idempotent | Learn and persist the current screen into `screens/<app>.screens.json`. Returns diff and sets up permanent `@id` targets. |
 | `pwa_click` | `snapshotId` + `ref`, or `target` (`@id`) | destructive, open-world | `{dryRun, snapshotId, path, url}`. |
 | `pwa_fill` | `snapshotId` + `ref`, or `target`; `text` (required) | destructive, open-world | Same. Sensitive fields (passwords) refused. |
 | `pwa_extract` | `snapshotId`, `mode` `text\|links` (required), `limit?` (1-100) | read-only, idempotent | Up to 100 lines inline; `{total, returned, omitted}`, rest stays in the snapshot file. |
@@ -100,7 +101,7 @@ Schemas are in `tools/list`. All results are `content` text plus `structuredCont
 
 Refs are valid for one snapshot only: use the `snapshotId` the last action returned, and re-snapshot after every mutation. `stale_ref` means re-snapshot and retry.
 
-`learn` (`snapshot --learn`) is CLI-only on purpose: it rewrites a committed file and needs human review.
+Screen learning is available both via CLI (`pwa-nav snapshot --learn`) and via MCP (`pwa_learn` or `pwa_snapshot` with `learn: true`), allowing agents to bootstrap and persist screen maps dynamically without manual intervention.
 
 ### Screen map, flows, resources
 
@@ -142,7 +143,7 @@ Failures are tool results, not protocol errors: `isError: true`, text `<code>: <
 | 10 | `protocol` | Unexpected BiDi error (also unknown errors). Report the message. |
 | 11 | `sensitive_target` | Sensitive field or human-only flow. The user does it by hand. |
 | 12 | `unknown_target` | `@id` or flow not in the map. Run `pwa_snapshot` with `screen: true`. |
-| 13 | `unmapped_screen` | No map for this origin/route. Use `pwa_snapshot` and `eN` refs. |
+| 13 | `unmapped_screen` | No map for this origin/route. Use `pwa_learn` (or `pwa_snapshot` with `learn: true`) to map the screen, or use `pwa_snapshot` and `eN` refs. |
 
 ## One BiDi session
 

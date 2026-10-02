@@ -175,6 +175,7 @@ test("tools/list: names, schemas compile under Ajv 2020, annotations, no armed f
       "pwa_click",
       "pwa_extract",
       "pwa_fill",
+      "pwa_learn",
       "pwa_open",
       "pwa_snapshot",
     ]);
@@ -485,7 +486,7 @@ test("flow tools: listed with the flow's own inputSchema; humanOnly flows are no
     assert.match(flow.description ?? "", /^Run flow "search" on screen "search" of app "synthetic"/);
     assert.match(flow.description ?? "", /Search for a term\./);
     assert.ok(!(flow.description ?? "").includes("Query"), "element names never reach descriptions");
-    assert.equal(tools.length, 7);
+    assert.equal(tools.length, 8);
     const ajv = new Ajv2020({ allErrors: true, strict: true });
     for (const tool of tools) assert.doesNotThrow(() => ajv.compile(tool.inputSchema), tool.name);
     assert.match(client.getInstructions() ?? "", /dry-run/i);
@@ -494,7 +495,7 @@ test("flow tools: listed with the flow's own inputSchema; humanOnly flows are no
   // The demo map only has a humanOnly flow: no flow tool, but instructions + resource mention it.
   await withMcp({}, async ({ client }) => {
     const { tools } = await client.listTools();
-    assert.equal(tools.length, 6);
+    assert.equal(tools.length, 7);
     assert.ok(!tools.some((t) => t.name.startsWith("flow_")));
     assert.match(client.getInstructions() ?? "", /Human-only flows exist.*login \(screen login\)/);
     const { resources } = await client.listResources();
@@ -617,7 +618,7 @@ test("startup tolerates missing, invalid, ambiguous and Ajv-invalid maps (no flo
   for (const [label, maps, expected] of cases) {
     await withMcp({ maps }, async ({ client, logs }) => {
       const { tools } = await client.listTools();
-      assert.equal(tools.length, 6, label);
+      assert.equal(tools.length, 7, label);
       assert.ok(logs.some((l) => expected.test(l)), `${label}: ${logs.join(" | ")}`);
       const { resources } = await client.listResources();
       assert.deepEqual(resources.map((r) => r.uri), ["pwa-nav://snapshot/latest"], label);
@@ -725,3 +726,22 @@ test("journey tools: listed with journey_<id>, destructiveHint: true, and callab
     assert.match(result.text, /no input sent \(pass --armed to execute\)/);
   });
 });
+
+test("pwa_learn and pwa_snapshot(learn: true) learn and persist screen map via MCP", async () => {
+  await withMcp({ maps: {} }, async ({ client, agentDir }) => {
+    await allow(agentDir);
+
+    // Call pwa_learn
+    const r1 = await call(client, "pwa_learn", { locale: "es", appId: "testapp" });
+    assert.equal(r1.isError, false, r1.text);
+    assert.equal(r1.structured["learned"], true);
+    assert.match(r1.text, /screen map:.*written/);
+
+    // Call pwa_snapshot with learn: true (idempotent re-learn)
+    const r2 = await call(client, "pwa_snapshot", { learn: true, locale: "es", appId: "testapp" });
+    assert.equal(r2.isError, false, r2.text);
+    assert.equal(r2.structured["learned"], true);
+    assert.match(r2.text, /screen map:.*unchanged/);
+  });
+});
+

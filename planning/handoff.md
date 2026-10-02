@@ -15,7 +15,7 @@ State after implementing specs 004–007. Read `planning/roadmap.md` first, then
 | 009 visual-qa-screenshots | todo | Spec ready in `planning/specs/009-visual-qa-screenshots/` | T001–T006 pending | 9 |
 | 010 cross-platform-runtime | todo | Spec ready in `planning/specs/010-cross-platform-runtime/` | T001–T005 pending | 10 |
 
-Gate at handoff: `pnpm lint && pnpm build && pnpm test` (301 tests) `&& pnpm smoke`, `node dist/cli.js qa run <check-file>`, and the opt-in real-Firefox E2E `PWA_NAV_E2E=1 node --test dist/e2e.test.js` all green.
+Gate at handoff: `pnpm lint && pnpm build && pnpm test` (302 tests) `&& pnpm smoke`, `node dist/cli.js qa run <check-file>`, and the opt-in real-Firefox E2E `PWA_NAV_E2E=1 node --test dist/e2e.test.js` all green.
 
 ## Spec 007 Deliverables (Multi-Screen Flows & Journeys)
 

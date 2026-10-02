@@ -62,8 +62,10 @@ const BASE_INSTRUCTIONS =
   "Then click the search/submit button with pwa_click(target: '@submit-btn'), or combine them with pwa_act(ops: ['fill:@search-input=query', 'click:@submit-btn']). " +
   "4. HOW TO EXECUTE JOURNEYS AND FLOWS: When multi-screen user journeys (tools named journey_*) or single-screen flows (tools named flow_*) are available, " +
   "call them directly with their declared input arguments. Journeys handle multi-route transitions and destination verification automatically. " +
-  "5. UNMAPPED SCREENS FALLBACK: If pwa_snapshot with screen: true returns exit code 13 (unmapped_screen), " +
-  "call pwa_snapshot(interactiveOnly: true) to capture raw interactive elements (e1, e2, ...) into .agent/snapshot.json, then target the ephemeral eN refs. " +
+  "5. UNMAPPED SCREENS & CREATING MAPS: If pwa_snapshot with screen: true returns exit code 13 (unmapped_screen), " +
+  "call pwa_learn (or pwa_snapshot with learn: true, locale: 'es') to immediately register and persist the screen map into screens/<app>.screens.json. " +
+  "This creates permanent semantic @id targets (e.g. @buscar, @carro) and eliminates stale eN refs! " +
+  "Alternatively, call pwa_snapshot without flags to inspect raw ephemeral eN refs in .agent/snapshot.json. " +
   "6. INVALIDATION: Ephemeral eN refs expire immediately after any mutating action. You must re-snapshot before using eN refs again. " +
   "7. SAFETY: Present dry-run action plans to the user before armed execution. On exit code 11 (sensitive_target), ask the user to type the value manually.";
 

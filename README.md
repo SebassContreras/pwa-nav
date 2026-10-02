@@ -150,7 +150,7 @@ Add to your `mcp.json` or `claude_desktop_config.json`:
 ```
 
 The MCP server exposes:
-- **Core tools**: `pwa_open`, `pwa_snapshot`, `pwa_click`, `pwa_fill`, `pwa_extract`, `pwa_act`.
+- **Core tools**: `pwa_open`, `pwa_snapshot`, `pwa_click`, `pwa_fill`, `pwa_extract`, `pwa_act`, `pwa_learn`.
 - **Dynamic flow tools**: `flow_<screen>_<flow>` for single-screen mapped tasks.
 - **Dynamic journey tools**: `journey_<id>` for multi-screen workflows with `destructiveHint: true`.
 - **Resources**: `pwa-nav://screens/<app-id>` and `pwa-nav://snapshot/latest`.
