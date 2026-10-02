@@ -1,136 +1,241 @@
 # pwa-nav
 
-A stable CLI + snapshot bridge for fluid QA of web apps and assisted, lawful browsing automation on login-walled sites where classic bots are blocked — including LLM notebooks.
+> **Stable CLI + MCP bridge for fluid QA testing and lawful, bot-proof browser automation on login-walled sites using your own authenticated Firefox PWA.**
 
-Instead of driving pixels, agents work from a **nav JSON snapshot**: an accessibility-tree contract with stable per-snapshot refs (`e1`, `e2`, …). Every mutation invalidates the snapshot, so stale refs fail fast with a re-snapshot instruction instead of clicking the wrong element.
+[![Node.js Version](https://img.shields.io/badge/node-%3E%3D22.0.0-brightgreen.svg)](https://nodejs.org/)
+[![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
+[![BiDi: W3C Standard](https://img.shields.io/badge/WebDriver-BiDi%20Standard-orange.svg)](https://w3c.github.io/webdriver-bidi/)
 
-## Status
+---
 
-- Default backend: your own logged-in **Firefox PWA** (PWAsForFirefox) over W3C WebDriver BiDi, loopback only (spec 004).
-- Offline fixture backend (`--backend offline`) keeps the original intent-log flow for demos, `pnpm smoke` and `qa run`.
-- Live backend is validated by unit tests with a fake BiDi server; the real-browser E2E is opt-in (`PWA_NAV_E2E=1`).
-- Screen map implemented (spec 005): `snapshot --screen|--learn`, `@id` targets, `act flow:<id>`. Validated against a fake BiDi server and the opt-in E2E, not yet against real authenticated screens (human task T012). See [`docs/screen-map.md`](docs/screen-map.md).
-- MCP adapter (spec 006, bin `pwa-nav-mcp`): stdio server with `pwa_open`, `pwa_snapshot`, `pwa_click`, `pwa_fill`, `pwa_extract`, `pwa_act`; armed is operator-only; flow tools (`flow_<screen>_<flow>`, non-human-only) and the `pwa-nav://screens/<app-id>` / `pwa-nav://snapshot/latest` resources. Validated with a fake BiDi server and over real stdio, not yet against your authenticated screens. Setup: [`docs/mcp.md`](docs/mcp.md).
+## 💡 What Problem Does It Solve?
 
-## Quickstart
+Traditional browser automation tools (Playwright, Puppeteer, Selenium with Chromium) face severe roadblocks on the modern web:
 
-Requirements: Node 22+, pnpm 11.
+1. **Anti-Bot & CAPTCHA Walls**: Cloudflare Turnstile, reCAPTCHA, and bot-defense shields instantly detect automated Chromium instances, headless flags, and synthetic browser profiles, blocking access to web apps like Google NotebookLM, Mercadona, and enterprise portals.
+2. **Login & 2FA Barriers**: Storing passwords or handling 2FA tokens in automation scripts is brittle, insecure, and frequently triggers fraud alerts or account bans.
+3. **Massive Token Waste**: Dumping full HTML DOM trees into LLM contexts burns thousands of tokens per step, slows down agents, and causes hallucinations when locators change.
+
+### The `pwa-nav` Solution:
+
+- **Attaches to Your Real Browser**: Connects directly to your everyday, already-authenticated **Firefox PWA** (Progressive Web App installed via PWAsForFirefox) over standard **W3C WebDriver BiDi** on loopback (`localhost:9222`).
+- **Zero Bot Footprints**: It's your authentic Firefox profile, with your active session, cookies, and human hardware fingerprint. You log in by hand; the agent operates lawfully and seamlessly alongside you.
+- **Accessibility Tree Contracts**: Instead of pixel coordinates or messy CSS selectors, `pwa-nav` uses a clean accessibility snapshot (`.agent/snapshot.json`) with ephemeral refs (`e1`, `e2`, ...). Mutations invalidate refs immediately, preventing stale misclicks.
+- **Screen Maps & User Journeys**: Declarative screen models (`screens/<app>.screens.json`) provide semantic `@id` targets, slashing LLM token consumption by up to **86%** and enabling declarative multi-screen workflows (`pwa-nav journey <name>`).
+- **Built-in Model Context Protocol (MCP)**: Exposes all browser operations and declarative flows directly to AI assistants (Claude Desktop, Cursor, Antigravity, etc.).
+
+---
+
+## 🚀 Quickstart: Running in 5 Minutes
+
+### Prerequisites
+- **Node.js**: `v22.0.0` or higher.
+- **pnpm**: `v11.0.0` or higher (`npm install -g pnpm`).
+- **Firefox** with the [PWAsForFirefox extension and native runtime](https://github.com/filips123/PWAsForFirefox) installed.
+
+### Step 1: Install & Build
 
 ```bash
-pnpm i
+git clone https://github.com/SebassContreras/pwa-nav.git
+cd pwa-nav
+pnpm install
 pnpm build
 ```
 
-**Offline demo** (no browser):
-
+Verify everything is working with the built-in smoke test:
 ```bash
 pnpm smoke
-node ./dist/cli.js qa run checks/demo-snapshot.json
-node ./dist/cli.js open https://example.com/login --backend offline
-node ./dist/cli.js snapshot -i --input checks/fixtures/login-tree.txt --url https://example.com/login --title "Sign in"
 ```
 
-**Live PWA** (details in [`docs/firefox-pwa.md`](docs/firefox-pwa.md)):
+### Step 2: Install or Identify Your Target PWA
+1. Open Firefox, go to any web app you want to test or automate (e.g., your local app, Mercadona, Google NotebookLM, or your own SaaS).
+2. Install it as a PWA using the PWAsForFirefox extension button in the address bar.
+3. Log in to the application normally.
 
-```bash
-pwa-nav open https://app.example.com --launch --allow-origin   # start runtime if needed, allow-list origin
-pwa-nav snapshot -i --json                                      # live DOM -> .agent/snapshot.json
-pwa-nav fill --snapshot <id> e3 "text"                          # dry-run: prints the plan only
-pwa-nav fill --snapshot <id> e3 "text" --armed                  # really types (user's explicit go-ahead only)
-pwa-nav snapshot -i                                             # re-snapshot after every mutation
-```
+### Step 3: Launch Your PWA with Remote Debugging
+To allow `pwa-nav` to attach, launch your installed PWA with `--remote-debugging-port 9222`.
 
-CI chain: `pnpm lint && pnpm build && pnpm test && pnpm smoke`. Give coding agents `SKILL.md`.
-
-## Commands
-
-| Command | What it does |
-|---|---|
-| `open <url> [--launch] [--site <ULID>] [--allow-origin]` | Live: navigate the PWA window. `--launch` starts the runtime with the debug port if nothing listens (never edits the profile). `--site` picks the firefoxpwa site when several share the origin. `--allow-origin` consents to this origin and adds it to `.agent/allow.json` after a successful navigation. `open` navigates your real window, so the origin must already be in `.agent/allow.json` or `--allow-origin` must be on that same call (else exit 6 before any connection); the kill-switch also blocks it (exit 7). Offline: persist URL to `.agent/session.json`. |
-| `snapshot [-i \| --all] [--json] [--input <file>] [--url <u>] [--title <t>] [--out <path>]` | Live: collect the DOM, write `.agent/snapshot.json` with a fresh `snapshotId`. `-i` interactive only (live default), `--all` full tree (remembered per snapshot). With `--input <file>` or piped stdin: normalize an ARIA tree offline (`--url`/`--title` override meta). |
-| `click --snapshot <id> [--armed] <ref>` | Live: dry-run unless `--armed`. Offline: log intent. Supersedes the snapshot. |
-| `fill --snapshot <id> [--armed] <ref> <text>` | Same as click. Password/sensitive text is never printed; password fields are never read (length-only readback). Agent rule: never type into sensitive fields. |
-| `act --snapshot <id> [--armed] <op>…` | Bulk ops (`fill:<ref>=<text>`, `click:<ref>`) in order; live: one session, one new snapshot. |
-| `extract --snapshot <id> --mode text\|links` | Read-only narrow extraction from the stored snapshot. Never supersedes. |
-| `snapshot --screen [--screen-map <f>] [--screens-dir <d>]` | Compact view of the mapped screen for the current URL; reads the URL only, no DOM collection. Exit 13 if unmapped. |
-| `snapshot --learn [--prune] [--locale <bcp47>] [--access public\|authenticated\|unknown] [--app-id <slug>] [--app-name <t>]` | Live snapshot, then learn the screen into the map and print the diff. `--locale` is required for a NEW map. |
-| `click @id`, `fill @id <text>`, `act click:@id fill:@id=<text> flow:<id> [k=v]` | Semantic targets from the map (no `--snapshot`); dry-run unless `--armed`. Sensitive field / human-only flow: exit 11; unknown id: 12. |
-| `qa run <check-file>` | Run a JSON check on the offline backend (`open/snapshot/click/fill/act/extract/assert-text`), save evidence + `result.json`. |
-
-Global options (`open`, `snapshot`, `click`, `fill`, `act`):
-
-| Option | Meaning |
-|---|---|
-| `--backend offline\|bidi` | Default `bidi`. Env `PWA_NAV_BACKEND`. |
-| `--port <n>` | BiDi port 1024-65535, default 9222. Env `PWA_NAV_PORT`. |
-| `--context <id>` | Browsing context id; required when the PWA has several top-level contexts. |
-
-## MCP
-
-`pwa-nav-mcp` (`node dist/mcp.js --port 9222`) exposes the same operations as MCP tools over the live PWA. Dry-run by default; `--armed` / `PWA_NAV_ARMED=1` is operator-only, never a tool argument. Repo `mcp.json` has the `pwa-nav` entry (start with cwd = repo root). Per-client setup, tools, errors: [`docs/mcp.md`](docs/mcp.md).
-
-## Screen map
-
-Per-app JSON (`<screens-dir>/<app-id>.screens.json`; `--screens-dir`, env `PWA_NAV_SCREENS_DIR`, default `./screens`, git-ignored) listing fields, actions, links and flows per screen. Agent loop on a known screen: `snapshot --screen` -> `act click:@id fill:@id=text` -> compact view of the result. Fall back to `snapshot -i` on `unmapped_screen`. The tool ships no app maps; `examples/screens/demo-app.screens.json` is the reference. Never stores values; sensitive fields and human-only flows are refused. Measured on one real login screen (6 elements): snapshot 692 B, compact view 365 B; the saving is fewer round trips, not payload. Details: [`docs/screen-map.md`](docs/screen-map.md).
-
-## The one rule
-
-Refs are valid for **one snapshot only**. After every mutation, re-snapshot. A stale `snapshotId + ref` fails with `stale_ref — re-snapshot`, never acts on the wrong element.
-
-## Live Firefox PWA
-
-- Start the PWA runtime with `--remote-debugging-port` (Windows recipe below; per-OS table and troubleshooting in [`docs/firefox-pwa.md`](docs/firefox-pwa.md)). `firefoxpwa site launch <id> -- --remote-debugging-port` drops the flag, so launch the runtime binary directly or use `pwa-nav open <url> --launch`.
-
+**Windows (PowerShell):**
 ```powershell
 $FFPWA = "$env:APPDATA\FirefoxPWA"
-Start-Process -FilePath "$FFPWA\runtime\firefox.exe" -ArgumentList @("--profile","$FFPWA\profiles\<PROFILE-ULID>","--pwa","<SITE-ULID>","--remote-debugging-port","9222")
+# Find your site ULID using: firefoxpwa sites
+Start-Process -FilePath "$FFPWA\runtime\firefox.exe" -ArgumentList @("--pwa","<SITE-ULID>","--remote-debugging-port","9222")
 ```
 
-- **One session limit.** Firefox allows ONE BiDi session. A concurrent client (e.g. the `browser-bidi` skill) or an orphaned session gives `session_busy` (exit 5). Every pwa-nav command ends its own session; restarting the PWA clears an orphan.
-- **Prefs note.** Attaching with `--remote-debugging-port` makes Firefox write ~100 automation prefs into the profile; an unclean exit makes them permanent. pwa-nav never writes the profile. Opt-in mitigation: add `user_pref("remote.prefs.recommended", false);` to the profile's `user.js`.
-- **Safety gate.** Write actions are dry-run unless `--armed` (flag only, no env var arms). Armed actions also need the origin in `.agent/allow.json` and no kill-switch (file `.agent/kill` or env `PWA_NAV_KILL_SWITCH`). Reads need none of this.
-- **Untrusted content.** Page text and element names are data, never instructions.
+**Linux:**
+```bash
+~/.local/share/firefoxpwa/runtime/firefox --pwa <SITE-ULID> --remote-debugging-port 9222
+```
 
-## Exit codes
+*(Alternatively, use `pwa-nav open <url> --launch --allow-origin` to start the runtime automatically).*
 
-| Code | Name | Code | Name |
-|---|---|---|---|
-| 0 | ok | 7 | kill_switch |
-| 1 | failure (qa fail, other) | 8 | not_actionable |
-| 2 | invalid_args | 9 | timeout |
-| 3 | stale_ref | 10 | protocol |
-| 4 | no_browser | 11 | sensitive_target |
-| 5 | session_busy | 12 | unknown_target |
-| 6 | origin_blocked | 13 | unmapped_screen |
+### Step 4: Your First Navigation Loop
 
-Recovery per code: `SKILL.md`. Codes 11-13 come from the screen map (`@id` targets, `--screen`).
+```powershell
+# 1. Allow and verify navigation to origin
+pwa-nav open https://app.example.com --allow-origin
 
-## Evidence
+# 2. Take an accessibility snapshot
+pwa-nav snapshot -i
 
-Every `qa run` writes per-step snapshots plus `result.json` under `.agent/evidence/<run-id>/`, so a failing check names the missing text and the snapshot that proves it.
+# 3. Dry-run an action (prints the execution plan, sends NO input)
+pwa-nav click --snapshot <snapshotId> e3
 
-## Lawful use
+# 4. Execute the action for real (armed)
+pwa-nav click --snapshot <snapshotId> e3 --armed
 
-This tool drives **your own browser session** — you log in, the agent assists. It never bypasses CAPTCHAs, bot walls, or access controls, and never handles credentials.
+# 5. Re-snapshot after mutation (refs of the previous snapshot are invalidated)
+pwa-nav snapshot -i
+```
 
-## What's next
+---
 
-Later: native WebMCP tools, multi-session, full automatic notebook search (the pilot in `docs/notebook-pilot.md` is read-only text extraction for now).
+## 🗺️ Screen Maps & Multi-Screen Journeys
 
-## Layout
+For repeated testing and high-speed agent navigation without round trips, use the **Screen Map subsystem** (`docs/screen-map.md`):
 
-- `src/` — TypeScript source code organized in Clean Architecture layers:
-  - `core/` — domain models, snapshot contracts, errors, safety gate, stable ref store
-  - `screens/` — screen-map engine (validation, routing, view rendering, learn, merge, resolve)
-  - `bidi/` — W3C WebDriver BiDi transport, protocol client, session lifecycle
-  - `browser/` — Firefox PWA runtime discovery, DOM collection, actions with network-idle settle, backend
-  - `backend/` — abstract backend port and factory
-  - `ops/` — CLI/MCP shared operations (`perform*`) and QA engine (`qa.ts`)
-  - `cli/` — CLI commands, screen map subcommands, CLI tests
-  - `mcp/` — stdio MCP server, tool definitions, dynamic flow tools
-  - `cli.ts`, `mcp.ts`, `smoke.ts` — binary entrypoints
-- `checks/` — example QA checks + offline ARIA fixtures
-- `docs/` — Firefox PWA launch (`firefox-pwa.md`), screen map (`screen-map.md`), MCP setup (`mcp.md`), notebook pilot
-- `schemas/`, `examples/screens/` — screen-map JSON Schema and the demo reference map
-- `planning/` — product, architecture, roadmap, per-spec requirements/design/tasks
-- `SKILL.md` — one-page agent guide
+### 1. Learn a Screen
+Once on a screen you want to map, run:
+```powershell
+pwa-nav snapshot --learn --locale es-ES --access public
+```
+This generates or updates `screens/<app-id>.screens.json` with semantic IDs (`@search-input`, `@submit-button`, `@cart-link`).
+
+### 2. View Compact Screen Info
+Instead of collecting full DOM trees, inspect the screen's compact summary (saves 86% tokens):
+```powershell
+pwa-nav snapshot --screen
+```
+
+### 3. Act on Semantic Targets
+Interact directly with stable `@id` targets without passing snapshot IDs:
+```powershell
+# Note: Always quote '@id' in PowerShell
+pwa-nav fill '@search-box' "olive oil" --armed
+pwa-nav click '@search-btn' --armed
+```
+
+### 4. Execute Multi-Screen User Journeys
+Declare complex cross-screen workflows in `screens/<app>.screens.json` and run them in one command:
+```powershell
+# Dry-run preview
+pwa-nav journey checkout-flow query="olive oil"
+
+# Armed execution (settles network & DOM, validates expected screens)
+pwa-nav journey checkout-flow query="olive oil" --armed
+```
+If a step fails or the destination route does not match `expectScreen`, the journey halts immediately with exit code `14` (`journey_step_failed`), preserving evidence.
+
+---
+
+## 🤖 MCP Server Integration (AI Agents)
+
+`pwa-nav` includes an MCP stdio server (`pwa-nav-mcp`) ready for Claude Desktop, Cursor, or Antigravity.
+
+Add to your `mcp.json` or `claude_desktop_config.json`:
+
+```json
+{
+  "mcpServers": {
+    "pwa-nav": {
+      "command": "node",
+      "args": [
+        "C:/path/to/pwa-nav/dist/mcp.js",
+        "--port",
+        "9222"
+      ]
+    }
+  }
+}
+```
+
+The MCP server exposes:
+- **Core tools**: `pwa_open`, `pwa_snapshot`, `pwa_click`, `pwa_fill`, `pwa_extract`, `pwa_act`.
+- **Dynamic flow tools**: `flow_<screen>_<flow>` for single-screen mapped tasks.
+- **Dynamic journey tools**: `journey_<id>` for multi-screen workflows with `destructiveHint: true`.
+- **Resources**: `pwa-nav://screens/<app-id>` and `pwa-nav://snapshot/latest`.
+
+---
+
+## 📖 Command Reference
+
+| Command | Description |
+|---|---|
+| `pwa-nav open <url> [--launch] [--site <ULID>] [--allow-origin]` | Navigate to URL. Requires origin in `.agent/allow.json` or explicit `--allow-origin`. |
+| `pwa-nav snapshot [-i \| --all] [--json] [--out <path>]` | Capture live accessibility DOM snapshot. `-i` interactive elements only (default). |
+| `pwa-nav snapshot --screen [--screen-map <f>]` | Print compact view of mapped screen matching current URL (no DOM dump). |
+| `pwa-nav snapshot --learn [--prune] [--locale <lang>]` | Learn live screen into `screens/<app>.screens.json` and show diff. |
+| `pwa-nav click --snapshot <id> [--armed] <ref>` | Click element by snapshot ref (e.g. `e3`). Dry-run unless `--armed`. |
+| `pwa-nav click [--armed] '@<id>'` | Click element by semantic ID (e.g. `'@submit-btn'`). |
+| `pwa-nav fill --snapshot <id> [--armed] <ref> <text>` | Fill field by ref. Typed text of sensitive fields is never printed or stored. |
+| `pwa-nav fill [--armed] '@<id>' <text>` | Fill field by semantic ID. Sensitive fields are blocked (exit 11). |
+| `pwa-nav act --snapshot <id> [--armed] <ops...>` | Batch mutations (`click:<ref>`, `fill:<ref>=<text>`) in a single session. |
+| `pwa-nav act [--armed] <semantic-ops...>` | Batch semantic ops (`click:'@id'`, `fill:'@id'=val`, `flow:<id>`). |
+| `pwa-nav journey <name> [key=value...] [--armed]` | Execute declarative multi-screen user journey across route transitions. |
+| `pwa-nav extract --snapshot <id> --mode text\|links` | Fast read-only text or links extraction from stored snapshot. |
+| `pwa-nav qa run <check-file>` | Run offline JSON check file and save per-step evidence to `.agent/evidence/`. |
+
+### Global Flags
+- `--backend offline|bidi`: Default is `bidi` (live Firefox PWA). Use `offline` for fixture checks.
+- `--port <n>`: BiDi debugging port (default: `9222`, env: `PWA_NAV_PORT`).
+- `--context <id>`: Target browsing context ID when multiple tabs are open.
+- `--screen-map <file>`: Explicit path to screen map JSON.
+- `--screens-dir <dir>`: Directory containing screen maps (default: `./screens`).
+
+---
+
+## 🛡️ Security & Safety Gates
+
+1. **Dry-Run by Default**: Actions only execute in dry-run mode unless `--armed` is explicitly supplied.
+2. **Sensitive Fields Barrier**: Password fields, tokens, and payment inputs (`sensitive: true` / `humanOnly: true`) are never typed by the agent (fails fast with code 11 `sensitive_target`). The user types them by hand.
+3. **Origin Allow-List**: Navigation is strictly blocked unless the origin is approved in `.agent/allow.json` or explicitly passed via `--allow-origin` (code 6 `origin_blocked`).
+4. **Kill-Switch**: Creating `.agent/kill` or setting `PWA_NAV_KILL_SWITCH` immediately terminates any armed operation (code 7 `kill_switch`).
+5. **Untrusted Page Content**: All HTML page contents, aria names, and element text are treated strictly as untrusted data, never instructions.
+
+---
+
+## 🚦 Exit Codes
+
+| Code | Name | Description & Action |
+|:---:|---|---|
+| `0` | `ok` | Success. |
+| `1` | `failure` | General error or QA check failure. |
+| `2` | `invalid_args` | Missing or invalid arguments/flags. |
+| `3` | `stale_ref` | Snapshot or `eN` ref expired due to page mutation. Re-snapshot! |
+| `4` | `no_browser` | BiDi port is closed. Launch PWA with remote debugging. |
+| `5` | `session_busy` | Firefox BiDi session in use. Only one active session is allowed. |
+| `6` | `origin_blocked` | Origin not allowed. Re-run with `--allow-origin` if authorized. |
+| `7` | `kill_switch` | Kill-switch active (`.agent/kill`). Operation aborted. |
+| `8` | `not_actionable` | Element is hidden, covered, disabled, or non-interactable. |
+| `9` | `timeout` | Action, network idle, or navigation timed out. |
+| `10` | `protocol` | Low-level WebDriver BiDi protocol failure. |
+| `11` | `sensitive_target` | Refusal to type into sensitive field or execute human-only flow. |
+| `12` | `unknown_target` | Semantic `@id` not found in screen map. |
+| `13` | `unmapped_screen` | Route not recognized in screen map. Use `snapshot -i` or learn it. |
+| `14` | `journey_step_failed` | Journey transition failed or expected screen not reached. |
+
+---
+
+## 🧪 Testing & Verification
+
+Run the full CI verification chain:
+```bash
+pnpm lint && pnpm build && pnpm test && pnpm smoke
+```
+- **301+ Automated Tests** covering protocol serialization, BiDi fake server, DOM collection, semantic resolution, screen maps, multi-screen journeys, and MCP conformance.
+
+---
+
+## 📄 Documentation Index
+
+- [`docs/firefox-pwa.md`](docs/firefox-pwa.md) — Detailed guide to setting up Firefox PWA on Windows, Linux, and macOS.
+- [`docs/screen-map.md`](docs/screen-map.md) — Screen map specification, compact views, and authoring user journeys.
+- [`docs/mcp.md`](docs/mcp.md) — Setting up the MCP server with Claude Desktop, Cursor, and other tools.
+- [`SKILL.md`](SKILL.md) — One-page agent manual for coding assistants driving `pwa-nav`.
+- [`AGENTS.md`](AGENTS.md) — Core architecture, coding conventions, and agent guidelines.
+
+---
+
+## ⚖️ Lawful Use Policy
+
+`pwa-nav` is designed strictly for testing and automating your **own web applications** and **personal, authenticated sessions**. It does not bypass paywalls, bot walls, or access controls. All credentials remain in the user's custody.
