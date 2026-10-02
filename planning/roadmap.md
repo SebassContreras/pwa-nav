@@ -13,4 +13,4 @@ Index of every spec — status, dependencies, pipeline stage, and priority. Read
 | 007 | multi-screen-flows | done | 004, 005 | — | 7 |
 | 008 | file-uploads | done | 004 | — | 8 |
 | 009 | visual-qa-screenshots | done | 003, 004 | — | 9 |
-| 010 | cross-platform-runtime | todo | 004 | tasks_ready | 10 |
+| 010 | cross-platform-runtime | done | 004 | — | 10 |

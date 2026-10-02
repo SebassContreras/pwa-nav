@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import type { ChildProcess } from "node:child_process";
-import { mkdtemp, rm, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { test } from "node:test";
@@ -44,19 +44,69 @@ function expectCode(fn: () => unknown, expected: string, re?: RegExp): void {
   });
 }
 
-test("firefoxPwaDir per platform and override", () => {
+test("firefoxPwaDir per platform, XDG, Flatpak, and override", () => {
   assert.equal(firefoxPwaDir("win32", { APPDATA: "C:\\A" }), join("C:\\A", "FirefoxPWA"));
   assert.equal(firefoxPwaDir("linux", { HOME: "/h" }), join("/h", ".local", "share", "firefoxpwa"));
+  assert.equal(firefoxPwaDir("linux", { XDG_DATA_HOME: "/xdg" }), join("/xdg", "firefoxpwa"));
   assert.equal(firefoxPwaDir("darwin", { HOME: "/h" }), join("/h", "Library", "Application Support", "firefoxpwa"));
   assert.equal(firefoxPwaDir("win32", { PWA_NAV_FIREFOXPWA_DIR: "/x" }), "/x");
+  assert.equal(firefoxPwaDir("linux", { PWA_NAV_FIREFOXPWA_DIR: "/x" }), "/x");
+  assert.equal(firefoxPwaDir("darwin", { PWA_NAV_FIREFOXPWA_DIR: "/x" }), "/x");
   expectCode(() => firefoxPwaDir("win32", {}), "invalid_args");
+  expectCode(() => firefoxPwaDir("linux", {}), "invalid_args");
+  expectCode(() => firefoxPwaDir("darwin", {}), "invalid_args");
   expectCode(() => firefoxPwaDir("freebsd", {}), "invalid_args");
 });
 
-test("runtimePath per platform", () => {
+test("firefoxPwaDir resolves Flatpak data directory when present on Linux", async () => {
+  const tmp = await mkdtemp(join(tmpdir(), "pwa-flatpak-"));
+  try {
+    const flatpakDir = join(tmp, ".var", "app", "org.filips.FirefoxPWA", "data", "firefoxpwa");
+    await mkdir(flatpakDir, { recursive: true });
+    assert.equal(firefoxPwaDir("linux", { HOME: tmp }), flatpakDir);
+  } finally {
+    await rm(tmp, { recursive: true, force: true });
+  }
+});
+
+test("runtimePath per platform with fallback and checkExists", () => {
   assert.equal(runtimePath("/d", "win32"), join("/d", "runtime", "firefox.exe"));
+  // Linux defaults to local runtime/firefox
   assert.equal(runtimePath("/d", "linux"), join("/d", "runtime", "firefox"));
-  expectCode(() => runtimePath("/d", "darwin"), "invalid_args", /TBD/);
+  // Linux uses local if exists
+  assert.equal(
+    runtimePath("/d", "linux", (p) => p === join("/d", "runtime", "firefox")),
+    join("/d", "runtime", "firefox"),
+  );
+  // Linux falls back to /usr/lib/firefoxpwa/runtime/firefox if local does not exist
+  assert.equal(
+    runtimePath("/d", "linux", (p) => p === "/usr/lib/firefoxpwa/runtime/firefox"),
+    "/usr/lib/firefoxpwa/runtime/firefox",
+  );
+  // Linux falls back to /usr/lib64/firefoxpwa/runtime/firefox
+  assert.equal(
+    runtimePath("/d", "linux", (p) => p === "/usr/lib64/firefoxpwa/runtime/firefox"),
+    "/usr/lib64/firefoxpwa/runtime/firefox",
+  );
+
+  // macOS defaults to Firefox.app bundle
+  assert.equal(
+    runtimePath("/d", "darwin"),
+    join("/d", "runtime", "Firefox.app", "Contents", "MacOS", "firefox"),
+  );
+  // macOS returns Firefox.app bundle if exists
+  assert.equal(
+    runtimePath("/d", "darwin", (p) => p === join("/d", "runtime", "Firefox.app", "Contents", "MacOS", "firefox")),
+    join("/d", "runtime", "Firefox.app", "Contents", "MacOS", "firefox"),
+  );
+  // macOS returns symlink/binary if it exists and app bundle does not
+  assert.equal(
+    runtimePath("/d", "darwin", (p) => p === join("/d", "runtime", "firefox")),
+    join("/d", "runtime", "firefox"),
+  );
+
+  // Unsupported platform
+  expectCode(() => runtimePath("/d", "freebsd"), "invalid_args", /cannot locate runtime binary/);
 });
 
 test("parseConfig valid, tolerates extras", () => {
@@ -119,7 +169,11 @@ test("launchCommandHint contains the flag, per shell", () => {
   assert.match(ps, /^Start-Process -FilePath 'C:\\r\\firefox\.exe'/);
   assert.match(ps, /'--remote-debugging-port', '9222'/);
   const sh = launchCommandHint("/r/firefox", args, "linux");
-  assert.match(sh, /--remote-debugging-port.*9222/);
+  assert.match(sh, /'\/r\/firefox'/);
+  assert.match(sh, /--remote-debugging-port.*9222.*&$/);
+  const mac = launchCommandHint("/Applications/Firefox.app/Contents/MacOS/firefox", args, "darwin");
+  assert.match(mac, /'\/Applications\/Firefox\.app\/Contents\/MacOS\/firefox'/);
+  assert.match(mac, /--remote-debugging-port.*9222.*&$/);
 });
 
 test("waitForPort succeeds after retries", async () => {
@@ -189,6 +243,66 @@ test("launchPwa spawns with injected spawn and waits for port", async () => {
       "--pwa",
       SITE_A,
     ]);
+  });
+});
+
+test("launchPwa spawns on macOS (darwin) with correct bundle binary and args", async () => {
+  await withDir(async (dir) => {
+    const spawned: { binary?: string; args?: string[] } = {};
+    const fake = {
+      pid: 43,
+      on: () => fake,
+      unref: () => undefined,
+    } as unknown as ChildProcess;
+    const res = await launchPwa({
+      origin: "http://localhost:8080",
+      port: 9444,
+      platform: "darwin",
+      env: { PWA_NAV_FIREFOXPWA_DIR: dir },
+      probe: () => Promise.resolve(spawned.binary !== undefined),
+      intervalMs: 1,
+      spawnFn: (binary, args) => {
+        spawned.binary = binary;
+        spawned.args = args;
+        return fake;
+      },
+    });
+    assert.equal(res.siteId, SITE_A);
+    assert.equal(res.pid, 43);
+    assert.equal(spawned.binary, join(dir, "runtime", "Firefox.app", "Contents", "MacOS", "firefox"));
+    assert.deepEqual((spawned.args ?? []).slice(0, 4), [
+      "--profile",
+      join(dir, "profiles", "01TESTPROFILEAAAAAAAAAAAA"),
+      "--pwa",
+      SITE_A,
+    ]);
+  });
+});
+
+test("launchPwa spawns on Windows (win32) with .exe binary and args", async () => {
+  await withDir(async (dir) => {
+    const spawned: { binary?: string; args?: string[] } = {};
+    const fake = {
+      pid: 44,
+      on: () => fake,
+      unref: () => undefined,
+    } as unknown as ChildProcess;
+    const res = await launchPwa({
+      origin: "http://localhost:8080",
+      port: 9555,
+      platform: "win32",
+      env: { PWA_NAV_FIREFOXPWA_DIR: dir },
+      probe: () => Promise.resolve(spawned.binary !== undefined),
+      intervalMs: 1,
+      spawnFn: (binary, args) => {
+        spawned.binary = binary;
+        spawned.args = args;
+        return fake;
+      },
+    });
+    assert.equal(res.siteId, SITE_A);
+    assert.equal(res.pid, 44);
+    assert.equal(spawned.binary, join(dir, "runtime", "firefox.exe"));
   });
 });
 

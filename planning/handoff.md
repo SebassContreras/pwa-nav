@@ -13,26 +13,24 @@ State after implementing specs 004–007. Read `planning/roadmap.md` first, then
 | 007 multi-screen-flows | done | T001–T007 done | — | — |
 | 008 file-uploads | done | T001–T008 done | — | — |
 | 009 visual-qa-screenshots | done | T001–T008 done | — | — |
-| 010 cross-platform-runtime | todo | Spec ready in `planning/specs/010-cross-platform-runtime/` | T001–T005 pending | 10 (Top) |
+| 010 cross-platform-runtime | done | T001–T004, T006 done | T005 (human live test on native Mac/Linux) | — |
 
-Gate at handoff: `pnpm lint && pnpm build && pnpm test` (325 tests) `&& pnpm smoke`, `node dist/cli.js qa run <check-file>`, and the opt-in real-Firefox E2E `PWA_NAV_E2E=1 node --test dist/e2e.test.js` (15 tests) all green.
+Gate at handoff: `pnpm lint && pnpm build && pnpm test` (328 tests) `&& pnpm smoke`, `node dist/cli.js qa run <check-file>`, and the opt-in real-Firefox E2E `PWA_NAV_E2E=1 node --test dist/e2e.test.js` (15 tests) all green.
 
-## Spec 009 Deliverables (Visual QA Screenshots)
+## Spec 010 Deliverables (Cross-Platform Runtime Discovery)
 
-1. **Protocol Integration**: Added `CaptureScreenshotOptions` and `browsingContext.captureScreenshot` in `src/bidi/protocol.ts` and fake BiDi server handler in `src/bidi/fake-server.ts`.
-2. **Backend Port**: Added `screenshot(options?): Promise<Buffer>` method to `Backend` port in `src/backend/backend.ts`, implemented in `OfflineBackend` and `BidiBackend` in `src/browser/bidi-backend.ts`.
-3. **Execution Layer & Context Economy**: Implemented `performScreenshot(options)` and `readPngDimensions` in `src/ops/ops.ts`. Saves binary PNG to disk directly (`.agent/screenshot.png` or custom path) and strictly avoids leaking base64 or raw image bytes into LLM/chat context.
-4. **QA Runner Evidence**: Integrated automatic screenshot capture on step failure and for explicit `{"op": "screenshot", "name": "..."}` or `screenshot: true` steps in `src/ops/qa.ts` (`.agent/evidence/<run-id>/step-<n>-<op>.png`).
-5. **CLI Command & Snapshot Flag**: Added `pwa-nav screenshot [--out <path>] [--format png|jpeg|webp]` command and `--screenshot` flag to `pwa-nav snapshot` in `src/cli.ts`.
-6. **MCP Tool**: Added `pwa_screenshot` tool to MCP server in `src/mcp/mcp-tools.ts`, returning `{ path, width, height }`.
-7. **Real Firefox E2E & Conformance**: Headless real Firefox E2E test in `src/e2e.test.ts` verifying binary PNG generation with verified magic bytes (`0x89 0x50 0x4e 0x47`), plus MCP stdio conformance tests.
-8. **Documentation**: Updated `README.md`, `SKILL.md`, and `AGENTS.md` (including rule 10).
+1. **Path Resolution Matrix**: Implemented comprehensive directory resolution in `src/browser/pwa-runtime.ts` across Windows (`%APPDATA%\FirefoxPWA`), Linux (standard `~/.local/share/firefoxpwa`, `$XDG_DATA_HOME/firefoxpwa`, and Flatpak `~/.var/app/org.filips.FirefoxPWA/data/firefoxpwa`), and macOS (`~/Library/Application Support/firefoxpwa`).
+2. **Binary Detection & Fallbacks**: Implemented `runtimePath` locating the Firefox runtime executable on Windows (`runtime/firefox.exe`), Linux (`runtime/firefox` with system fallback to `/usr/lib/firefoxpwa/runtime/firefox` or `/usr/lib64/firefoxpwa/runtime/firefox`), and macOS (`runtime/Firefox.app/Contents/MacOS/firefox` or `runtime/firefox`).
+3. **POSIX Launch Hints**: Added POSIX shell launch hint generation with proper single-quote escaping and backgrounding (`&`) for bash/zsh on Linux and macOS, alongside PowerShell `Start-Process` on Windows.
+4. **Cross-Platform Matrix Tests**: Added comprehensive matrix unit tests in `src/browser/pwa-runtime.test.ts` testing XDG resolution, Flatpak profile discovery, system fallback binaries, and mock process spawning across win32, linux, and darwin.
+5. **Documentation**: Updated `docs/firefox-pwa.md` and `README.md` with verified launch recipes for Windows, Linux, and macOS.
 
 ## Open Work & Next Priorities
 
-1. **Spec 010 — Cross-Platform Runtime Discovery (Next Priority)**:
-   - Formalize runtime path detection across Windows, macOS, and Linux.
-   - Verify `firefoxpwa` profile discovery and fallback configurations.
+1. **Human Verification**:
+   - Spec 010 T005: Verify live runtime launch on a native Linux or macOS machine when available.
+2. **Future Enhancements**:
+   - All 10 initial specifications in `planning/roadmap.md` are completed!
 
 ## Safety Rules & Invariants Learned
 

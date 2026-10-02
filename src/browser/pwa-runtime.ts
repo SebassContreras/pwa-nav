@@ -2,6 +2,7 @@
 // `firefoxpwa site launch -- args` drops --remote-debugging-port, so the runtime binary is spawned directly.
 // Never writes to the profile (no user.js/prefs.js).
 import { spawn, type ChildProcess } from "node:child_process";
+import { existsSync } from "node:fs";
 import { readFile } from "node:fs/promises";
 import { connect } from "node:net";
 import { join } from "node:path";
@@ -34,12 +35,24 @@ export interface LaunchArgsInput {
 
 type Env = Readonly<Record<string, string | undefined>>;
 
-// Only win32 is verified on a real machine; linux/darwin paths are UNVERIFIED conventions.
+// Standard PWAsForFirefox data directory conventions per platform.
+// win32: %APPDATA%\FirefoxPWA
+// linux: $XDG_DATA_HOME/firefoxpwa (or Flatpak ~/.var/app/org.filips.FirefoxPWA/data/firefoxpwa, or ~/.local/share/firefoxpwa)
+// darwin: ~/Library/Application Support/firefoxpwa
 const DATA_DIR_TABLE: Readonly<Record<string, (env: Env) => string | undefined>> = {
   win32: (env) => (env["APPDATA"] === undefined ? undefined : join(env["APPDATA"], "FirefoxPWA")),
-  // UNVERIFIED
-  linux: (env) => (env["HOME"] === undefined ? undefined : join(env["HOME"], ".local", "share", "firefoxpwa")),
-  // UNVERIFIED
+  linux: (env) => {
+    const xdg = env["XDG_DATA_HOME"];
+    if (xdg !== undefined && xdg !== "") return join(xdg, "firefoxpwa");
+    const home = env["HOME"];
+    if (home === undefined) return undefined;
+    const flatpakData = join(home, ".var", "app", "org.filips.FirefoxPWA", "data", "firefoxpwa");
+    const standardData = join(home, ".local", "share", "firefoxpwa");
+    if (existsSync(flatpakData) && !existsSync(standardData)) {
+      return flatpakData;
+    }
+    return standardData;
+  },
   darwin: (env) =>
     env["HOME"] === undefined ? undefined : join(env["HOME"], "Library", "Application Support", "firefoxpwa"),
 };
@@ -56,10 +69,31 @@ export function firefoxPwaDir(platform: string, env: Env): string {
   return dir;
 }
 
-export function runtimePath(dir: string, platform: string): string {
-  if (platform === "win32") return join(dir, "runtime", "firefox.exe");
-  if (platform === "linux") return join(dir, "runtime", "firefox");
-  throw new PwaNavError("invalid_args", `runtime binary path for platform "${platform}" is TBD (unverified)`, {
+export function runtimePath(
+  dir: string,
+  platform: string,
+  checkExists: (path: string) => boolean = existsSync,
+): string {
+  if (platform === "win32") {
+    return join(dir, "runtime", "firefox.exe");
+  }
+  if (platform === "linux") {
+    const local = join(dir, "runtime", "firefox");
+    if (checkExists(local)) return local;
+    const sysPath = "/usr/lib/firefoxpwa/runtime/firefox";
+    if (checkExists(sysPath)) return sysPath;
+    const sysPath64 = "/usr/lib64/firefoxpwa/runtime/firefox";
+    if (checkExists(sysPath64)) return sysPath64;
+    return local;
+  }
+  if (platform === "darwin") {
+    const appBundle = join(dir, "runtime", "Firefox.app", "Contents", "MacOS", "firefox");
+    if (checkExists(appBundle)) return appBundle;
+    const symlinkOrBinary = join(dir, "runtime", "firefox");
+    if (checkExists(symlinkOrBinary)) return symlinkOrBinary;
+    return appBundle;
+  }
+  throw new PwaNavError("invalid_args", `cannot locate runtime binary on platform "${platform}"`, {
     hint: "launch the runtime manually with --profile <dir> --pwa <ULID> --remote-debugging-port <port>",
   });
 }
@@ -180,6 +214,7 @@ export function launchCommandHint(binary: string, args: readonly string[], platf
     const ps = (s: string): string => `'${s.replaceAll("'", "''")}'`;
     return `Start-Process -FilePath ${ps(binary)} -ArgumentList ${args.map(ps).join(", ")}`;
   }
+  // POSIX shell (Linux, macOS bash/zsh): background execution with single-quoted arguments.
   const sh = (s: string): string => `'${s.replaceAll("'", "'\\''")}'`;
   return `${sh(binary)} ${args.map(sh).join(" ")} &`;
 }

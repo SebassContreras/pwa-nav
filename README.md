@@ -62,12 +62,17 @@ $FFPWA = "$env:APPDATA\FirefoxPWA"
 Start-Process -FilePath "$FFPWA\runtime\firefox.exe" -ArgumentList @("--pwa","<SITE-ULID>","--remote-debugging-port","9222")
 ```
 
-**Linux:**
+**Linux (Bash / Zsh):**
 ```bash
-~/.local/share/firefoxpwa/runtime/firefox --pwa <SITE-ULID> --remote-debugging-port 9222
+"${XDG_DATA_HOME:-$HOME/.local/share}/firefoxpwa/runtime/firefox" --pwa <SITE-ULID> --remote-debugging-port 9222 &
 ```
 
-*(Alternatively, use `pwa-nav open <url> --launch --allow-origin` to start the runtime automatically).*
+**macOS (Zsh):**
+```zsh
+"$HOME/Library/Application Support/firefoxpwa/runtime/Firefox.app/Contents/MacOS/firefox" --pwa <SITE-ULID> --remote-debugging-port 9222 &
+```
+
+*(Alternatively, use `pwa-nav open <url> --launch --allow-origin` to start the runtime automatically on any OS).*
 
 ### Step 4: Your First Navigation Loop
 
