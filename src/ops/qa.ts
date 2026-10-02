@@ -21,7 +21,9 @@ import {
   performExtract,
   performFill,
   performOpen,
+  performScreenshot,
   performSnapshot,
+  type OpOptions,
 } from "./ops.js";
 
 export interface QaResult {
@@ -31,13 +33,14 @@ export interface QaResult {
 }
 
 export type CheckStep =
-  | { op: "open"; url: string }
-  | { op: "snapshot"; input: string | null; url: string | null; title: string | null }
-  | { op: "click"; ref: string }
-  | { op: "fill"; ref: string; text: string }
-  | { op: "act"; ops: string[] }
-  | { op: "extract"; mode: "text" | "links" }
-  | { op: "assert-text"; text: string };
+  | { op: "open"; url: string; screenshot?: boolean }
+  | { op: "snapshot"; input: string | null; url: string | null; title: string | null; screenshot?: boolean }
+  | { op: "click"; ref: string; screenshot?: boolean }
+  | { op: "fill"; ref: string; text: string; screenshot?: boolean }
+  | { op: "act"; ops: string[]; screenshot?: boolean }
+  | { op: "extract"; mode: "text" | "links"; screenshot?: boolean }
+  | { op: "assert-text"; text: string; screenshot?: boolean }
+  | { op: "screenshot"; name?: string | null; screenshot?: boolean };
 
 interface StepContext {
   n: number;
@@ -81,8 +84,9 @@ function parseStep(raw: unknown, n: number): CheckStep {
   if (typeof op !== "string") {
     throw new Error(`step ${label} needs a string "op".`);
   }
+  const screenshot = raw["screenshot"] === true;
   if (op === "open") {
-    return { op, url: requiredString(raw, "url", label) };
+    return { op, url: requiredString(raw, "url", label), screenshot };
   }
   if (op === "snapshot") {
     return {
@@ -90,13 +94,14 @@ function parseStep(raw: unknown, n: number): CheckStep {
       input: optionalString(raw, "input", label),
       url: optionalString(raw, "url", label),
       title: optionalString(raw, "title", label),
+      screenshot,
     };
   }
   if (op === "click") {
-    return { op, ref: requiredString(raw, "ref", label) };
+    return { op, ref: requiredString(raw, "ref", label), screenshot };
   }
   if (op === "fill") {
-    return { op, ref: requiredString(raw, "ref", label), text: requiredString(raw, "text", label) };
+    return { op, ref: requiredString(raw, "ref", label), text: requiredString(raw, "text", label), screenshot };
   }
   if (op === "act") {
     const ops = raw["ops"];
@@ -116,23 +121,30 @@ function parseStep(raw: unknown, n: number): CheckStep {
       }
       checked.push(entry);
     }
-    return { op, ops: checked };
+    return { op, ops: checked, screenshot };
   }
   if (op === "extract") {
     const mode = raw["mode"];
     if (mode === undefined || mode === null) {
-      return { op, mode: "text" };
+      return { op, mode: "text", screenshot };
     }
     if (mode !== "text" && mode !== "links") {
       throw new Error(`step ${label} needs "mode" to be text|links.`);
     }
-    return { op, mode };
+    return { op, mode, screenshot };
   }
   if (op === "assert-text") {
-    return { op, text: requiredString(raw, "text", label) };
+    return { op, text: requiredString(raw, "text", label), screenshot };
+  }
+  if (op === "screenshot") {
+    return {
+      op,
+      name: optionalString(raw, "name", label),
+      screenshot: true,
+    };
   }
   throw new Error(
-    `step ${label}: unknown op ${JSON.stringify(op)} (expected open|snapshot|click|fill|act|extract|assert-text).`,
+    `step ${label}: unknown op ${JSON.stringify(op)} (expected open|snapshot|click|fill|act|extract|assert-text|screenshot).`,
   );
 }
 
@@ -163,9 +175,9 @@ function requireSnapshotId(currentId: string | null, op: string): string {
   return currentId;
 }
 
-async function runStep(step: CheckStep, ctx: StepContext): Promise<string | null> {
+async function runStep(step: CheckStep, ctx: StepContext, options: OpOptions = {}): Promise<string | null> {
   if (step.op === "open") {
-    await performOpen(step.url);
+    await performOpen(step.url, options);
     return ctx.currentId;
   }
   if (step.op === "snapshot") {
@@ -179,44 +191,53 @@ async function runStep(step: CheckStep, ctx: StepContext): Promise<string | null
       } catch {
         throw new Error(`cannot read snapshot input file: ${step.input}`);
       }
-      const session = await loadSession(DEFAULT_SESSION_PATH);
+      const agentDir = options.backend?.agentDir;
+      const sessionPath = agentDir ? join(agentDir, "session.json") : DEFAULT_SESSION_PATH;
+      const snapshotPath = agentDir ? join(agentDir, "snapshot.json") : DEFAULT_SNAPSHOT_PATH;
+      const session = await loadSession(sessionPath);
       const snapshot = await performSnapshot(rawTree, {
         url: step.url ?? session?.url ?? "",
         title: step.title ?? session?.title ?? "",
-        outPath: DEFAULT_SNAPSHOT_PATH,
+        outPath: snapshotPath,
+        agentDir,
       });
       return snapshot.snapshotId;
     }
-    const latest = await latestSnapshotId();
+    const store = { agentDir: options.backend?.agentDir ?? ".agent" };
+    const latest = await latestSnapshotId(store);
     if (latest === null) {
       throw new Error('snapshot step needs an "input" file or a stored snapshot; none found.');
     }
-    const stored = await loadSnapshot(latest);
+    const stored = await loadSnapshot(latest, store);
     console.log(
       `snapshot ok (reuse): ${(stored?.elements.length ?? 0).toString()} elements (id ${latest})`,
     );
     return latest;
   }
   if (step.op === "click") {
-    return performClick(requireSnapshotId(ctx.currentId, "click"), step.ref);
+    return performClick(requireSnapshotId(ctx.currentId, "click"), step.ref, options);
   }
   if (step.op === "fill") {
-    return performFill(requireSnapshotId(ctx.currentId, "fill"), step.ref, step.text);
+    return performFill(requireSnapshotId(ctx.currentId, "fill"), step.ref, step.text, options);
   }
   if (step.op === "act") {
     const ops = step.ops.map((token) => parseActOp(token));
-    return performAct(requireSnapshotId(ctx.currentId, "act"), ops);
+    return performAct(requireSnapshotId(ctx.currentId, "act"), ops, options);
   }
   if (step.op === "extract") {
-    const lines = await performExtract(requireSnapshotId(ctx.currentId, "extract"), step.mode);
+    const lines = await performExtract(requireSnapshotId(ctx.currentId, "extract"), step.mode, options);
     for (const line of lines) {
       console.log(line);
     }
     return ctx.currentId;
   }
+  if (step.op === "screenshot") {
+    console.log(`screenshot ok (step ${ctx.n.toString()})`);
+    return ctx.currentId;
+  }
   // assert-text: extract-text semantics; the run fails when the text is absent.
   // The failure names the missing text and the evidence snapshot that proves it.
-  const lines = await performExtract(requireSnapshotId(ctx.currentId, "assert-text"), "text");
+  const lines = await performExtract(requireSnapshotId(ctx.currentId, "assert-text"), "text", options);
   const snapshotId = ctx.currentId ?? "";
   const found = lines.some((line) => line.includes(step.text));
   if (!found) {
@@ -231,26 +252,48 @@ async function runStep(step: CheckStep, ctx: StepContext): Promise<string | null
 async function saveStepEvidence(
   evidenceAbs: string,
   n: number,
-  op: string,
+  step: CheckStep,
   currentId: string | null,
+  options: OpOptions = {},
+  forceScreenshot: boolean = false,
 ): Promise<void> {
+  const store = { agentDir: options.backend?.agentDir ?? ".agent" };
+  const op = step.op;
   if (currentId !== null) {
-    const snapshot = await loadSnapshot(currentId);
+    const snapshot = await loadSnapshot(currentId, store);
     if (snapshot !== null) {
       await writeFile(
         join(evidenceAbs, `step-${n.toString()}-${op}-snapshot.json`),
         JSON.stringify(snapshot, null, 2) + "\n",
         "utf8",
       );
-      return;
+    }
+  } else {
+    // No snapshot context (e.g. open before any snapshot): keep the session state.
+    try {
+      const sessionRaw = await readFile(DEFAULT_SESSION_PATH, "utf8");
+      await writeFile(join(evidenceAbs, `step-${n.toString()}-${op}-session.json`), sessionRaw, "utf8");
+    } catch {
+      // No session either (e.g. a failing first step): nothing to copy.
     }
   }
-  // No snapshot context (e.g. open before any snapshot): keep the session state.
-  try {
-    const sessionRaw = await readFile(DEFAULT_SESSION_PATH, "utf8");
-    await writeFile(join(evidenceAbs, `step-${n.toString()}-${op}-session.json`), sessionRaw, "utf8");
-  } catch {
-    // No session either (e.g. a failing first step): nothing to copy.
+
+  const takeScreenshot = forceScreenshot || step.op === "screenshot" || step.screenshot === true;
+  if (takeScreenshot) {
+    const outPath = join(evidenceAbs, `step-${n.toString()}-${op}.png`);
+    try {
+      await performScreenshot({ ...options, outPath, quiet: true });
+      if (step.op === "screenshot" && step.name) {
+        const namedPath = join(evidenceAbs, `step-${n.toString()}-${op}-${step.name}.png`);
+        try {
+          await writeFile(namedPath, await readFile(outPath));
+        } catch {
+          // ignore
+        }
+      }
+    } catch {
+      // Non-fatal if offline/unsupported
+    }
   }
 }
 
@@ -258,7 +301,7 @@ async function writeResult(evidenceAbs: string, result: QaResult): Promise<void>
   await writeFile(join(evidenceAbs, "result.json"), JSON.stringify(result, null, 2) + "\n", "utf8");
 }
 
-export async function runCheck(checkPath: string): Promise<QaResult> {
+export async function runCheck(checkPath: string, options: OpOptions = {}): Promise<QaResult> {
   let text: string;
   try {
     text = await readFile(checkPath, "utf8");
@@ -267,7 +310,9 @@ export async function runCheck(checkPath: string): Promise<QaResult> {
   }
   const steps = parseCheckFile(text, checkPath);
   const runId = randomUUID();
-  const evidenceDir = `.agent/evidence/${runId}`;
+  const evidenceDir = options.backend?.agentDir
+    ? join(options.backend.agentDir, "evidence", runId)
+    : join(".agent", "evidence", runId);
   const evidenceAbs = resolve(evidenceDir);
   await mkdir(evidenceAbs, { recursive: true });
   let currentId: string | null = null;
@@ -278,17 +323,17 @@ export async function runCheck(checkPath: string): Promise<QaResult> {
       continue;
     }
     try {
-      currentId = await runStep(step, { n, evidenceDir, currentId });
+      currentId = await runStep(step, { n, evidenceDir, currentId }, options);
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
-      await saveStepEvidence(evidenceAbs, n, step.op, currentId);
+      await saveStepEvidence(evidenceAbs, n, step, currentId, options, true);
       const result: QaResult = { pass: false, failedStep: n, evidenceDir };
       await writeResult(evidenceAbs, result);
       console.error(`qa step ${n.toString()} (${step.op}) failed: ${message}`);
       console.error(`qa fail: step ${n.toString()}, evidence ${evidenceDir}`);
       return result;
     }
-    await saveStepEvidence(evidenceAbs, n, step.op, currentId);
+    await saveStepEvidence(evidenceAbs, n, step, currentId, options, false);
   }
   const result: QaResult = { pass: true, failedStep: null, evidenceDir };
   await writeResult(evidenceAbs, result);

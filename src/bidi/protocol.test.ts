@@ -274,3 +274,40 @@ test("setFiles sends context, element and files", async () => {
   });
 });
 
+test("captureScreenshot requests base64 data and forwards options", async () => {
+  await withClient(async (client, server) => {
+    // Default call
+    const b64 = await client.captureScreenshot("c1");
+    assert.equal(typeof b64, "string");
+    assert.equal(b64.length > 0, true);
+    assert.deepEqual(last(server).params, { context: "c1" });
+
+    // With format and box clip
+    const customB64 = "custom-screenshot-base64";
+    server.handle("browsingContext.captureScreenshot", (params) => {
+      const p = params as { context: string; format?: { type: string } };
+      assert.equal(p.context, "c2");
+      assert.equal(p.format?.type, "image/png");
+      return { data: customB64 };
+    });
+
+    const result = await client.captureScreenshot("c2", {
+      format: { type: "image/png" },
+      clip: { type: "box", x: 10, y: 20, width: 300, height: 200 },
+    });
+    assert.equal(result, customB64);
+    assert.deepEqual(last(server).params, {
+      context: "c2",
+      format: { type: "image/png" },
+      clip: { type: "box", x: 10, y: 20, width: 300, height: 200 },
+    });
+
+    // Error when server returns non-string data
+    server.handle("browsingContext.captureScreenshot", () => ({ data: 123 }));
+    await assert.rejects(
+      () => client.captureScreenshot("c1"),
+      (err) => err instanceof PwaNavError && err.code === "protocol",
+    );
+  });
+});
+

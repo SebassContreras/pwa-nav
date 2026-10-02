@@ -456,3 +456,55 @@ test("cli: act upload:<ref>=<path>", async () => {
   });
 });
 
+test("cli: screenshot command offline and live with --out", async () => {
+  // Offline screenshot
+  const dir = await mkdtemp(join(tmpdir(), "pwa-nav-cli-screenshot-"));
+  try {
+    const offlineRes = runSync(dir, ["screenshot", "--backend", "offline"]);
+    assert.equal(offlineRes.status, 0, offlineRes.stderr);
+    assert.match(offlineRes.stdout, /screenshot saved to \.agent[/\\]screenshot\.png/);
+    assert.equal(existsSync(join(dir, ".agent", "screenshot.png")), true);
+
+    // Custom out path
+    const customOut = join(dir, "custom-shot.png");
+    const customRes = runSync(dir, ["screenshot", "--backend", "offline", "--out", customOut]);
+    assert.equal(customRes.status, 0, customRes.stderr);
+    assert.match(customRes.stdout, /screenshot saved to .*custom-shot\.png/);
+    assert.equal(existsSync(customOut), true);
+
+    // Invalid format
+    const badFormat = runSync(dir, ["screenshot", "--backend", "offline", "--format", "bmp"]);
+    assert.equal(badFormat.status, 2, badFormat.stderr);
+    assert.match(badFormat.stderr, /invalid --format: bmp/);
+  } finally {
+    await rm(dir, { recursive: true, force: true });
+  }
+
+  // Live screenshot via fake BiDi server
+  await withFake(async (liveDir, server) => {
+    const port = String(server.port);
+    const liveOut = join(liveDir, "live-screenshot.png");
+    const liveRes = await run(liveDir, ["screenshot", "--out", liveOut, "--port", port]);
+    assert.equal(liveRes.status, 0, liveRes.stderr);
+    assert.match(liveRes.stdout, /screenshot saved to .*live-screenshot\.png/);
+    assert.equal(existsSync(liveOut), true);
+
+    const shotCommands = server.commands.filter((c) => c.method === "browsingContext.captureScreenshot");
+    assert.equal(shotCommands.length, 1);
+  });
+});
+
+test("cli: snapshot with --screenshot flag", async () => {
+  await withFake(async (dir, server) => {
+    const port = String(server.port);
+    const res = await run(dir, ["snapshot", "--screenshot", "--port", port]);
+    assert.equal(res.status, 0, res.stderr);
+    assert.match(res.stdout, /snapshot ok:/);
+    assert.match(res.stdout, /screenshot saved to \.agent[/\\]screenshot\.png/);
+    assert.equal(existsSync(join(dir, ".agent", "screenshot.png")), true);
+
+    const shotCommands = server.commands.filter((c) => c.method === "browsingContext.captureScreenshot");
+    assert.equal(shotCommands.length, 1);
+  });
+});
+

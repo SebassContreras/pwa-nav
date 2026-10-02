@@ -14,6 +14,7 @@ import {
   performFill,
   performLiveSnapshot,
   performOpen,
+  performScreenshot,
   performUpload,
 } from "../ops/ops.js";
 import type { ActOp } from "../ops/ops.js";
@@ -342,6 +343,50 @@ const upload: ToolDef = {
   },
 };
 
+const screenshotTool: ToolDef = {
+  name: "pwa_screenshot",
+  description:
+    "Capture a visual screenshot of the current page and save it to disk. Returns the saved file path and image dimensions (never returns base64 bytes inline to preserve context tokens).",
+  inputSchema: {
+    type: "object",
+    properties: {
+      outPath: {
+        type: "string",
+        description: "Optional destination path for the screenshot PNG (defaults to .agent/screenshot.png).",
+      },
+      format: {
+        enum: ["png", "jpeg", "webp"],
+        description: "Image format (default: png).",
+      },
+    },
+    additionalProperties: false,
+  },
+  annotations: { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false },
+  async handler(args, ctx) {
+    const outPath = str(args, "outPath");
+    const rawFormat = str(args, "format");
+    let format: "png" | "jpeg" | "webp" | undefined;
+    if (rawFormat === "png" || rawFormat === "jpeg" || rawFormat === "webp") {
+      format = rawFormat;
+    }
+    const backend = ctx.backendFactory({ armed: false });
+    const result = await performScreenshot({
+      backend,
+      ...(outPath !== undefined ? { outPath } : {}),
+      ...(format !== undefined ? { format } : {}),
+      quiet: true,
+    });
+    return {
+      text: `screenshot saved to ${result.path}`,
+      structured: {
+        path: result.path,
+        ...(result.width !== undefined ? { width: result.width } : {}),
+        ...(result.height !== undefined ? { height: result.height } : {}),
+      },
+    };
+  },
+};
+
 // ops + inputs -> the CLI token list (flow inputs follow their flow token as key=value).
 function actTokens(ops: readonly string[], inputs: Record<string, string> | undefined): string[] {
   const pairs = Object.entries(inputs ?? {}).map(([key, value]) => `${key}=${value}`);
@@ -473,4 +518,14 @@ const learnTool: ToolDef = {
   },
 };
 
-export const TOOLS: readonly ToolDef[] = [open, snapshot, click, fill, upload, extract, act, learnTool];
+export const TOOLS: readonly ToolDef[] = [
+  open,
+  snapshot,
+  click,
+  fill,
+  upload,
+  screenshotTool,
+  extract,
+  act,
+  learnTool,
+];

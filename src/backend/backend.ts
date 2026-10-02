@@ -52,6 +52,17 @@ export interface OpenOptions {
   allowOrigin?: boolean;
 }
 
+export interface ScreenshotOptions {
+  format?: "png" | "jpeg" | "webp";
+  clip?: {
+    type: "box";
+    x: number;
+    y: number;
+    width: number;
+    height: number;
+  };
+}
+
 export interface Backend {
   /** Directory holding session.json, snapshots, refs and the gate files. */
   readonly agentDir: string;
@@ -62,6 +73,7 @@ export interface Backend {
   upload(snapshotId: string, ref: string, files: readonly string[], ctx?: ActionContext): Promise<ActionResult>;
   act(snapshotId: string, ops: readonly ActOp[], ctx?: ActionContext): Promise<ActResult>;
   currentUrl(): Promise<string>;
+  screenshot(options?: ScreenshotOptions): Promise<Buffer>;
 }
 
 export function agentPath(agentDir: string, name: string): string {
@@ -141,6 +153,15 @@ export class OfflineBackend implements Backend {
 
   async currentUrl(): Promise<string> {
     return (await loadSession(agentPath(this.agentDir, "session.json")))?.url ?? "";
+  }
+
+  screenshot(): Promise<Buffer> {
+    return Promise.resolve(
+      Buffer.from(
+        "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==",
+        "base64",
+      ),
+    );
   }
 
   click(snapshotId: string, ref: string): Promise<ActionResult> {

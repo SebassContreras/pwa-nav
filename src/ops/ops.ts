@@ -18,6 +18,7 @@ import {
   type ActOp,
   type ActionResult,
   type Backend,
+  type ScreenshotOptions,
   type Session,
 } from "../backend/backend.js";
 import type { RawElement } from "../browser/collector.js";
@@ -36,12 +37,21 @@ export type { ActOp, Backend, Session };
 export const DEFAULT_SESSION_PATH = ".agent/session.json";
 export const DEFAULT_SNAPSHOT_PATH = ".agent/snapshot.json";
 export const DEFAULT_ACTIONS_PATH = ".agent/actions.log";
+export const DEFAULT_SCREENSHOT_PATH = ".agent/screenshot.png";
 
 export interface SnapshotPerformOptions {
   url: string;
   title: string;
   outPath: string;
   quiet?: boolean;
+  agentDir?: string;
+}
+
+export interface ScreenshotPerformOptions extends OpOptions {
+  outPath?: string;
+  quiet?: boolean;
+  format?: ScreenshotOptions["format"];
+  clip?: ScreenshotOptions["clip"];
 }
 
 export type ExtractMode = "text" | "links";
@@ -133,7 +143,7 @@ export async function performSnapshot(
   await writeFile(options.outPath, JSON.stringify(snapshot, null, 2) + "\n", "utf8");
   // Keep the refs store in sync so click --snapshot <id> <ref> resolves.
   // save() rewrites .agent/snapshot.json plus refs/<id>.json + latest.json.
-  await saveSnapshot(snapshot);
+  await saveSnapshot(snapshot, options.agentDir ? { agentDir: options.agentDir } : undefined);
   if (options.quiet !== true) {
     console.log(
       `snapshot ok: ${snapshot.elements.length.toString()} elements -> ${options.outPath} (id ${snapshot.snapshotId})`,
@@ -277,4 +287,41 @@ export async function performExtract(
         (element.role === "link" || element.role === "button") && element.name.length > 0,
     )
     .map(formatExtractLine);
+}
+
+export function readPngDimensions(buffer: Buffer): { width: number; height: number } | null {
+  if (
+    buffer.length >= 24 &&
+    buffer[0] === 0x89 &&
+    buffer[1] === 0x50 &&
+    buffer[2] === 0x4e &&
+    buffer[3] === 0x47
+  ) {
+    const width = buffer.readUInt32BE(16);
+    const height = buffer.readUInt32BE(20);
+    return { width, height };
+  }
+  return null;
+}
+
+export async function performScreenshot(
+  options: ScreenshotPerformOptions = {},
+): Promise<{ path: string; buffer: Buffer; width?: number; height?: number }> {
+  const backend = backendOf(options);
+  const outPath = options.outPath ?? agentPath(backend.agentDir, "screenshot.png");
+  const buffer = await backend.screenshot({
+    format: options.format,
+    clip: options.clip,
+  });
+  await ensureParentDir(outPath);
+  await writeFile(outPath, buffer);
+  if (options.quiet !== true) {
+    console.log(`screenshot saved to ${outPath}`);
+  }
+  const dims = readPngDimensions(buffer);
+  return {
+    path: outPath,
+    buffer,
+    ...(dims !== null ? { width: dims.width, height: dims.height } : {}),
+  };
 }

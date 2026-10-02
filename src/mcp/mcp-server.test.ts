@@ -177,6 +177,7 @@ test("tools/list: names, schemas compile under Ajv 2020, annotations, no armed f
       "pwa_fill",
       "pwa_learn",
       "pwa_open",
+      "pwa_screenshot",
       "pwa_snapshot",
       "pwa_upload",
     ]);
@@ -187,7 +188,7 @@ test("tools/list: names, schemas compile under Ajv 2020, annotations, no armed f
       assert.ok(tool.description !== undefined && tool.description.length > 0);
     }
     const by = new Map(tools.map((t) => [t.name, t.annotations]));
-    for (const name of ["pwa_snapshot", "pwa_extract"]) assert.equal(by.get(name)?.readOnlyHint, true, name);
+    for (const name of ["pwa_snapshot", "pwa_extract", "pwa_screenshot"]) assert.equal(by.get(name)?.readOnlyHint, true, name);
     for (const name of ["pwa_click", "pwa_fill", "pwa_upload", "pwa_act"]) {
       assert.equal(by.get(name)?.destructiveHint, true, name);
       assert.equal(by.get(name)?.openWorldHint, true, name);
@@ -491,7 +492,7 @@ test("flow tools: listed with the flow's own inputSchema; humanOnly flows are no
     assert.match(flow.description ?? "", /^Run flow "search" on screen "search" of app "synthetic"/);
     assert.match(flow.description ?? "", /Search for a term\./);
     assert.ok(!(flow.description ?? "").includes("Query"), "element names never reach descriptions");
-    assert.equal(tools.length, 9);
+    assert.equal(tools.length, 10);
     const ajv = new Ajv2020({ allErrors: true, strict: true });
     for (const tool of tools) assert.doesNotThrow(() => ajv.compile(tool.inputSchema), tool.name);
     assert.match(client.getInstructions() ?? "", /dry-run/i);
@@ -500,7 +501,7 @@ test("flow tools: listed with the flow's own inputSchema; humanOnly flows are no
   // The demo map only has a humanOnly flow: no flow tool, but instructions + resource mention it.
   await withMcp({}, async ({ client }) => {
     const { tools } = await client.listTools();
-    assert.equal(tools.length, 8);
+    assert.equal(tools.length, 9);
     assert.ok(!tools.some((t) => t.name.startsWith("flow_")));
     assert.match(client.getInstructions() ?? "", /Human-only flows exist.*login \(screen login\)/);
     const { resources } = await client.listResources();
@@ -623,7 +624,7 @@ test("startup tolerates missing, invalid, ambiguous and Ajv-invalid maps (no flo
   for (const [label, maps, expected] of cases) {
     await withMcp({ maps }, async ({ client, logs }) => {
       const { tools } = await client.listTools();
-      assert.equal(tools.length, 8, label);
+      assert.equal(tools.length, 9, label);
       assert.ok(logs.some((l) => expected.test(l)), `${label}: ${logs.join(" | ")}`);
       const { resources } = await client.listResources();
       assert.deepEqual(resources.map((r) => r.uri), ["pwa-nav://snapshot/latest"], label);
@@ -791,6 +792,40 @@ test("pwa_upload armed: sets files and returns new snapshotId", async () => {
     assert.equal(armed.structured["dryRun"], false);
     assert.match(armed.text, /upload ok/);
     assert.equal(count(server, "input.setFiles"), 1);
+  });
+});
+
+test("pwa_screenshot: captures screenshot to disk and returns path + dimensions without inline bytes", async () => {
+  await withMcp({}, async ({ client, server, agentDir }) => {
+    // 1x1 PNG fake data
+    const pngBase64 = "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==";
+    server.handle("browsingContext.captureScreenshot", () => ({ data: pngBase64 }));
+
+    // Default call
+    const res = await call(client, "pwa_screenshot", {});
+    assert.equal(res.isError, false, res.text);
+    assert.match(res.text, /screenshot saved to/);
+    const path = res.structured["path"] as string;
+    assert.ok(path.endsWith(".png"));
+    assert.equal(res.structured["width"], 1);
+    assert.equal(res.structured["height"], 1);
+    // Crucial requirement: never returns raw base64 or binary data inline
+    assert.equal("data" in res.structured, false);
+    assert.equal("base64" in res.structured, false);
+
+    const onDisk = await readFile(path);
+    assert.deepEqual(onDisk, Buffer.from(pngBase64, "base64"));
+
+    // Custom outPath call
+    const customPath = join(agentDir, "my-evidence.png");
+    const customRes = await call(client, "pwa_screenshot", { outPath: customPath });
+    assert.equal(customRes.isError, false, customRes.text);
+    assert.equal(customRes.structured["path"], customPath);
+    assert.equal(customRes.structured["width"], 1);
+    assert.equal(customRes.structured["height"], 1);
+
+    const customDisk = await readFile(customPath);
+    assert.deepEqual(customDisk, Buffer.from(pngBase64, "base64"));
   });
 });
 

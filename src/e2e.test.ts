@@ -393,4 +393,21 @@ describe("E2E: real Firefox over BiDi", { skip }, () => {
     // A fresh session must still be creatable (no orphan).
     assert.equal(await evalPage("1 + 1"), 2);
   });
+
+  test("screenshot: captures PNG to disk and verifies binary header", async () => {
+    assert.equal((await cli(["open", `${base}/`])).status, 0);
+    const shotPath = join(cwd, "test-screenshot.png");
+    const r = await cli(["screenshot", "--out", shotPath]);
+    assert.equal(r.status, 0, r.stderr);
+    assert.match(r.stdout, /screenshot saved to/);
+    assert.equal(existsSync(shotPath), true);
+
+    const buf = await readFile(shotPath);
+    assert.equal(buf.length > 100, true);
+    // Verify PNG magic bytes
+    assert.equal(buf[0], 0x89);
+    assert.equal(buf[1], 0x50);
+    assert.equal(buf[2], 0x4e);
+    assert.equal(buf[3], 0x47);
+  });
 });

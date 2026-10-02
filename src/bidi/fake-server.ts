@@ -68,6 +68,13 @@ export async function startFakeBidiServer(handlers: Record<string, FakeHandler> 
       }
       return {};
     }
+    if (command.method === "browsingContext.captureScreenshot") {
+      const handler = table.get(command.method);
+      if (handler !== undefined) {
+        return handler(command.params, command);
+      }
+      return { data: "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==" };
+    }
     const handler = table.get(command.method);
     if (handler === undefined) {
       throw new FakeBidiError("unknown command", `no handler for ${command.method}`);

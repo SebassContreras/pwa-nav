@@ -17,6 +17,7 @@ import {
   type ActionResult,
   type Backend,
   type OpenOptions,
+  type ScreenshotOptions,
   type Session,
 } from "../backend/backend.js";
 import { PwaNavError } from "../core/errors.js";
@@ -197,6 +198,20 @@ export class BidiBackend implements Backend {
       if (typeof href !== "string") throw new PwaNavError("protocol", "location.href is not a string");
       return href;
     });
+  }
+
+  async screenshot(options?: ScreenshotOptions): Promise<Buffer> {
+    const b64 = await this.run(await this.sessionUrl(), async (client, context) => {
+      const bidiOpts =
+        options !== undefined
+          ? {
+              ...(options.clip !== undefined ? { clip: options.clip } : {}),
+              ...(options.format !== undefined ? { format: { type: `image/${options.format}` as const } } : {}),
+            }
+          : undefined;
+      return client.captureScreenshot(context, bidiOpts);
+    });
+    return Buffer.from(b64, "base64");
   }
 
   async click(snapshotId: string, ref: string, ctx: ActionContext = {}): Promise<ActionResult> {

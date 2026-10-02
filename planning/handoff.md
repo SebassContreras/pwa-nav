@@ -12,28 +12,25 @@ State after implementing specs 004–007. Read `planning/roadmap.md` first, then
 | 006 mcp-adapter | done | T001–T007, T009 done | T008 (human registration confirmed) | — |
 | 007 multi-screen-flows | done | T001–T007 done | — | — |
 | 008 file-uploads | done | T001–T008 done | — | — |
-| 009 visual-qa-screenshots | todo | Spec ready in `planning/specs/009-visual-qa-screenshots/` | T001–T006 pending | 9 (Top) |
-| 010 cross-platform-runtime | todo | Spec ready in `planning/specs/010-cross-platform-runtime/` | T001–T005 pending | 10 |
+| 009 visual-qa-screenshots | done | T001–T008 done | — | — |
+| 010 cross-platform-runtime | todo | Spec ready in `planning/specs/010-cross-platform-runtime/` | T001–T005 pending | 10 (Top) |
 
-Gate at handoff: `pnpm lint && pnpm build && pnpm test` (316 tests) `&& pnpm smoke`, `node dist/cli.js qa run <check-file>`, and the opt-in real-Firefox E2E `PWA_NAV_E2E=1 node --test dist/e2e.test.js` all green.
+Gate at handoff: `pnpm lint && pnpm build && pnpm test` (325 tests) `&& pnpm smoke`, `node dist/cli.js qa run <check-file>`, and the opt-in real-Firefox E2E `PWA_NAV_E2E=1 node --test dist/e2e.test.js` (15 tests) all green.
 
-## Spec 008 Deliverables (File Uploads)
+## Spec 009 Deliverables (Visual QA Screenshots)
 
-1. **Protocol Integration**: Added `input.setFiles` in `src/bidi/protocol.ts` and fake server handler in `src/bidi/fake-server.ts`.
-2. **Security Gate**: Implemented `assertFileUploadAllowed` and path allow-list in `src/core/gate.ts`, blocking traversal and sensitive files (`.env*`, private keys) with exit code 15 (`file_upload_blocked`).
-3. **DOM Collector & Actionability**: Updated `src/browser/collector.ts` to tag file inputs and `checkActionable` in `src/browser/actions.ts` to allow invisible styled native file inputs.
-4. **Execution Layer**: Implemented `uploadFiles` in `src/browser/actions.ts`, `Backend.upload` in `OfflineBackend` & `BidiBackend`, and `performUpload` in `src/ops/ops.ts`.
-5. **CLI & Semantic Routing**: Added `pwa-nav upload <ref|@id> <path...>` and `act upload:<ref>=<path>` in `src/cli.ts` with semantic resolution.
-6. **MCP Tool**: Added `pwa_upload` tool in `src/mcp/mcp-tools.ts` with dry-run/armed execution.
-7. **Documentation**: Updated `README.md`, `SKILL.md`, and `AGENTS.md`.
+1. **Protocol Integration**: Added `CaptureScreenshotOptions` and `browsingContext.captureScreenshot` in `src/bidi/protocol.ts` and fake BiDi server handler in `src/bidi/fake-server.ts`.
+2. **Backend Port**: Added `screenshot(options?): Promise<Buffer>` method to `Backend` port in `src/backend/backend.ts`, implemented in `OfflineBackend` and `BidiBackend` in `src/browser/bidi-backend.ts`.
+3. **Execution Layer & Context Economy**: Implemented `performScreenshot(options)` and `readPngDimensions` in `src/ops/ops.ts`. Saves binary PNG to disk directly (`.agent/screenshot.png` or custom path) and strictly avoids leaking base64 or raw image bytes into LLM/chat context.
+4. **QA Runner Evidence**: Integrated automatic screenshot capture on step failure and for explicit `{"op": "screenshot", "name": "..."}` or `screenshot: true` steps in `src/ops/qa.ts` (`.agent/evidence/<run-id>/step-<n>-<op>.png`).
+5. **CLI Command & Snapshot Flag**: Added `pwa-nav screenshot [--out <path>] [--format png|jpeg|webp]` command and `--screenshot` flag to `pwa-nav snapshot` in `src/cli.ts`.
+6. **MCP Tool**: Added `pwa_screenshot` tool to MCP server in `src/mcp/mcp-tools.ts`, returning `{ path, width, height }`.
+7. **Real Firefox E2E & Conformance**: Headless real Firefox E2E test in `src/e2e.test.ts` verifying binary PNG generation with verified magic bytes (`0x89 0x50 0x4e 0x47`), plus MCP stdio conformance tests.
+8. **Documentation**: Updated `README.md`, `SKILL.md`, and `AGENTS.md` (including rule 10).
 
 ## Open Work & Next Priorities
 
-1. **Spec 009 — Visual QA Screenshots (Next Priority)**:
-   - Capture full-page and element-level screenshots over BiDi (`browsingContext.captureScreenshot`).
-   - Store visual evidence in `.agent/evidence/<run-id>/screenshots/`.
-   - Implement visual regression diffing in `pwa-nav qa run`.
-3. **Spec 010 — Cross-Platform Runtime Discovery**:
+1. **Spec 010 — Cross-Platform Runtime Discovery (Next Priority)**:
    - Formalize runtime path detection across Windows, macOS, and Linux.
    - Verify `firefoxpwa` profile discovery and fallback configurations.
 

@@ -8,7 +8,17 @@ import { createBackend, DEFAULT_HOST, DEFAULT_PORT } from "../backend/backend-fa
 import { startFakeBidiServer, type FakeBidiServer, type ReceivedCommand } from "../bidi/fake-server.js";
 import { PwaNavError } from "../core/errors.js";
 import { addAllowedOrigin, loadAllowList } from "../core/gate.js";
-import { parseActOp, performAct, performClick, performFill, performLiveSnapshot, performOpen, performUpload } from "../ops/ops.js";
+import {
+  parseActOp,
+  performAct,
+  performClick,
+  performFill,
+  performLiveSnapshot,
+  performOpen,
+  performScreenshot,
+  performUpload,
+  readPngDimensions,
+} from "../ops/ops.js";
 import { latestSnapshotId, loadLocators, load, StaleRefError } from "../core/refs.js";
 import type { RawElement } from "./collector.js";
 import { BidiBackend, endpointFor, type BidiBackendOptions } from "./bidi-backend.js";
@@ -689,6 +699,50 @@ test("performAct supports upload: operation", async () => {
     await allow(e);
     const armed = await captureLog(() => performAct(id, [parseActOp(`upload:e4=${testFile}`)], { backend: armedBackend(e) }));
     assert.match(armed.out, /upload ok: upload textbox "Avatar"/);
+  });
+});
+
+test("screenshot captures PNG buffer via BidiBackend and OfflineBackend", async () => {
+  // OfflineBackend returns 1x1 png buffer
+  const offline = new OfflineBackend({ agentDir: ".agent" });
+  const offlineBuf = await offline.screenshot();
+  assert.ok(Buffer.isBuffer(offlineBuf));
+  assert.equal(offlineBuf.length > 0, true);
+
+  // BidiBackend delegates to browsingContext.captureScreenshot
+  await withEnv(async (e) => {
+    e.server.handle("browsingContext.captureScreenshot", (params) => {
+      const p = params as { context: string; format?: { type: string } };
+      assert.equal(p.context, "ctx");
+      assert.equal(p.format?.type, "image/png");
+      return { data: Buffer.from("fake-png-bytes").toString("base64") };
+    });
+
+    const buf = await e.backend.screenshot({ format: "png" });
+    assert.ok(Buffer.isBuffer(buf));
+    assert.equal(buf.toString(), "fake-png-bytes");
+
+    const commands = e.server.commands.filter((c) => c.method === "browsingContext.captureScreenshot");
+    assert.equal(commands.length, 1);
+  });
+});
+
+test("performScreenshot writes image to disk and reads dimensions", async () => {
+  await withEnv(async (e) => {
+    // 1x1 transparent PNG
+    const pngBase64 = "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==";
+    e.server.handle("browsingContext.captureScreenshot", () => ({ data: pngBase64 }));
+
+    const outPath = join(e.dir, "evidence", "shot.png");
+    const result = await performScreenshot({ backend: e.backend, outPath, quiet: true });
+
+    assert.equal(result.path, outPath);
+    assert.equal(result.width, 1);
+    assert.equal(result.height, 1);
+
+    const onDisk = await readFile(outPath);
+    assert.deepEqual(onDisk, Buffer.from(pngBase64, "base64"));
+    assert.deepEqual(readPngDimensions(onDisk), { width: 1, height: 1 });
   });
 });
 

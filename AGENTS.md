@@ -89,6 +89,7 @@ Agents operate through two complementary navigation layers:
 7. **Secrets**: Never commit secrets, `.env` files, or user cookies.
 8. **Windows PowerShell Splatting**: In PowerShell, `@id` without quotes is treated as an empty splatting variable. **Always quote semantic targets in shell commands**: `'@id'` or `click:'@id'`.
 9. **File Upload Security Boundary**: File uploads (`upload`, `pwa_upload`) are strictly restricted to files within allowed safe directories (workspace root or `.agent/`). Paths with traversal (`..`) or targeting sensitive files (`.env*`, private keys) are blocked immediately (exit code 15 `file_upload_blocked`).
+10. **Visual Screenshots & Context Economy**: Screenshots are written directly to disk (`.agent/screenshot.png` or custom `--out <path>`) and QA evidence directories (`.agent/evidence/<run-id>/`). Binary image data or base64 strings are **never** dumped into agent context or chat responses.
 
 ---
 

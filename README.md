@@ -150,7 +150,7 @@ Add to your `mcp.json` or `claude_desktop_config.json`:
 ```
 
 The MCP server exposes:
-- **Core tools**: `pwa_open`, `pwa_snapshot`, `pwa_click`, `pwa_fill`, `pwa_upload`, `pwa_extract`, `pwa_act`, `pwa_learn`.
+- **Core tools**: `pwa_open`, `pwa_snapshot`, `pwa_click`, `pwa_fill`, `pwa_upload`, `pwa_screenshot`, `pwa_extract`, `pwa_act`, `pwa_learn`.
 - **Dynamic flow tools**: `flow_<screen>_<flow>` for single-screen mapped tasks.
 - **Dynamic journey tools**: `journey_<id>` for multi-screen workflows with `destructiveHint: true`.
 - **Resources**: `pwa-nav://screens/<app-id>` and `pwa-nav://snapshot/latest`.
@@ -174,6 +174,7 @@ The MCP server exposes:
 | `pwa-nav act --snapshot <id> [--armed] <ops...>` | Batch mutations (`click:<ref>`, `fill:<ref>=<text>`, `upload:<ref>=<path>`) in a single session. |
 | `pwa-nav act [--armed] <semantic-ops...>` | Batch semantic ops (`click:'@id'`, `fill:'@id'=val`, `upload:'@id'=path`, `flow:<id>`). |
 | `pwa-nav journey <name> [key=value...] [--armed]` | Execute declarative multi-screen user journey across route transitions. |
+| `pwa-nav screenshot [--out <path>] [--format png\|jpeg\|webp]` | Capture visual screenshot to disk (`.agent/screenshot.png` by default). |
 | `pwa-nav extract --snapshot <id> --mode text\|links` | Fast read-only text or links extraction from stored snapshot. |
 | `pwa-nav qa run <check-file>` | Run offline JSON check file and save per-step evidence to `.agent/evidence/`. |
 
@@ -226,7 +227,7 @@ Run the full CI verification chain:
 ```bash
 pnpm lint && pnpm build && pnpm test && pnpm smoke
 ```
-- **301+ Automated Tests** covering protocol serialization, BiDi fake server, DOM collection, semantic resolution, screen maps, multi-screen journeys, and MCP conformance.
+- **330+ Automated Tests** covering protocol serialization, BiDi fake server, DOM collection, semantic resolution, screen maps, multi-screen journeys, visual screenshots, and MCP conformance.
 
 ---
 

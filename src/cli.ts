@@ -24,6 +24,7 @@ import {
   performFill,
   performLiveSnapshot,
   performOpen,
+  performScreenshot,
   performSnapshot,
   performUpload,
 } from "./ops/ops.js";
@@ -58,12 +59,13 @@ function usage(): string {
     "  pwa-nav click --snapshot <id> [--armed] <ref>   |   click [--armed] @<id>",
     "  pwa-nav fill --snapshot <id> [--armed] <ref> <text>   |   fill [--armed] @<id> <text>",
     "  pwa-nav upload --snapshot <id> [--armed] <ref> <path>...   |   upload [--armed] @<id> <path>...",
+    "  pwa-nav screenshot [--out <path>] [--format png|jpeg|webp]",
     "  pwa-nav extract --snapshot <id> --mode text|links",
     "  pwa-nav act --snapshot <id> [--armed] <op>...   |   act [--armed] <semantic-op>...",
     "  pwa-nav journey <name> [key=value...] [--armed] [--screen-map <file>] [--screens-dir <dir>]",
     "  pwa-nav qa run <check-file>",
     "",
-    "Global options (open, snapshot, click, fill, upload, act, journey):",
+    "Global options (open, snapshot, click, fill, upload, screenshot, act, journey):",
     "  --backend offline|bidi  Default bidi (live Firefox PWA); env PWA_NAV_BACKEND.",
     "  --port <n>              BiDi port 1024-65535 (default 9222); env PWA_NAV_PORT.",
     "  --context <id>          Browsing context id (required when the PWA has several top-level contexts).",
@@ -76,6 +78,7 @@ function usage(): string {
     "  click           Live: dry-run unless --armed. Offline: log intent, supersede snapshot.",
     "  fill            Same as click; typed text of password/sensitive fields is never printed.",
     "  upload          Live: dry-run unless --armed. Sets files on <input type=\"file\"> via input.setFiles.",
+    "  screenshot      Capture a visual screenshot of the current page; saves PNG to disk.",
     "  extract         Read-only narrow extraction (text|links) from stored snapshot (never supersedes).",
     "  act             Run bulk ops (fill:<ref>=<text> click:<ref> upload:<ref>=<path>); live: one session, one new snapshot.",
     "  journey         Declarative multi-screen user journey; dry-run unless --armed.",
@@ -171,6 +174,7 @@ const VALUE_HINT: Readonly<Record<string, string>> = {
   "--access": "public|authenticated|unknown",
   "--app-id": "<slug>",
   "--app-name": "<text>",
+  "--format": "png|jpeg|webp",
 };
 
 function missingValue(name: string): PwaNavError {
@@ -229,6 +233,12 @@ const JOURNEY_OPTIONS = {
   ...LIVE_OPTIONS,
   ...SCREEN_OPTIONS,
   armed: { type: "boolean" },
+} as const satisfies ParseArgsOptionsConfig;
+
+const SCREENSHOT_OPTIONS = {
+  ...LIVE_OPTIONS,
+  out: { type: "string" },
+  format: { type: "string" },
 } as const satisfies ParseArgsOptionsConfig;
 
 interface LiveConfig {
@@ -334,6 +344,7 @@ async function cmdSnapshot(rest: string[]): Promise<void> {
     access: { type: "string" },
     "app-id": { type: "string" },
     "app-name": { type: "string" },
+    screenshot: { type: "boolean" },
   });
   printHelpAndExit(values.help);
   if (positionals.length > 0) {
@@ -411,11 +422,15 @@ async function cmdSnapshot(rest: string[]): Promise<void> {
   }
 
   if (rawTree === null) {
-    const snapshot = await performLiveSnapshot(makeBackend(live), {
+    const backend = makeBackend(live);
+    const snapshot = await performLiveSnapshot(backend, {
       outPath,
       quiet: asJson,
       includeAll: values.all === true,
     });
+    if (values.screenshot === true) {
+      await performScreenshot({ backend });
+    }
     if (asJson) {
       console.log(JSON.stringify(snapshot));
     }
@@ -574,6 +589,30 @@ async function cmdAct(rest: string[]): Promise<void> {
   noInputNote(live, armed);
 }
 
+async function cmdScreenshot(rest: string[]): Promise<void> {
+  const { values, positionals } = strictParse("screenshot", rest, SCREENSHOT_OPTIONS);
+  printHelpAndExit(values.help);
+  if (positionals.length > 0) {
+    throw invalid(`unexpected screenshot argument: ${positionals[0] ?? ""}`);
+  }
+  const outPath = requireNonEmpty("--out", values.out);
+  const rawFormat = requireNonEmpty("--format", values.format);
+  let format: "png" | "jpeg" | "webp" | undefined;
+  if (rawFormat !== undefined) {
+    if (rawFormat !== "png" && rawFormat !== "jpeg" && rawFormat !== "webp") {
+      throw invalid(`invalid --format: ${rawFormat} (expected png|jpeg|webp).`);
+    }
+    format = rawFormat;
+  }
+  const live = resolveLive(values);
+  const backend = makeBackend(live);
+  await performScreenshot({
+    backend,
+    ...(outPath !== undefined ? { outPath } : {}),
+    ...(format !== undefined ? { format } : {}),
+  });
+}
+
 async function cmdExtract(rest: string[]): Promise<void> {
   const { values, positionals } = strictParse("extract", rest, {
     snapshot: { type: "string" },
@@ -656,6 +695,8 @@ async function main(): Promise<void> {
       return cmdFill(rest);
     case "upload":
       return cmdUpload(rest);
+    case "screenshot":
+      return cmdScreenshot(rest);
     case "extract":
       return cmdExtract(rest);
     case "act":

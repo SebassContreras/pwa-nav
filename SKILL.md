@@ -19,7 +19,9 @@ Choose the interface based on your environment:
 | **Raw accessibility tree** | `pwa-nav snapshot -i [--all]` | `pwa_snapshot` (`interactiveOnly: true`) | Writes `.agent/snapshot.json`. Returns element count and path. |
 | **Click element** | `pwa-nav click <target> [--armed]` | `pwa_click` (`target`) | Target can be semantic `'@id'` or ephemeral `eN`. |
 | **Fill input** | `pwa-nav fill <target> <text> [--armed]` | `pwa_fill` (`target`, `text`) | Rejects sensitive fields (exit 11). |
-| **Batch actions** | `pwa-nav act <ops...> [--armed]` | `pwa_act` (`ops`) | Combines clicks, fills, and flow invocations. |
+| **Upload files** | `pwa-nav upload <target> <path...> [--armed]` | `pwa_upload` (`target`, `files`) | Sets files on file inputs. Safe paths only. |
+| **Capture screenshot** | `pwa-nav screenshot [--out <path>]` | `pwa_screenshot` (`path`, `format`) | Saves binary PNG to disk; returns `{ path, width, height }`. |
+| **Batch actions** | `pwa-nav act <ops...> [--armed]` | `pwa_act` (`ops`) | Combines clicks, fills, uploads, and flows. |
 | **Read page content** | `pwa-nav extract --mode text\|links` | `pwa_extract` (`mode`) | Read-only; does not invalidate snapshots. |
 | **Multi-screen journey** | `pwa-nav journey <name> [k=v] [--armed]` | `journey_<name>` (`params`) | Executes multi-route journeys with screen validation. |
 | **Single-screen flow** | `pwa-nav act flow:<id> [k=v] [--armed]` | `flow_<screen>_<id>` (`params`) | Reusable parameterized screen flow. |

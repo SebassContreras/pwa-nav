@@ -55,6 +55,29 @@ export interface SharedReference {
   sharedId: string;
 }
 
+export interface CaptureScreenshotClipBox {
+  type: "box";
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+}
+
+export interface CaptureScreenshotClipElement {
+  type: "element";
+  element: SharedReference;
+}
+
+export type CaptureScreenshotClip = CaptureScreenshotClipBox | CaptureScreenshotClipElement;
+
+export interface CaptureScreenshotOptions {
+  clip?: CaptureScreenshotClip;
+  format?: {
+    type: "image/png" | "image/jpeg" | "image/webp";
+    quality?: number;
+  };
+}
+
 export interface NavigationWatch {
   /** A navigationStarted event was seen since the watch was created. */
   readonly started: boolean;
@@ -430,6 +453,22 @@ export class BidiClient {
       element: { sharedId: element.sharedId },
       files: Array.from(files),
     });
+  }
+
+  async captureScreenshot(context: string, options?: CaptureScreenshotOptions): Promise<string> {
+    const params: Record<string, unknown> = { context };
+    if (options?.clip !== undefined) {
+      params.clip = options.clip;
+    }
+    if (options?.format !== undefined) {
+      params.format = options.format;
+    }
+    const raw = await this.transport.send("browsingContext.captureScreenshot", params);
+    const data = (raw as { data?: unknown }).data;
+    if (typeof data !== "string") {
+      throw new PwaNavError("protocol", "browsingContext.captureScreenshot did not return data string");
+    }
+    return data;
   }
 
   async subscribe(events: readonly string[], contexts?: readonly string[]): Promise<void> {
