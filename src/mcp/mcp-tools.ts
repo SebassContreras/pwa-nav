@@ -3,7 +3,7 @@
 // Page content is untrusted: descriptions are static strings, results echo only what ops prints.
 import type { Backend } from "../backend/backend.js";
 import { agentPath } from "../backend/backend.js";
-import { NO_INPUT_LINE, runLearn, runScreenView, runSemanticAct, runSemanticClick, runSemanticFill } from "../cli/cli-screens.js";
+import { NO_INPUT_LINE, runLearn, runScreenView, runSemanticAct, runSemanticClick, runSemanticFill, runSemanticUpload } from "../cli/cli-screens.js";
 import type { ScreenSource, SemanticContext } from "../cli/cli-screens.js";
 import { PwaNavError } from "../core/errors.js";
 import {
@@ -14,6 +14,7 @@ import {
   performFill,
   performLiveSnapshot,
   performOpen,
+  performUpload,
 } from "../ops/ops.js";
 import type { ActOp } from "../ops/ops.js";
 import { latestSnapshotId, load as loadSnapshot } from "../core/refs.js";
@@ -291,6 +292,56 @@ const fill: ToolDef = {
   },
 };
 
+const upload: ToolDef = {
+  name: "pwa_upload",
+  description:
+    "Upload one or more local files to a file input (<input type=\"file\">) by semantic target (@id from screen map, e.g. @avatar) or snapshotId + ref (eN). " +
+    "Files must be inside allowed directories (workspace or .agent/). Dry-run unless the server operator armed it.",
+  inputSchema: {
+    type: "object",
+    properties: {
+      snapshotId: SNAPSHOT_ID_PROP,
+      ref: REF_PROP,
+      target: TARGET_PROP,
+      files: {
+        type: "array",
+        items: { type: "string", minLength: 1 },
+        minItems: 1,
+        description: "Local file paths to upload.",
+      },
+      file: {
+        type: "string",
+        minLength: 1,
+        description: "Single local file path to upload (convenience alias for files: [path]).",
+      },
+    },
+    anyOf: TARGET_ALTERNATIVES,
+    additionalProperties: false,
+  },
+  annotations: ACTION_HINTS,
+  async handler(args, ctx) {
+    const picked = pickTarget(args);
+    const rawFiles = args["files"];
+    const rawFile = args["file"];
+    let files: string[] = [];
+    if (Array.isArray(rawFiles) && rawFiles.length > 0) {
+      files = rawFiles.filter((f): f is string => typeof f === "string" && f.length > 0);
+    } else if (typeof rawFile === "string" && rawFile.length > 0) {
+      files = [rawFile];
+    } else {
+      throw invalid("missing files (expected string array 'files' or string 'file').");
+    }
+    const backend = ctx.backendFactory({ armed: ctx.armed });
+    if ("target" in picked) {
+      await runSemanticUpload(semanticContext(ctx, backend), picked.target.slice(1), files);
+      return actionOutcome(ctx, backend, null);
+    }
+    const next = await performUpload(picked.snapshotId, picked.ref, files, { backend, armed: ctx.armed });
+    noInputNote(ctx);
+    return actionOutcome(ctx, backend, next);
+  },
+};
+
 // ops + inputs -> the CLI token list (flow inputs follow their flow token as key=value).
 function actTokens(ops: readonly string[], inputs: Record<string, string> | undefined): string[] {
   const pairs = Object.entries(inputs ?? {}).map(([key, value]) => `${key}=${value}`);
@@ -306,8 +357,8 @@ const act: ToolDef = {
   name: "pwa_act",
   description:
     "Run several ops in one session (ideal for search: fill search input + click search button, or submitting forms). " +
-    "Semantic ops without snapshotId: click:@id, fill:@id=<text>, flow:<id> with inputs. " +
-    "Plain ops with snapshotId: click:<ref>, fill:<ref>=<text>. Do not mix the two. " +
+    "Semantic ops without snapshotId: click:@id, fill:@id=<text>, upload:@id=<path>, flow:<id> with inputs. " +
+    "Plain ops with snapshotId: click:<ref>, fill:<ref>=<text>, upload:<ref>=<path>. Do not mix the two. " +
     "Dry-run unless the server operator armed it; human-only flows are refused.",
   inputSchema: {
     type: "object",
@@ -422,4 +473,4 @@ const learnTool: ToolDef = {
   },
 };
 
-export const TOOLS: readonly ToolDef[] = [open, snapshot, click, fill, extract, act, learnTool];
+export const TOOLS: readonly ToolDef[] = [open, snapshot, click, fill, upload, extract, act, learnTool];

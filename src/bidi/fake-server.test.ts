@@ -23,3 +23,22 @@ test("fake server: one active session, session.end frees it, bare close does not
     await server.close();
   }
 });
+
+test("fake server: handles input.setFiles by default", async () => {
+  const server = await startFakeBidiServer();
+  try {
+    const transport = await BidiTransport.connect(server.url);
+    await transport.send("session.new", { capabilities: {} });
+    const res = await transport.send("input.setFiles", {
+      context: "c1",
+      element: { sharedId: "e1" },
+      files: ["/test/file.png"],
+    });
+    assert.deepEqual(res, {});
+    await transport.send("session.end", {});
+    await transport.close();
+  } finally {
+    await server.close();
+  }
+});
+

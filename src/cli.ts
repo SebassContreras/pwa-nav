@@ -25,6 +25,7 @@ import {
   performLiveSnapshot,
   performOpen,
   performSnapshot,
+  performUpload,
 } from "./ops/ops.js";
 import type { ActOp, ExtractMode } from "./ops/ops.js";
 import { runCheck } from "./ops/qa.js";
@@ -34,6 +35,7 @@ import {
   runSemanticAct,
   runSemanticClick,
   runSemanticFill,
+  runSemanticUpload,
   validateLearnFlags,
   NO_INPUT_LINE,
   type ScreenSource,
@@ -55,12 +57,13 @@ function usage(): string {
     "                   [--app-id <slug>] [--app-name <text>] [--screen-map <file>] [--screens-dir <dir>]",
     "  pwa-nav click --snapshot <id> [--armed] <ref>   |   click [--armed] @<id>",
     "  pwa-nav fill --snapshot <id> [--armed] <ref> <text>   |   fill [--armed] @<id> <text>",
+    "  pwa-nav upload --snapshot <id> [--armed] <ref> <path>...   |   upload [--armed] @<id> <path>...",
     "  pwa-nav extract --snapshot <id> --mode text|links",
     "  pwa-nav act --snapshot <id> [--armed] <op>...   |   act [--armed] <semantic-op>...",
     "  pwa-nav journey <name> [key=value...] [--armed] [--screen-map <file>] [--screens-dir <dir>]",
     "  pwa-nav qa run <check-file>",
     "",
-    "Global options (open, snapshot, click, fill, act, journey):",
+    "Global options (open, snapshot, click, fill, upload, act, journey):",
     "  --backend offline|bidi  Default bidi (live Firefox PWA); env PWA_NAV_BACKEND.",
     "  --port <n>              BiDi port 1024-65535 (default 9222); env PWA_NAV_PORT.",
     "  --context <id>          Browsing context id (required when the PWA has several top-level contexts).",
@@ -72,8 +75,9 @@ function usage(): string {
     "                  With --input <file> or piped stdin: normalize an ARIA tree offline.",
     "  click           Live: dry-run unless --armed. Offline: log intent, supersede snapshot.",
     "  fill            Same as click; typed text of password/sensitive fields is never printed.",
+    "  upload          Live: dry-run unless --armed. Sets files on <input type=\"file\"> via input.setFiles.",
     "  extract         Read-only narrow extraction (text|links) from stored snapshot (never supersedes).",
-    "  act             Run bulk ops (fill:<ref>=<text> click:<ref>); live: one session, one new snapshot.",
+    "  act             Run bulk ops (fill:<ref>=<text> click:<ref> upload:<ref>=<path>); live: one session, one new snapshot.",
     "  journey         Declarative multi-screen user journey; dry-run unless --armed.",
     "  qa run          Execute a JSON check file (offline backend; open/snapshot/click/fill/act/extract/",
     "                  assert-text), save evidence to .agent/evidence/<run-id>/ + result.json, exit 0/1.",
@@ -113,17 +117,18 @@ function usage(): string {
     "                      equals the current origin, searched in the screens dir.",
     "  --screens-dir <dir> Screens directory (default ./screens); env PWA_NAV_SCREENS_DIR.",
     "",
-    "Action options (click, fill, act):",
+    "Action options (click, fill, upload, act):",
     "  --armed             Actually send input. Without it live actions are dry-run. Only this flag arms:",
     "                      no env var does. Kill-switch (PWA_NAV_KILL_SWITCH or .agent/kill) and the",
     "                      origin allow-list still apply.",
     "",
     "Bulk op format:",
-    "  fill:<ref>=<text>  Fill ref with text (split on first =).",
-    "  click:<ref>        Click ref.",
+    "  fill:<ref>=<text>   Fill ref with text (split on first =).",
+    "  click:<ref>         Click ref.",
+    "  upload:<ref>=<path> Set file path on ref.",
     "",
-    "Semantic @id targets (click, fill, act; live backend only; no --snapshot):",
-    "  click @sign-in | fill @email <text> | act click:@id fill:@id=<text> flow:<id> [key=value ...]",
+    "Semantic @id targets (click, fill, upload, act; live backend only; no --snapshot):",
+    "  click @sign-in | fill @email <text> | upload @avatar <path>... | act click:@id fill:@id=<text> upload:@id=<path> flow:<id> [key=value ...]",
     "  The current URL selects the mapped screen; @id is resolved on a FRESH snapshot by role+name+occurrence",
     "  (not found live: stale_ref 3). Sensitive fields and human-only flows are refused before any input",
     "  (sensitive_target 11); unknown id/flow: unknown_target 12; no map/screen: unmapped_screen 13.",
@@ -523,6 +528,28 @@ async function cmdFill(rest: string[]): Promise<void> {
   noInputNote(live, armed);
 }
 
+async function cmdUpload(rest: string[]): Promise<void> {
+  const { values, positionals } = strictParse("upload", rest, ACTION_OPTIONS);
+  printHelpAndExit(values.help);
+  const semanticRef = positionals[0];
+  if (semanticRef?.startsWith("@") === true) {
+    const files = positionals.slice(1);
+    if (files.length === 0) throw invalid("missing <ref> <path>.");
+    await runSemanticUpload(semanticContext(values), semanticRef.slice(1), files);
+    return;
+  }
+  const snapshotId = requireSnapshotId(values.snapshot);
+  const ref = positionals[0];
+  const files = positionals.slice(1);
+  if (ref === undefined || files.length === 0) {
+    throw invalid("missing <ref> <path>.");
+  }
+  const live = resolveLive(values);
+  const armed = values.armed === true;
+  await performUpload(snapshotId, ref, files, { backend: makeBackend(live, { armed }), armed });
+  noInputNote(live, armed);
+}
+
 async function cmdAct(rest: string[]): Promise<void> {
   const { values, positionals } = strictParse("act", rest, ACTION_OPTIONS);
   printHelpAndExit(values.help);
@@ -532,7 +559,7 @@ async function cmdAct(rest: string[]): Promise<void> {
   }
   const snapshotId = requireSnapshotId(values.snapshot);
   if (positionals.length === 0) {
-    throw invalid("missing <op>... (expected fill:<ref>=<text> or click:<ref>).");
+    throw invalid("missing <op>... (expected fill:<ref>=<text>, click:<ref>, or upload:<ref>=<path>).");
   }
   const ops: ActOp[] = positionals.map((token) => {
     try {
@@ -627,6 +654,8 @@ async function main(): Promise<void> {
       return cmdClick(rest);
     case "fill":
       return cmdFill(rest);
+    case "upload":
+      return cmdUpload(rest);
     case "extract":
       return cmdExtract(rest);
     case "act":

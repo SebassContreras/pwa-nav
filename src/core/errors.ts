@@ -13,7 +13,8 @@ export type ErrorCode =
   | "sensitive_target"
   | "unknown_target"
   | "unmapped_screen"
-  | "journey_step_failed";
+  | "journey_step_failed"
+  | "file_upload_blocked";
 
 export const EXIT_CODES: Readonly<Record<ErrorCode, number>> = {
   invalid_args: 2,
@@ -29,6 +30,7 @@ export const EXIT_CODES: Readonly<Record<ErrorCode, number>> = {
   unknown_target: 12,
   unmapped_screen: 13,
   journey_step_failed: 14,
+  file_upload_blocked: 15,
 };
 
 export interface PwaNavErrorOptions {

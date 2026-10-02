@@ -77,7 +77,7 @@ function run(dir: string, args: string[], env: NodeJS.ProcessEnv = {}): Promise<
   });
 }
 
-async function withDir(fn: (dir: string) => Promise<void>): Promise<void> {
+async function withDir(fn: (dir: string) => Promise<void> | void): Promise<void> {
   const dir = await mkdtemp(join(tmpdir(), "pwa-nav-cli-"));
   try {
     await fn(dir);
@@ -375,3 +375,84 @@ test("live snapshot --json and --all", async () => {
     assert.ok(flags.includes(true));
   });
 });
+
+test("cli: upload requires <ref> and <path>", async () => {
+  await withDir((dir) => {
+    const r = runSync(dir, ["upload", "--snapshot", "s1", "e1"]);
+    assert.equal(r.status, 2);
+    assert.match(r.stderr, /missing <ref> <path>/);
+  });
+});
+
+test("cli: upload dry-run and armed", async () => {
+  await withFake(async (dir, server) => {
+    const port = String(server.port);
+    const testFile = join(dir, "avatar.png");
+    await writeFile(testFile, "img-data", "utf8");
+
+    const rawBackup = [...RAW];
+    RAW.push({ role: "textbox", name: "Avatar", nameSource: "label", occurrence: 0, inputType: "file" });
+    try {
+      const snapRes = await run(dir, ["snapshot", "--port", port]);
+      assert.equal(snapRes.status, 0, snapRes.stderr);
+      const match = /^snapshot ok: \d+ elements -> \.agent\/snapshot\.json \(id ([\w-]+)\)$/m.exec(snapRes.stdout);
+      assert.ok(match, snapRes.stdout);
+      const id = match[1] ?? "";
+
+      // Dry-run
+      const dry = await run(dir, ["upload", "--snapshot", id, "e4", testFile, "--port", port]);
+      assert.equal(dry.status, 0, dry.stderr);
+      assert.match(dry.stdout, /upload dry-run: upload textbox "Avatar"/);
+      assert.match(dry.stdout, /no input sent/);
+      assert.equal(server.commands.filter((c) => c.method === "input.setFiles").length, 0);
+
+      // Armed without allow-origin fails with origin_blocked
+      const blocked = await run(dir, ["upload", "--snapshot", id, "e4", testFile, "--armed", "--port", port]);
+      assert.equal(blocked.status, 6, blocked.stderr);
+
+      // Allow origin
+      await run(dir, ["open", URL_A, "--allow-origin", "--port", port]);
+
+      // Armed
+      const armed = await run(dir, ["upload", "--snapshot", id, "e4", testFile, "--armed", "--port", port]);
+      assert.equal(armed.status, 0, armed.stderr);
+      assert.match(armed.stdout, /upload ok: upload textbox "Avatar"/);
+      assert.equal(server.commands.filter((c) => c.method === "input.setFiles").length, 1);
+    } finally {
+      RAW.length = 0;
+      RAW.push(...rawBackup);
+    }
+  });
+});
+
+test("cli: act upload:<ref>=<path>", async () => {
+  await withFake(async (dir, server) => {
+    const port = String(server.port);
+    const testFile = join(dir, "avatar.png");
+    await writeFile(testFile, "img-data", "utf8");
+
+    const rawBackup = [...RAW];
+    RAW.push({ role: "textbox", name: "Avatar", nameSource: "label", occurrence: 0, inputType: "file" });
+    try {
+      await run(dir, ["open", URL_A, "--allow-origin", "--port", port]);
+      const snapRes = await run(dir, ["snapshot", "--port", port]);
+      assert.equal(snapRes.status, 0, snapRes.stderr);
+      const match = /^snapshot ok: \d+ elements -> \.agent\/snapshot\.json \(id ([\w-]+)\)$/m.exec(snapRes.stdout);
+      assert.ok(match, snapRes.stdout);
+      const id = match[1] ?? "";
+
+      const dry = await run(dir, ["act", "--snapshot", id, `upload:e4=${testFile}`, "--port", port]);
+      assert.equal(dry.status, 0, dry.stderr);
+      assert.match(dry.stdout, /upload textbox "Avatar"/);
+
+      const armed = await run(dir, ["act", "--snapshot", id, `upload:e4=${testFile}`, "--armed", "--port", port]);
+      assert.equal(armed.status, 0, armed.stderr);
+      assert.match(armed.stdout, /upload ok: upload textbox "Avatar"/);
+      assert.equal(server.commands.filter((c) => c.method === "input.setFiles").length, 1);
+    } finally {
+      RAW.length = 0;
+      RAW.push(...rawBackup);
+    }
+  });
+});
+

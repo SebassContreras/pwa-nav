@@ -50,7 +50,9 @@ function field(id: string, name: string, sensitive = false, agentFillable = true
 
 test("demo login view matches the golden file", async () => {
   const { login } = await demo();
-  const golden = (await readFile(new URL("demo-login.view.txt", viewsDir), "utf8")).replace(/\r?\n$/, "");
+  const golden = (await readFile(new URL("demo-login.view.txt", viewsDir), "utf8"))
+    .replace(/\r\n/g, "\n")
+    .replace(/\n$/, "");
   assert.equal(renderScreenView(login), golden);
 });
 

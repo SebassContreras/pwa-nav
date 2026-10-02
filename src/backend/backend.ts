@@ -17,7 +17,10 @@ export interface Session {
   openedAt: string;
 }
 
-export type ActOp = { kind: "click"; ref: string } | { kind: "fill"; ref: string; text: string };
+export type ActOp =
+  | { kind: "click"; ref: string }
+  | { kind: "fill"; ref: string; text: string }
+  | { kind: "upload"; ref: string; files: readonly string[] };
 
 export interface ActionResult {
   kind: "dry-run" | "done";
@@ -56,6 +59,7 @@ export interface Backend {
   collect(opts?: { includeAll?: boolean }): Promise<{ url: string; title: string; raw: RawElement[] }>;
   click(snapshotId: string, ref: string, ctx?: ActionContext): Promise<ActionResult>;
   fill(snapshotId: string, ref: string, text: string, ctx?: ActionContext): Promise<ActionResult>;
+  upload(snapshotId: string, ref: string, files: readonly string[], ctx?: ActionContext): Promise<ActionResult>;
   act(snapshotId: string, ops: readonly ActOp[], ctx?: ActionContext): Promise<ActResult>;
   currentUrl(): Promise<string>;
 }
@@ -147,7 +151,11 @@ export class OfflineBackend implements Backend {
     return this.mutate(snapshotId, ref, text);
   }
 
-  // Sequential click/fill; each op supersedes, so later refs resolve against the evolving id.
+  upload(snapshotId: string, ref: string, files: readonly string[]): Promise<ActionResult> {
+    return this.mutate(snapshotId, ref, undefined, files);
+  }
+
+  // Sequential click/fill/upload; each op supersedes, so later refs resolve against the evolving id.
   // The first StaleRefError aborts the sequence.
   async act(snapshotId: string, ops: readonly ActOp[], ctx: ActionContext = {}): Promise<ActResult> {
     let currentId = snapshotId;
@@ -156,7 +164,9 @@ export class OfflineBackend implements Backend {
       const result =
         op.kind === "click"
           ? await this.click(currentId, op.ref)
-          : await this.fill(currentId, op.ref, op.text);
+          : op.kind === "fill"
+            ? await this.fill(currentId, op.ref, op.text)
+            : await this.upload(currentId, op.ref, op.files);
       currentId = result.snapshotId;
       results.push(result);
       ctx.onResult?.(op, result);
@@ -169,6 +179,7 @@ export class OfflineBackend implements Backend {
     snapshotId: string,
     ref: string,
     text: string | undefined,
+    files?: readonly string[],
   ): Promise<ActionResult> {
     const store = { agentDir: this.agentDir };
     const element = await resolveRef(snapshotId, ref, store);
@@ -179,6 +190,7 @@ export class OfflineBackend implements Backend {
       role: element.role,
       name: element.name,
       ...(text === undefined ? {} : { text }),
+      ...(files === undefined ? {} : { files: Array.from(files) }),
       at: new Date().toISOString(),
     };
     const logPath = agentPath(this.agentDir, "actions.log");

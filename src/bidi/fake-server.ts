@@ -61,6 +61,13 @@ export async function startFakeBidiServer(handlers: Record<string, FakeHandler> 
       sessionActive = false;
       return {};
     }
+    if (command.method === "input.setFiles") {
+      const handler = table.get(command.method);
+      if (handler !== undefined) {
+        return handler(command.params, command);
+      }
+      return {};
+    }
     const handler = table.get(command.method);
     if (handler === undefined) {
       throw new FakeBidiError("unknown command", `no handler for ${command.method}`);

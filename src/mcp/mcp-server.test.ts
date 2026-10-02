@@ -178,6 +178,7 @@ test("tools/list: names, schemas compile under Ajv 2020, annotations, no armed f
       "pwa_learn",
       "pwa_open",
       "pwa_snapshot",
+      "pwa_upload",
     ]);
     const ajv = new Ajv2020({ allErrors: true, strict: true });
     for (const tool of tools) {
@@ -187,7 +188,7 @@ test("tools/list: names, schemas compile under Ajv 2020, annotations, no armed f
     }
     const by = new Map(tools.map((t) => [t.name, t.annotations]));
     for (const name of ["pwa_snapshot", "pwa_extract"]) assert.equal(by.get(name)?.readOnlyHint, true, name);
-    for (const name of ["pwa_click", "pwa_fill", "pwa_act"]) {
+    for (const name of ["pwa_click", "pwa_fill", "pwa_upload", "pwa_act"]) {
       assert.equal(by.get(name)?.destructiveHint, true, name);
       assert.equal(by.get(name)?.openWorldHint, true, name);
       assert.equal(by.get(name)?.readOnlyHint, false, name);
@@ -208,6 +209,8 @@ test("invalid arguments are tool errors (invalid_args), never protocol errors", 
       ["pwa_click", { target: "sign-in" }],
       ["pwa_click", { target: "@sign-in", snapshotId: "s1", ref: "e1" }],
       ["pwa_fill", { target: "@email" }],
+      ["pwa_upload", { target: "@avatar" }],
+      ["pwa_upload", { target: "@avatar", files: [] }],
       ["pwa_act", { ops: [] }],
       ["pwa_act", { ops: ["click:e1"] }],
       ["pwa_act", { snapshotId: "s1", ops: [`fill:e1`, `bogus:${SECRET}`] }],
@@ -262,7 +265,9 @@ test("snapshot returns path + count only; screen:true returns the golden compact
     const collects = count(server, "script.callFunction");
     const screen = await call(client, "pwa_snapshot", { screen: true });
     assert.equal(screen.isError, false, screen.text);
-    const golden = await readFile(join(ROOT, "checks", "fixtures", "views", "demo-login.view.txt"), "utf8");
+    const golden = (
+      await readFile(join(ROOT, "checks", "fixtures", "views", "demo-login.view.txt"), "utf8")
+    ).replace(/\r\n/g, "\n");
     assert.equal(screen.text.trim(), golden.trim());
     assert.equal(count(server, "script.callFunction"), collects);
 
@@ -486,7 +491,7 @@ test("flow tools: listed with the flow's own inputSchema; humanOnly flows are no
     assert.match(flow.description ?? "", /^Run flow "search" on screen "search" of app "synthetic"/);
     assert.match(flow.description ?? "", /Search for a term\./);
     assert.ok(!(flow.description ?? "").includes("Query"), "element names never reach descriptions");
-    assert.equal(tools.length, 8);
+    assert.equal(tools.length, 9);
     const ajv = new Ajv2020({ allErrors: true, strict: true });
     for (const tool of tools) assert.doesNotThrow(() => ajv.compile(tool.inputSchema), tool.name);
     assert.match(client.getInstructions() ?? "", /dry-run/i);
@@ -495,7 +500,7 @@ test("flow tools: listed with the flow's own inputSchema; humanOnly flows are no
   // The demo map only has a humanOnly flow: no flow tool, but instructions + resource mention it.
   await withMcp({}, async ({ client }) => {
     const { tools } = await client.listTools();
-    assert.equal(tools.length, 7);
+    assert.equal(tools.length, 8);
     assert.ok(!tools.some((t) => t.name.startsWith("flow_")));
     assert.match(client.getInstructions() ?? "", /Human-only flows exist.*login \(screen login\)/);
     const { resources } = await client.listResources();
@@ -618,7 +623,7 @@ test("startup tolerates missing, invalid, ambiguous and Ajv-invalid maps (no flo
   for (const [label, maps, expected] of cases) {
     await withMcp({ maps }, async ({ client, logs }) => {
       const { tools } = await client.listTools();
-      assert.equal(tools.length, 7, label);
+      assert.equal(tools.length, 8, label);
       assert.ok(logs.some((l) => expected.test(l)), `${label}: ${logs.join(" | ")}`);
       const { resources } = await client.listResources();
       assert.deepEqual(resources.map((r) => r.uri), ["pwa-nav://snapshot/latest"], label);
@@ -744,4 +749,49 @@ test("pwa_learn and pwa_snapshot(learn: true) learn and persist screen map via M
     assert.match(r2.text, /screen map:.*unchanged/);
   });
 });
+
+test("pwa_upload: dry-run and armed with single file and files array", async () => {
+  await withMcp({}, async ({ client, server, agentDir }) => {
+    await mkdir(agentDir, { recursive: true });
+    const testFile = join(agentDir, "avatar.png");
+    await writeFile(testFile, "img");
+
+    const snap = await call(client, "pwa_snapshot", {});
+    const snapshotId = snap.structured["snapshotId"] as string;
+
+    // Dry-run with single file
+    const drySingle = await call(client, "pwa_upload", { snapshotId, ref: "e1", file: testFile });
+    assert.equal(drySingle.isError, false, drySingle.text);
+    assert.equal(drySingle.structured["dryRun"], true);
+    assert.match(drySingle.text, /upload dry-run/);
+    assert.match(drySingle.text, /no input sent/);
+    assert.equal(count(server, "input.setFiles"), 0);
+
+    // Dry-run with files array
+    const dryArray = await call(client, "pwa_upload", { snapshotId, ref: "e1", files: [testFile] });
+    assert.equal(dryArray.isError, false, dryArray.text);
+    assert.equal(dryArray.structured["dryRun"], true);
+    assert.match(dryArray.text, /upload dry-run/);
+    assert.equal(count(server, "input.setFiles"), 0);
+  });
+});
+
+test("pwa_upload armed: sets files and returns new snapshotId", async () => {
+  await withMcp({ armed: true }, async ({ client, server, agentDir }) => {
+    await allow(agentDir);
+    await mkdir(agentDir, { recursive: true });
+    const testFile = join(agentDir, "avatar.png");
+    await writeFile(testFile, "img");
+
+    const snap = await call(client, "pwa_snapshot", {});
+    const snapshotId = snap.structured["snapshotId"] as string;
+
+    const armed = await call(client, "pwa_upload", { snapshotId, ref: "e1", files: [testFile] });
+    assert.equal(armed.isError, false, armed.text);
+    assert.equal(armed.structured["dryRun"], false);
+    assert.match(armed.text, /upload ok/);
+    assert.equal(count(server, "input.setFiles"), 1);
+  });
+});
+
 

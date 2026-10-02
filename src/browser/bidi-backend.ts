@@ -1,7 +1,8 @@
 // BidiBackend (spec 004, T010): the Backend port over WebDriver BiDi.
 // Every operation is ONE withTopLevelContext session (connect -> work -> session.end);
 // a session is never reused (Firefox allows a single active session).
-import { addAllowedOrigin, assertArmedAllowed, assertNavigationAllowed, DEFAULT_AGENT_DIR } from "../core/gate.js";
+import { dirname } from "node:path";
+import { addAllowedOrigin, assertArmedAllowed, assertFileUploadAllowed, assertNavigationAllowed, DEFAULT_AGENT_DIR } from "../core/gate.js";
 import { withTopLevelContext, type SessionOptions } from "../bidi/session.js";
 import type { BidiClient } from "../bidi/protocol.js";
 import {
@@ -22,7 +23,7 @@ import { PwaNavError } from "../core/errors.js";
 import { load as loadSnapshot, loadLocators, resolveLocator, saveLive } from "../core/refs.js";
 import type { Locator } from "../screens/screen-map.js";
 import type { Snapshot } from "../core/snapshot.js";
-import { clickLocator, collectLive, describeTarget, fillLocator, type LiveCollect } from "./actions.js";
+import { clickLocator, collectLive, describeTarget, fillLocator, uploadFiles, type LiveCollect } from "./actions.js";
 import type { RawElement } from "./collector.js";
 import { buildLiveSnapshot, type LiveExtras } from "./live-snapshot.js";
 import { assertFresh } from "./locate.js";
@@ -206,6 +207,10 @@ export class BidiBackend implements Backend {
     return this.single(await this.runBatch(snapshotId, [{ kind: "fill", ref, text }], ctx));
   }
 
+  async upload(snapshotId: string, ref: string, files: readonly string[], ctx: ActionContext = {}): Promise<ActionResult> {
+    return this.single(await this.runBatch(snapshotId, [{ kind: "upload", ref, files }], ctx));
+  }
+
   act(snapshotId: string, ops: readonly ActOp[], ctx: ActionContext = {}): Promise<ActResult> {
     return this.runBatch(snapshotId, ops, ctx);
   }
@@ -227,6 +232,15 @@ export class BidiBackend implements Backend {
   private async runBatch(snapshotId: string, ops: readonly ActOp[], ctx: ActionContext): Promise<ActResult> {
     const armed = ctx.armed ?? this.armed;
     const store = { agentDir: this.agentDir };
+
+    const safeRoots = [process.cwd(), this.agentDir, dirname(this.agentDir)];
+    for (const op of ops) {
+      if (op.kind === "upload") {
+        for (const file of op.files) {
+          assertFileUploadAllowed(file, safeRoots);
+        }
+      }
+    }
 
     const targets: Target[] = [];
     for (const op of ops) {
@@ -257,6 +271,7 @@ export class BidiBackend implements Backend {
             locator,
             element: withExtras(element, Object.hasOwn(extras, op.ref) ? extras[op.ref] : undefined),
             ...(op.kind === "fill" ? { text: op.text } : {}),
+            ...(op.kind === "upload" ? { files: op.files } : {}),
           });
           let result: ActionResult;
           if (!armed) {
@@ -265,7 +280,9 @@ export class BidiBackend implements Backend {
             const state =
               op.kind === "click"
                 ? await clickLocator(client, context, current, locator, { includeAll })
-                : await fillLocator(client, context, current, locator, op.text, { includeAll });
+                : op.kind === "fill"
+                  ? await fillLocator(client, context, current, locator, op.text, { includeAll })
+                  : await uploadFiles(client, context, current, locator, op.files, { includeAll });
             executed++;
             current = { ...current, url: state.url };
             result = { kind: "done", plan, snapshotId, url: state.url, title: state.title, interim: true };

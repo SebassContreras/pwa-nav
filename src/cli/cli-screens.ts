@@ -6,7 +6,7 @@
 import { join } from "node:path";
 import type { Backend } from "../backend/backend.js";
 import { PwaNavError } from "../core/errors.js";
-import { captureLiveSnapshot, performAct, performClick, performFill, performLiveSnapshot } from "../ops/ops.js";
+import { captureLiveSnapshot, performAct, performClick, performFill, performLiveSnapshot, performUpload } from "../ops/ops.js";
 import type { ActOp } from "../ops/ops.js";
 import { load as loadSnapshot, loadLocators } from "../core/refs.js";
 import type { Screen, ScreenMap } from "../screens/screen-map.js";
@@ -174,8 +174,8 @@ interface Planned {
   intent: Intent;
   target: ResolvedTarget;
   text?: string;
+  files?: readonly string[];
 }
-
 
 // Fresh snapshot (quiet) + refs for every planned target, then the existing eN action paths.
 async function execute(ctx: SemanticContext, planned: Planned[], mode: "single" | "batch"): Promise<void> {
@@ -184,7 +184,9 @@ async function execute(ctx: SemanticContext, planned: Planned[], mode: "single" 
   const sidecar = await loadLocators(fresh.snapshotId, { agentDir: backend.agentDir });
   const ops: ActOp[] = planned.map((step) => {
     const ref = refFor(sidecar, step.target.locator, step.target, fresh.snapshotId);
-    return step.intent === "click" ? { kind: "click", ref } : { kind: "fill", ref, text: step.text ?? "" };
+    if (step.intent === "click") return { kind: "click", ref };
+    if (step.intent === "fill") return { kind: "fill", ref, text: step.text ?? "" };
+    return { kind: "upload", ref, files: step.files ?? [] };
   });
   for (const step of planned) console.log(describeResolved(step.target, step.intent));
 
@@ -195,7 +197,9 @@ async function execute(ctx: SemanticContext, planned: Planned[], mode: "single" 
     nextId =
       first.kind === "click"
         ? await performClick(fresh.snapshotId, first.ref, { backend, armed })
-        : await performFill(fresh.snapshotId, first.ref, first.text, { backend, armed });
+        : first.kind === "fill"
+          ? await performFill(fresh.snapshotId, first.ref, first.text, { backend, armed })
+          : await performUpload(fresh.snapshotId, first.ref, first.files, { backend, armed });
   } else {
     nextId = await performAct(fresh.snapshotId, ops, { backend, armed });
   }
@@ -222,9 +226,20 @@ export async function runSemanticFill(ctx: SemanticContext, id: string, text: st
   await execute(ctx, [{ intent: "fill", target: resolveTarget(screen, id, "fill"), text }], "single");
 }
 
-/** act with click:@id / fill:@id=text / flow:<id> [key=value ...]. Plain-ref tokens are rejected. */
+export async function runSemanticUpload(ctx: SemanticContext, id: string, files: readonly string[]): Promise<void> {
+  parseTarget(`@${id}`);
+  const screen = await screenAt(ctx);
+  await execute(ctx, [{ intent: "upload", target: resolveTarget(screen, id, "upload"), files }], "single");
+}
+
+/** act with click:@id / fill:@id=text / upload:@id=path / flow:<id> [key=value ...]. Plain-ref tokens are rejected. */
 export async function runSemanticAct(ctx: SemanticContext, tokens: readonly string[]): Promise<void> {
-  const items: ({ kind: "click"; id: string } | { kind: "fill"; id: string; text: string } | { kind: "flow"; flowId: string; inputs: string[] })[] = [];
+  const items: (
+    | { kind: "click"; id: string }
+    | { kind: "fill"; id: string; text: string }
+    | { kind: "upload"; id: string; files: readonly string[] }
+    | { kind: "flow"; flowId: string; inputs: string[] }
+  )[] = [];
   for (const token of tokens) {
     if (isSemanticToken(token)) {
       const parsed = parseSemanticAct(token);
@@ -235,7 +250,7 @@ export async function runSemanticAct(ctx: SemanticContext, tokens: readonly stri
     if (last?.kind !== "flow") {
       throw new PwaNavError(
         "invalid_args",
-        "cannot mix semantic act tokens (click:@id, fill:@id=<text>, flow:<id> key=value) with plain refs or stray arguments.",
+        "cannot mix semantic act tokens (click:@id, fill:@id=<text>, upload:@id=<path>, flow:<id> key=value) with plain refs or stray arguments.",
       );
     }
     last.inputs.push(token);
@@ -248,6 +263,8 @@ export async function runSemanticAct(ctx: SemanticContext, tokens: readonly stri
       planned.push({ intent: "click", target: resolveTarget(screen, item.id, "click") });
     } else if (item.kind === "fill") {
       planned.push({ intent: "fill", target: resolveTarget(screen, item.id, "fill"), text: item.text });
+    } else if (item.kind === "upload") {
+      planned.push({ intent: "upload", target: resolveTarget(screen, item.id, "upload"), files: item.files });
     } else {
       // humanOnly must win over malformed inputs: parse errors are deferred behind resolveFlow.
       let inputs: Record<string, string> = {};
@@ -264,7 +281,9 @@ export async function runSemanticAct(ctx: SemanticContext, tokens: readonly stri
         planned.push(
           step.op === "fill"
             ? { intent: "fill", target: step.target, text: step.text }
-            : { intent: "click", target: step.target },
+            : step.op === "upload"
+              ? { intent: "upload", target: step.target, files: step.files }
+              : { intent: "click", target: step.target },
         );
       }
     }

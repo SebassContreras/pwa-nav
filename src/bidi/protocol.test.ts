@@ -253,3 +253,24 @@ test("watchNavigation: tracks navigation and network idle with in-flight count",
     watch.dispose();
   });
 });
+
+test("setFiles sends context, element and files", async () => {
+  await withClient(async (client, server) => {
+    server.handle("input.setFiles", () => ({}));
+    await client.setFiles("c1", { sharedId: "s1" }, ["/path/to/file.txt"]);
+    assert.deepEqual(last(server).params, {
+      context: "c1",
+      element: { sharedId: "s1" },
+      files: ["/path/to/file.txt"],
+    });
+
+    // Also accepts NodeArgument
+    await client.setFiles("c2", { type: "node", sharedId: "s2" }, ["/a.pdf", "/b.png"]);
+    assert.deepEqual(last(server).params, {
+      context: "c2",
+      element: { sharedId: "s2" },
+      files: ["/a.pdf", "/b.png"],
+    });
+  });
+});
+

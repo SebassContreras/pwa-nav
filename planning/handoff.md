@@ -11,28 +11,25 @@ State after implementing specs 004–007. Read `planning/roadmap.md` first, then
 | 005 screen-map | done | T001–T014 done | — | — |
 | 006 mcp-adapter | done | T001–T007, T009 done | T008 (human registration confirmed) | — |
 | 007 multi-screen-flows | done | T001–T007 done | — | — |
-| 008 file-uploads | todo | Spec ready in `planning/specs/008-file-uploads/` | T001–T006 pending | 8 (Top) |
-| 009 visual-qa-screenshots | todo | Spec ready in `planning/specs/009-visual-qa-screenshots/` | T001–T006 pending | 9 |
+| 008 file-uploads | done | T001–T008 done | — | — |
+| 009 visual-qa-screenshots | todo | Spec ready in `planning/specs/009-visual-qa-screenshots/` | T001–T006 pending | 9 (Top) |
 | 010 cross-platform-runtime | todo | Spec ready in `planning/specs/010-cross-platform-runtime/` | T001–T005 pending | 10 |
 
-Gate at handoff: `pnpm lint && pnpm build && pnpm test` (302 tests) `&& pnpm smoke`, `node dist/cli.js qa run <check-file>`, and the opt-in real-Firefox E2E `PWA_NAV_E2E=1 node --test dist/e2e.test.js` all green.
+Gate at handoff: `pnpm lint && pnpm build && pnpm test` (316 tests) `&& pnpm smoke`, `node dist/cli.js qa run <check-file>`, and the opt-in real-Firefox E2E `PWA_NAV_E2E=1 node --test dist/e2e.test.js` all green.
 
-## Spec 007 Deliverables (Multi-Screen Flows & Journeys)
+## Spec 008 Deliverables (File Uploads)
 
-1. **Schema & Types**: Extended `schemas/screen-map.schema.json` with top-level `journeys` object defining ordered steps across routes, parameters, transitions, and `humanOnly` flags.
-2. **Core Errors**: Added `journey_step_failed` (exit code 14) and `JourneyStepError` domain error.
-3. **Execution Engine**: Implemented `src/screens/screen-journey.ts` and `src/ops/journey.ts` with route transitions, parameter interpolation, step assertions, and dry-run safety.
-4. **CLI & MCP Adapters**: Added CLI command `pwa-nav journey <name> [k=v] [--armed]` and dynamic MCP tools `journey_<name>`.
-5. **Documentation & Tests**: Updated `docs/screen-map.md`, `examples/screens/demo-app.screens.json`, and added 16 unit tests.
+1. **Protocol Integration**: Added `input.setFiles` in `src/bidi/protocol.ts` and fake server handler in `src/bidi/fake-server.ts`.
+2. **Security Gate**: Implemented `assertFileUploadAllowed` and path allow-list in `src/core/gate.ts`, blocking traversal and sensitive files (`.env*`, private keys) with exit code 15 (`file_upload_blocked`).
+3. **DOM Collector & Actionability**: Updated `src/browser/collector.ts` to tag file inputs and `checkActionable` in `src/browser/actions.ts` to allow invisible styled native file inputs.
+4. **Execution Layer**: Implemented `uploadFiles` in `src/browser/actions.ts`, `Backend.upload` in `OfflineBackend` & `BidiBackend`, and `performUpload` in `src/ops/ops.ts`.
+5. **CLI & Semantic Routing**: Added `pwa-nav upload <ref|@id> <path...>` and `act upload:<ref>=<path>` in `src/cli.ts` with semantic resolution.
+6. **MCP Tool**: Added `pwa_upload` tool in `src/mcp/mcp-tools.ts` with dry-run/armed execution.
+7. **Documentation**: Updated `README.md`, `SKILL.md`, and `AGENTS.md`.
 
 ## Open Work & Next Priorities
 
-1. **Spec 008 — File Uploads (Next Priority)**:
-   - Implement `input.setFiles` BiDi command wrapper in `src/browser/actions.ts`.
-   - Support `fill` or dedicated file parameter on `input[type="file"]` elements.
-   - Enforce safety gate on file paths (must exist, must be within allowed directories, reject forbidden extensions).
-   - Add unit tests, offline normalizer updates, and QA runner support.
-2. **Spec 009 — Visual QA Screenshots**:
+1. **Spec 009 — Visual QA Screenshots (Next Priority)**:
    - Capture full-page and element-level screenshots over BiDi (`browsingContext.captureScreenshot`).
    - Store visual evidence in `.agent/evidence/<run-id>/screenshots/`.
    - Implement visual regression diffing in `pwa-nav qa run`.

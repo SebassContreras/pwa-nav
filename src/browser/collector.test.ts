@@ -186,3 +186,19 @@ test("buttonType: native buttons only, submit default inside a form", () => {
     [["Free", "button"], ["Div", undefined], ["Implicit", "submit"], ["Plain", "button"], ["Rst", "reset"], ["Send", "submit"], ["Img", "submit"]],
   );
 });
+
+test("collector tags input type file with role textbox and inputType file even if styled display:none", () => {
+  const els = body(
+    `<label for="up">Upload photo</label>
+     <input id="up" type="file" style="display:none">
+     <input type="file" aria-label="Attach CV">`,
+  );
+  assert.deepEqual(
+    els.map((e) => [e.role, e.name, e.inputType]),
+    [
+      ["textbox", "Upload photo", "file"],
+      ["textbox", "Attach CV", "file"],
+    ],
+  );
+});
+

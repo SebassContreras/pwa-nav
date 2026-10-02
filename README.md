@@ -150,7 +150,7 @@ Add to your `mcp.json` or `claude_desktop_config.json`:
 ```
 
 The MCP server exposes:
-- **Core tools**: `pwa_open`, `pwa_snapshot`, `pwa_click`, `pwa_fill`, `pwa_extract`, `pwa_act`, `pwa_learn`.
+- **Core tools**: `pwa_open`, `pwa_snapshot`, `pwa_click`, `pwa_fill`, `pwa_upload`, `pwa_extract`, `pwa_act`, `pwa_learn`.
 - **Dynamic flow tools**: `flow_<screen>_<flow>` for single-screen mapped tasks.
 - **Dynamic journey tools**: `journey_<id>` for multi-screen workflows with `destructiveHint: true`.
 - **Resources**: `pwa-nav://screens/<app-id>` and `pwa-nav://snapshot/latest`.
@@ -169,8 +169,10 @@ The MCP server exposes:
 | `pwa-nav click [--armed] '@<id>'` | Click element by semantic ID (e.g. `'@submit-btn'`). |
 | `pwa-nav fill --snapshot <id> [--armed] <ref> <text>` | Fill field by ref. Typed text of sensitive fields is never printed or stored. |
 | `pwa-nav fill [--armed] '@<id>' <text>` | Fill field by semantic ID. Sensitive fields are blocked (exit 11). |
-| `pwa-nav act --snapshot <id> [--armed] <ops...>` | Batch mutations (`click:<ref>`, `fill:<ref>=<text>`) in a single session. |
-| `pwa-nav act [--armed] <semantic-ops...>` | Batch semantic ops (`click:'@id'`, `fill:'@id'=val`, `flow:<id>`). |
+| `pwa-nav upload --snapshot <id> [--armed] <ref> <path...>` | Upload local file(s) to `<input type="file">`. Dry-run unless `--armed`. |
+| `pwa-nav upload [--armed] '@<id>' <path...>` | Upload local file(s) by semantic ID. |
+| `pwa-nav act --snapshot <id> [--armed] <ops...>` | Batch mutations (`click:<ref>`, `fill:<ref>=<text>`, `upload:<ref>=<path>`) in a single session. |
+| `pwa-nav act [--armed] <semantic-ops...>` | Batch semantic ops (`click:'@id'`, `fill:'@id'=val`, `upload:'@id'=path`, `flow:<id>`). |
 | `pwa-nav journey <name> [key=value...] [--armed]` | Execute declarative multi-screen user journey across route transitions. |
 | `pwa-nav extract --snapshot <id> --mode text\|links` | Fast read-only text or links extraction from stored snapshot. |
 | `pwa-nav qa run <check-file>` | Run offline JSON check file and save per-step evidence to `.agent/evidence/`. |
@@ -191,6 +193,7 @@ The MCP server exposes:
 3. **Origin Allow-List**: Navigation is strictly blocked unless the origin is approved in `.agent/allow.json` or explicitly passed via `--allow-origin` (code 6 `origin_blocked`).
 4. **Kill-Switch**: Creating `.agent/kill` or setting `PWA_NAV_KILL_SWITCH` immediately terminates any armed operation (code 7 `kill_switch`).
 5. **Untrusted Page Content**: All HTML page contents, aria names, and element text are treated strictly as untrusted data, never instructions.
+6. **File Upload Security Gate**: Local file uploads (`pwa_upload`, `upload`) are strictly restricted to files within allowed safe directories (workspace root or `.agent/`). Files attempting path traversal (`..`), sensitive environment files (`.env*`), or private keys (`id_rsa`, etc.) are blocked immediately before touching the browser (fails fast with code 15 `file_upload_blocked`).
 
 ---
 
@@ -213,6 +216,7 @@ The MCP server exposes:
 | `12` | `unknown_target` | Semantic `@id` not found in screen map. |
 | `13` | `unmapped_screen` | Route not recognized in screen map. Use `snapshot -i` or learn it. |
 | `14` | `journey_step_failed` | Journey transition failed or expected screen not reached. |
+| `15` | `file_upload_blocked` | File path is outside allowed safe directories or targets sensitive files. |
 
 ---
 

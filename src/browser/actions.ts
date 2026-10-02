@@ -62,13 +62,7 @@ interface ActionableResult {
 export async function checkActionable(el: Element): Promise<ActionableResult> {
   const view = el.ownerDocument.defaultView;
   if (view === null) return { ok: false, reason: "element is detached from a window" };
-  const visible = (): boolean => {
-    const style = view.getComputedStyle(el);
-    if (style.display === "none" || style.visibility === "hidden" || style.visibility === "collapse") return false;
-    const rect = el.getBoundingClientRect();
-    return rect.width > 0 && rect.height > 0;
-  };
-  if (!el.isConnected || !visible()) return { ok: false, reason: "element is not visible" };
+  if (!el.isConnected) return { ok: false, reason: "element is not in the document" };
 
   let disabled = el.getAttribute("aria-disabled") === "true";
   if (!disabled) {
@@ -79,6 +73,21 @@ export async function checkActionable(el: Element): Promise<ActionableResult> {
     }
   }
   if (disabled) return { ok: false, reason: "element is disabled" };
+
+  // For native file inputs, bounding box and visibility checks are bypassed because
+  // file inputs are styled invisible/hidden in modern frontends.
+  const isFileInput = el.localName === "input" && (el.getAttribute("type") ?? "").trim().toLowerCase() === "file";
+  if (isFileInput) {
+    return { ok: true };
+  }
+
+  const visible = (): boolean => {
+    const style = view.getComputedStyle(el);
+    if (style.display === "none" || style.visibility === "hidden" || style.visibility === "collapse") return false;
+    const rect = el.getBoundingClientRect();
+    return rect.width > 0 && rect.height > 0;
+  };
+  if (!visible()) return { ok: false, reason: "element is not visible" };
 
   if (typeof el.scrollIntoView === "function") {
     el.scrollIntoView({ block: "center", inline: "center" });
@@ -290,20 +299,25 @@ function sensitiveElement(element: RawElement): boolean {
 
 /** Pure text for dry-run output. Never includes typed text of sensitive targets. */
 export function describeTarget(args: {
-  action: "click" | "fill";
+  action: "click" | "fill" | "upload";
   locator: Locator;
   element?: RawElement;
   text?: string;
+  files?: readonly string[];
 }): string {
-  const { action, locator, element, text } = args;
+  const { action, locator, element, text, files } = args;
   const occurrence = locator.occurrence ?? 0;
   let out = `${action} ${locator.role} "${locator.name}" (occurrence ${String(occurrence)})`;
   if (action === "fill" && text !== undefined) {
     const redact = element !== undefined && sensitiveElement(element);
     out += redact ? ` with <redacted, ${String(text.length)} chars>` : ` with ${JSON.stringify(text)}`;
+  } else if (action === "upload" && files !== undefined) {
+    out += ` with ${files.join(", ")}`;
   }
   if (element !== undefined) {
-    const info: string[] = [element.disabled === true ? "disabled" : "enabled", "visible"];
+    const isFileInput = element.inputType === "file";
+    const info: string[] = [element.disabled === true ? "disabled" : "enabled"];
+    if (!isFileInput) info.push("visible");
     if (element.inputType !== undefined) info.push(`type=${element.inputType}`);
     out += ` [${info.join(", ")}]`;
   }
@@ -551,3 +565,26 @@ export async function fillLocator(
     watch.dispose();
   }
 }
+
+/**
+ * Sets local file paths on an `<input type="file">` element via WebDriver BiDi `input.setFiles`.
+ */
+export async function uploadFiles(
+  client: BidiClient,
+  context: string,
+  snapshot: Snapshot,
+  locator: Locator,
+  files: readonly string[],
+  options: ActionOptions = {},
+): Promise<PageState> {
+  const located = await locate(client, context, snapshot, locator, options);
+  await ensureActionable(client, context, located, locator);
+  const watch = await armWatch(client, context);
+  try {
+    await client.setFiles(context, { sharedId: located.sharedId }, files);
+    return options.settle === false ? await pageState(client, context) : await settle(client, context, watch);
+  } finally {
+    watch.dispose();
+  }
+}
+

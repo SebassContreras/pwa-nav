@@ -1,6 +1,6 @@
 // Armed gate: kill-switch + origin allow-list (spec 004 design, "Key decisions").
 import { access, mkdir, readFile, rename, writeFile } from "node:fs/promises";
-import { dirname, join, resolve } from "node:path";
+import { basename, dirname, isAbsolute, join, relative, resolve } from "node:path";
 import { PwaNavError } from "./errors.js";
 
 export const DEFAULT_AGENT_DIR = ".agent";
@@ -185,3 +185,44 @@ export async function assertNavigationAllowed(options: AssertNavigationOptions):
     });
   }
 }
+
+const FORBIDDEN_FILE_NAMES = new Set([
+  ".env",
+  ".env.local",
+  ".env.production",
+  ".env.development",
+  "id_rsa",
+  "id_ed25519",
+  "id_ecdsa",
+  "id_dsa",
+]);
+
+export function isPathInside(targetPath: string, rootDir: string): boolean {
+  const targetResolved = resolve(targetPath);
+  const rootResolved = resolve(rootDir);
+  const rel = process.platform === "win32"
+    ? relative(rootResolved.toLowerCase(), targetResolved.toLowerCase())
+    : relative(rootResolved, targetResolved);
+  return rel === "" || (!rel.startsWith("..") && !isAbsolute(rel));
+}
+
+export function assertFileUploadAllowed(
+  filePath: string,
+  safeRoots: readonly string[] = [process.cwd(), resolve(DEFAULT_AGENT_DIR)],
+): void {
+  const resolved = resolve(filePath);
+  const base = basename(resolved).toLowerCase();
+  if (base.startsWith(".env") || FORBIDDEN_FILE_NAMES.has(base)) {
+    throw new PwaNavError("file_upload_blocked", `upload of sensitive file ${filePath} is blocked`, {
+      hint: "Sensitive files (.env, private keys) cannot be uploaded.",
+    });
+  }
+
+  const isInside = safeRoots.some((root) => isPathInside(resolved, root));
+  if (!isInside) {
+    throw new PwaNavError("file_upload_blocked", `file ${filePath} is outside allowed upload paths`, {
+      hint: "Files can only be uploaded from workspace root or .agent/ directory.",
+    });
+  }
+}
+

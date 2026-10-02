@@ -137,7 +137,9 @@ const port = (s: FakeBidiServer): string => String(s.port);
 test("snapshot --screen prints the golden compact view without collecting or writing a snapshot", async () => {
   await withFake(async (dir, server, page) => {
     await seedDemo(dir);
-    const golden = await readFile(join(ROOT, "checks", "fixtures", "views", "demo-login.view.txt"), "utf8");
+    const golden = (
+      await readFile(join(ROOT, "checks", "fixtures", "views", "demo-login.view.txt"), "utf8")
+    ).replace(/\r\n/g, "\n");
     const r = await run(dir, ["snapshot", "--screen", "--port", port(server)]);
     assert.equal(r.status, 0, r.stderr);
     assert.equal(r.stdout.trim(), golden.trim());
@@ -419,10 +421,12 @@ test("offline @id, mixed tokens and --snapshot with @id exit 2", async () => {
     const cases: string[][] = [
       ["click", "@show-password", "--backend", "offline"],
       ["fill", "@email", "x", "--backend", "offline"],
+      ["upload", "@avatar", "x.png", "--backend", "offline"],
       ["act", "click:@show-password", "--backend", "offline"],
       ["act", "click:@show-password", "e3", ...p],
       ["act", "fill:e2=x", "click:@show-password", ...p],
       ["click", "@show-password", "--snapshot", "s1", ...p],
+      ["upload", "@avatar", "--snapshot", "s1", "x.png", ...p],
       ["click", "@Bad_Id", ...p],
     ];
     for (const args of cases) {

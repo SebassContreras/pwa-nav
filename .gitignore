@@ -4,3 +4,4 @@ dist/
 .env
 # Per-user screen maps learned from real apps (examples/ is the versioned reference)
 /screens/
+planning/dashboard.html

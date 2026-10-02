@@ -8,7 +8,7 @@ import { createBackend, DEFAULT_HOST, DEFAULT_PORT } from "../backend/backend-fa
 import { startFakeBidiServer, type FakeBidiServer, type ReceivedCommand } from "../bidi/fake-server.js";
 import { PwaNavError } from "../core/errors.js";
 import { addAllowedOrigin, loadAllowList } from "../core/gate.js";
-import { performAct, performClick, performFill, performLiveSnapshot, performOpen } from "../ops/ops.js";
+import { parseActOp, performAct, performClick, performFill, performLiveSnapshot, performOpen, performUpload } from "../ops/ops.js";
 import { latestSnapshotId, loadLocators, load, StaleRefError } from "../core/refs.js";
 import type { RawElement } from "./collector.js";
 import { BidiBackend, endpointFor, type BidiBackendOptions } from "./bidi-backend.js";
@@ -634,3 +634,61 @@ test("armed act on an includeAll snapshot keeps the mode for the persisted snaps
     assert.ok(collectFlags(e.server).every((flag) => flag === true));
   });
 });
+
+test("upload dry-run and armed on a file input", async () => {
+  await withEnv(async (e) => {
+    e.page.raw = [...baseRaw(), { role: "textbox", name: "Avatar", nameSource: "label", occurrence: 0, inputType: "file" }];
+    const id = await seed(e);
+    const testFile = join(e.dir, "avatar.png");
+    await writeFile(testFile, "fake-image");
+
+    const dry = await e.backend.upload(id, "e4", [testFile]);
+    assert.equal(dry.kind, "dry-run");
+    assert.match(dry.plan, /upload textbox "Avatar".* with/);
+    assert.equal(e.server.commands.filter((c) => c.method === "input.setFiles").length, 0);
+
+    const { out: dryOut } = await captureLog(() => performUpload(id, "e4", [testFile], { backend: e.backend }));
+    assert.match(dryOut, /^upload dry-run: upload textbox "Avatar"/);
+
+    await allow(e);
+    const done = await armedBackend(e).upload(id, "e4", [testFile]);
+    assert.equal(done.kind, "done");
+    assert.notEqual(done.snapshotId, id);
+
+    const setFilesCommands = e.server.commands.filter((c) => c.method === "input.setFiles");
+    assert.equal(setFilesCommands.length, 1);
+    assert.deepEqual(setFilesCommands[0]?.params, {
+      context: "ctx",
+      element: { sharedId: "node-1" },
+      files: [testFile],
+    });
+  });
+});
+
+test("upload fails fast with file_upload_blocked for blocked files", async () => {
+  await withEnv(async (e) => {
+    e.page.raw = [...baseRaw(), { role: "textbox", name: "Avatar", nameSource: "label", occurrence: 0, inputType: "file" }];
+    const id = await seed(e);
+    const envFile = join(e.dir, ".env");
+    await writeFile(envFile, "SECRET=1");
+
+    await expectError(e.backend.upload(id, "e4", [envFile]), "file_upload_blocked");
+  });
+});
+
+test("performAct supports upload: operation", async () => {
+  await withEnv(async (e) => {
+    e.page.raw = [...baseRaw(), { role: "textbox", name: "Avatar", nameSource: "label", occurrence: 0, inputType: "file" }];
+    const id = await seed(e);
+    const testFile = join(e.dir, "doc.pdf");
+    await writeFile(testFile, "fake-doc");
+
+    const dry = await captureLog(() => performAct(id, [parseActOp(`upload:e4=${testFile}`)], { backend: e.backend }));
+    assert.match(dry.out, /upload textbox "Avatar"/);
+
+    await allow(e);
+    const armed = await captureLog(() => performAct(id, [parseActOp(`upload:e4=${testFile}`)], { backend: armedBackend(e) }));
+    assert.match(armed.out, /upload ok: upload textbox "Avatar"/);
+  });
+});
+

@@ -63,17 +63,25 @@ function collectImpl(root: Document, options?: CollectOptions): { items: RawElem
     "button", "link", "tab", "menuitem", "menuitemcheckbox", "menuitemradio", "option",
     "checkbox", "radio", "switch", "heading",
   ]);
-  const TEXT_TYPES = new Set(["", "text", "email", "search", "tel", "url", "number", "password"]);
+  const TEXT_TYPES = new Set(["", "text", "email", "search", "tel", "url", "number", "password", "file"]);
 
   const collapse = (s: string | null | undefined): string => (s ?? "").replace(/\s+/g, " ").trim();
   const displayOf = (el: Element): string => view?.getComputedStyle(el).display ?? "inline";
 
   // Inheritable hiding: pruned together with the whole subtree.
-  const hiddenSelf = (el: Element): boolean =>
-    el.hasAttribute("hidden") ||
-    el.hasAttribute("inert") ||
-    el.getAttribute("aria-hidden") === "true" ||
-    displayOf(el) === "none";
+  // Native file inputs are styled invisible/display:none in most modern apps,
+  // so a file input leaf is not pruned by its own display:none/hidden.
+  const hiddenSelf = (el: Element): boolean => {
+    if (el.localName === "input" && typeOf(el) === "file") {
+      return el.hasAttribute("inert") || el.getAttribute("aria-hidden") === "true";
+    }
+    return (
+      el.hasAttribute("hidden") ||
+      el.hasAttribute("inert") ||
+      el.getAttribute("aria-hidden") === "true" ||
+      displayOf(el) === "none"
+    );
+  };
 
   const textOf = (node: Node, skip: Element | null): string => {
     let out = "";
@@ -215,8 +223,9 @@ function collectImpl(root: Document, options?: CollectOptions): { items: RawElem
 
     const role = tag === "input" && typeOf(el) === "hidden" ? null : roleOf(el);
     // visibility inherits and can be overridden by descendants, so it only gates this element.
+    const isFile = tag === "input" && typeOf(el) === "file";
     const invisible = view !== null && ["hidden", "collapse"].includes(view.getComputedStyle(el).visibility);
-    if (role !== null && !invisible && (includeAll || INTERACTIVE.has(role))) {
+    if (role !== null && (!invisible || isFile) && (includeAll || INTERACTIVE.has(role))) {
       const [name, nameSource] = nameOf(el, role);
       const key = `${role}\u0000${name}`;
       const occurrence = counts.get(key) ?? 0;

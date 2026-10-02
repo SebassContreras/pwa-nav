@@ -19,6 +19,7 @@ import {
   readBackMatches,
   SETTLE_TIMEOUT_MS,
   SETTLE_WINDOW_MS,
+  uploadFiles,
 } from "./actions.js";
 
 const URL_A = "https://app.test/login";
@@ -514,6 +515,15 @@ test("checkActionable: scrolls into view centered", async () => {
   assert.deepEqual(arg, { block: "center", inline: "center" });
 });
 
+test("checkActionable: file inputs bypass visibility and zero rect", async () => {
+  const { el } = page(`<input id="t" type="file" style="display:none">`);
+  assert.deepEqual(await checkActionable(el), { ok: true });
+
+  const disabled = page(`<input id="t" type="file" disabled>`);
+  assert.deepEqual(await checkActionable(disabled.el), { ok: false, reason: "element is disabled" });
+});
+
+
 test("prepareFill: kinds, unsupported targets, focus", () => {
   const text = page(`<input id="t" type="text">`);
   assert.deepEqual(prepareFill(text.el), { ok: true, kind: "text", sensitive: false });
@@ -561,3 +571,22 @@ test("prepareFill: contenteditable gets a caret inside the host (focus alone typ
   assert.ok(el.contains(selection.anchorNode));
   assert.equal(selection.isCollapsed, true);
 });
+
+test("uploadFiles: sets files via input.setFiles on located element with settle", async () => {
+  const rawWithFile: RawElement[] = [
+    { role: "textbox", name: "Avatar", nameSource: "label", occurrence: 0, inputType: "file" },
+  ];
+  await harness({ raw: rawWithFile }, async (client, server) => {
+    const snap: Snapshot = { snapshotId: "s1", url: URL_A, title: "Upload", elements: [] };
+    const res = await uploadFiles(client, "ctx", snap, { role: "textbox", name: "Avatar" }, ["/path/to/img.png"]);
+    assert.deepEqual(res, { url: URL_A, title: "Login" });
+    const setFilesCmd = server.commands.find((c) => c.method === "input.setFiles");
+    assert.ok(setFilesCmd);
+    assert.deepEqual(setFilesCmd.params, {
+      context: "ctx",
+      element: { sharedId: "node-1" },
+      files: ["/path/to/img.png"],
+    });
+  });
+});
+

@@ -159,7 +159,9 @@ export async function performJourney(
 
     const ops: ActOp[] = resolved.resolvedSteps.map((s) => {
       const ref = refFor(sidecar, s.target.locator, s.target, fresh.snapshotId);
-      return s.op === "click" ? { kind: "click", ref } : { kind: "fill", ref, text: s.text };
+      if (s.op === "click") return { kind: "click", ref };
+      if (s.op === "fill") return { kind: "fill", ref, text: s.text };
+      return { kind: "upload", ref, files: s.files };
     });
 
     try {

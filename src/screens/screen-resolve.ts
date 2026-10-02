@@ -7,7 +7,7 @@ import { StaleRefError, type LocatorSidecar } from "../core/refs.js";
 import type { Locator, Screen } from "./screen-map.js";
 
 export type TargetKind = "field" | "action" | "link";
-export type Intent = "click" | "fill";
+export type Intent = "click" | "fill" | "upload";
 
 export interface ResolvedTarget {
   id: string;
@@ -23,7 +23,8 @@ export interface ResolvedTarget {
 
 export type ResolvedStep =
   | { op: "fill"; target: ResolvedTarget; text: string }
-  | { op: "click"; target: ResolvedTarget };
+  | { op: "click"; target: ResolvedTarget }
+  | { op: "upload"; target: ResolvedTarget; files: readonly string[] };
 
 export interface ResolvedFlow {
   id: string;
@@ -35,6 +36,7 @@ export type ParsedTarget = { kind: "ref"; ref: string } | { kind: "id"; id: stri
 export type SemanticAct =
   | { kind: "click"; id: string }
   | { kind: "fill"; id: string; text: string }
+  | { kind: "upload"; id: string; files: readonly string[] }
   | { kind: "flow"; flowId: string };
 
 const ID_PATTERN = /^[a-z0-9]+(-[a-z0-9]+)*$/;
@@ -54,9 +56,14 @@ export function parseTarget(token: string): ParsedTarget {
   return { kind: "id", id };
 }
 
-// Routes the CLI: true for click:@id, fill:@id=..., flow:<id>.
+// Routes the CLI: true for click:@id, fill:@id=..., upload:@id=..., flow:<id>.
 export function isSemanticToken(token: string): boolean {
-  return token.startsWith("click:@") || token.startsWith("fill:@") || token.startsWith("flow:");
+  return (
+    token.startsWith("click:@") ||
+    token.startsWith("fill:@") ||
+    token.startsWith("upload:@") ||
+    token.startsWith("flow:")
+  );
 }
 
 export function parseSemanticAct(token: string): SemanticAct {
@@ -87,6 +94,19 @@ export function parseSemanticAct(token: string): SemanticAct {
       throw new PwaNavError("invalid_args", "invalid fill token (expected fill:@<id>=<text>)");
     }
     return { kind: "fill", id: target.id, text };
+  }
+  if (token.startsWith("upload:@")) {
+    const remainder = token.slice("upload:@".length);
+    const eq = remainder.indexOf("=");
+    if (eq < 0) {
+      throw new PwaNavError("invalid_args", "invalid upload token (expected upload:@<id>=<path>)");
+    }
+    const target = parseTarget(`@${remainder.slice(0, eq)}`);
+    const path = remainder.slice(eq + 1);
+    if (target.kind !== "id" || path.length === 0) {
+      throw new PwaNavError("invalid_args", "invalid upload token (expected upload:@<id>=<path>)");
+    }
+    return { kind: "upload", id: target.id, files: [path] };
   }
   throw new PwaNavError("invalid_args", "not a semantic act token");
 }
@@ -175,6 +195,15 @@ export function resolveTarget(screen: Screen, id: string, intent: Intent): Resol
     }
     if (resolved.sensitive || !resolved.agentFillable) {
       throw new PwaNavError("sensitive_target", `refusing to fill sensitive field @${id}`, {
+        hint: HUMAN_HINT,
+      });
+    }
+  } else if (intent === "upload") {
+    if (resolved.kind !== "field") {
+      throw new PwaNavError("invalid_args", `cannot upload to ${resolved.kind} @${id}`);
+    }
+    if (resolved.sensitive || !resolved.agentFillable) {
+      throw new PwaNavError("sensitive_target", `refusing to upload to sensitive field @${id}`, {
         hint: HUMAN_HINT,
       });
     }

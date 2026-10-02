@@ -84,7 +84,7 @@ Always follow this decision path to minimize token consumption and avoid breakin
 
 ## 3. Safety Gate & Execution Protocol
 
-Write operations (`click`, `fill`, `act`, `journey`) alter state in a real, user-authenticated browser.
+Write operations (`click`, `fill`, `upload`, `act`, `journey`) alter state in a real, user-authenticated browser.
 
 ### The 3-Step Arming Protocol
 1. **Dry-Run First**: Execute without `--armed`. The CLI will validate the target, check accessibility constraints, and print the planned action without touching the browser DOM.
@@ -116,6 +116,7 @@ In PowerShell, the `@` symbol is reserved for array sub-expressions and variable
 4. **Origin Gating**: Navigations are blocked unless the origin is registered in `.agent/allow.json`. Use `--allow-origin` only with explicit user permission.
 5. **Kill Switch**: If `.agent/kill` or `PWA_NAV_KILL_SWITCH` exists, all actions halt immediately (exit 7). Never delete the kill switch yourself; the user must remove it.
 6. **Single BiDi Client**: Firefox allows only one WebDriver BiDi session. If `session_busy` (exit 5) occurs, ensure no other CLI, MCP server, or bridge is running.
+7. **File Upload Security Boundary**: File uploads (`pwa_upload`, `upload`) are strictly restricted to files within allowed safe directories (workspace root or `.agent/`). Files attempting path traversal (`..`) or targeting sensitive files (`.env*`, private keys) are rejected with exit code 15 (`file_upload_blocked`).
 
 ---
 
@@ -138,3 +139,4 @@ In PowerShell, the `@` symbol is reserved for array sub-expressions and variable
 | **12** | `unknown_target` | Semantic `@id`, flow, or journey not in map. | Run `pwa-nav snapshot --screen` to inspect the available targets in the current screen map. |
 | **13** | `unmapped_screen` | Route is not covered by current screen map. | Fall back to Raw Accessibility Loop (`snapshot -i`). Suggest `snapshot --learn` if stable. |
 | **14** | `journey_step_failed` | Multi-screen journey step assertion failed. | Check route transition, parameters, or if the application UI deviated from journey spec. |
+| **15** | `file_upload_blocked` | File upload outside allowed paths or targeting sensitive files. | Ensure file is within workspace root or `.agent/` and is not sensitive. |

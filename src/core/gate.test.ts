@@ -7,9 +7,11 @@ import { PwaNavError } from "./errors.js";
 import {
   addAllowedOrigin,
   assertArmedAllowed,
+  assertFileUploadAllowed,
   assertNavigationAllowed,
   decideAction,
   isKillSwitchActive,
+  isPathInside,
   killSwitchPath,
   loadAllowList,
   normalizeOrigin,
@@ -188,3 +190,71 @@ test("assertNavigationAllowed: allow-list or flag, kill-switch, invalid URL", as
     await rm(dir, { recursive: true, force: true });
   }
 });
+
+test("assertFileUploadAllowed: allows files inside safe roots, rejects outside and sensitive files", async () => {
+  const dir = await tmp();
+  try {
+    const inside = join(dir, "uploads", "receipt.pdf");
+    const safeRoots = [dir];
+
+    // Allowed inside root
+    assert.doesNotThrow(() => {
+      assertFileUploadAllowed(inside, safeRoots);
+    });
+    assert.equal(isPathInside(inside, dir), true);
+
+    // Traversal outside root is blocked
+    const outside = join(dir, "..", "secret.txt");
+    assert.equal(isPathInside(outside, dir), false);
+    assert.throws(
+      () => {
+        assertFileUploadAllowed(outside, safeRoots);
+      },
+      (e: unknown) => e instanceof PwaNavError && e.code === "file_upload_blocked",
+    );
+
+    const traversal = join(dir, "uploads", "..", "..", "outside.png");
+    assert.throws(
+      () => {
+        assertFileUploadAllowed(traversal, safeRoots);
+      },
+      (e: unknown) => e instanceof PwaNavError && e.code === "file_upload_blocked",
+    );
+
+    // Sensitive files are blocked even if inside root
+    const envFile = join(dir, ".env");
+    assert.throws(
+      () => {
+        assertFileUploadAllowed(envFile, safeRoots);
+      },
+      (e: unknown) =>
+        e instanceof PwaNavError &&
+        e.code === "file_upload_blocked" &&
+        e.message.includes("sensitive"),
+    );
+
+    const envLocal = join(dir, ".env.production");
+    assert.throws(
+      () => {
+        assertFileUploadAllowed(envLocal, safeRoots);
+      },
+      (e: unknown) => e instanceof PwaNavError && e.code === "file_upload_blocked",
+    );
+
+    const keyFile = join(dir, "id_rsa");
+    assert.throws(
+      () => {
+        assertFileUploadAllowed(keyFile, safeRoots);
+      },
+      (e: unknown) => e instanceof PwaNavError && e.code === "file_upload_blocked",
+    );
+
+    // Default roots allow files in cwd
+    assert.doesNotThrow(() => {
+      assertFileUploadAllowed("package.json");
+    });
+  } finally {
+    await rm(dir, { recursive: true, force: true });
+  }
+});
+

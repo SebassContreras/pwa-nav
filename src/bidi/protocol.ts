@@ -50,6 +50,11 @@ export interface NodeArgument {
   sharedId: string;
 }
 
+/** BiDi shared reference targeting a DOM element. */
+export interface SharedReference {
+  sharedId: string;
+}
+
 export interface NavigationWatch {
   /** A navigationStarted event was seen since the watch was created. */
   readonly started: boolean;
@@ -417,6 +422,14 @@ export class BidiClient {
 
   async releaseActions(context: string): Promise<void> {
     await this.transport.send("input.releaseActions", { context });
+  }
+
+  async setFiles(context: string, element: SharedReference | NodeArgument, files: readonly string[]): Promise<void> {
+    await this.transport.send("input.setFiles", {
+      context,
+      element: { sharedId: element.sharedId },
+      files: Array.from(files),
+    });
   }
 
   async subscribe(events: readonly string[], contexts?: readonly string[]): Promise<void> {

@@ -167,6 +167,18 @@ export async function performFill(
   return result.snapshotId;
 }
 
+export async function performUpload(
+  snapshotId: string,
+  ref: string,
+  files: readonly string[],
+  options: OpOptions = {},
+): Promise<string> {
+  const backend = backendOf(options);
+  const result = await backend.upload(snapshotId, ref, files, actionContext(options));
+  console.log(reportLine("upload", result, backend.agentDir));
+  return result.snapshotId;
+}
+
 export function parseActOp(token: string): ActOp {
   if (token.startsWith("click:")) {
     const ref = token.slice("click:".length);
@@ -188,7 +200,20 @@ export function parseActOp(token: string): ActOp {
     }
     return { kind: "fill", ref, text };
   }
-  throw new Error(`invalid act op: ${token} (expected fill:<ref>=<text> or click:<ref>).`);
+  if (token.startsWith("upload:")) {
+    const remainder = token.slice("upload:".length);
+    const eq = remainder.indexOf("=");
+    if (eq < 0) {
+      throw new Error(`invalid act op: ${token} (expected upload:<ref>=<path>).`);
+    }
+    const ref = remainder.slice(0, eq);
+    const path = remainder.slice(eq + 1);
+    if (ref.length === 0 || /\s/.test(ref) || path.length === 0) {
+      throw new Error(`invalid act op: ${token} (expected upload:<ref>=<path>).`);
+    }
+    return { kind: "upload", ref, files: [path] };
+  }
+  throw new Error(`invalid act op: ${token} (expected fill:<ref>=<text>, click:<ref>, or upload:<ref>=<path>).`);
 }
 
 export async function performAct(
