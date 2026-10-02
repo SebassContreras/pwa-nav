@@ -446,11 +446,61 @@ test("help documents the screen flags, @id grammar and exit codes", async () => 
       "PWA_NAV_SCREENS_DIR",
       "@id",
       "flow:<id>",
+      "journey",
       "sensitive_target",
       "unknown_target",
       "unmapped_screen",
     ]) {
       assert.ok(r.stdout.includes(needle), `help is missing ${needle}`);
     }
+  });
+});
+
+test("journey command: dry-run, missing args, and execution", async () => {
+  await withFake(async (dir, server) => {
+    await seedDemo(dir);
+    const mapRaw = await readFile(join(dir, "screens", "demo-app.screens.json"), "utf8");
+    const map = JSON.parse(mapRaw) as ScreenMap;
+    map.journeys = [
+      {
+        id: "demo-journey",
+        description: "Test demo journey",
+        inputSchema: {
+          type: "object",
+          required: ["user"],
+          properties: { user: { type: "string" } },
+        },
+        steps: [
+          {
+            screenId: "login",
+            action: "fill:@email=${inputs.user}",
+            expectScreen: "login",
+          },
+        ],
+      },
+    ];
+    await writeFile(join(dir, "screens", "demo-app.screens.json"), JSON.stringify(map), "utf8");
+    const p = ["--port", port(server)];
+
+    // Missing name -> exit 2
+    const missingName = await run(dir, ["journey", ...p]);
+    assert.equal(missingName.status, 2);
+
+    // Invalid input args (not key=value) -> exit 2
+    const badInput = await run(dir, ["journey", "demo-journey", "not-key-value", ...p]);
+    assert.equal(badInput.status, 2);
+
+    // Dry-run mode -> prints plan and returns 0 without calling browser
+    const dry = await run(dir, ["journey", "demo-journey", "user=alice@example.com", ...p]);
+    assert.equal(dry.status, 0, dry.stderr);
+    assert.match(dry.stdout, /journey "demo-journey": Test demo journey/);
+    assert.match(dry.stdout, /Step 1 \[login\]: fill @email \[fill @email\] -> expectScreen: login/);
+    assert.match(dry.stdout, /no input sent \(pass --armed to execute\)/);
+
+    // Armed execution -> executes step and checks transition
+    await allow(dir);
+    const armed = await run(dir, ["journey", "demo-journey", "user=alice@example.com", "--armed", ...p]);
+    assert.equal(armed.status, 0, armed.stderr);
+    assert.match(armed.stdout, /journey step 1\/1 \[login\]: fill @email/);
   });
 });

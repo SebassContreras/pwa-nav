@@ -38,7 +38,8 @@ import {
   NO_INPUT_LINE,
   type ScreenSource,
 } from "./cli/cli-screens.js";
-import { isSemanticToken } from "./screens/screen-resolve.js";
+import { isSemanticToken, parseFlowInputs } from "./screens/screen-resolve.js";
+import { performJourney } from "./ops/journey.js";
 
 const SITE_ULID = /^[0-9A-HJKMNP-TV-Z]{26}$/i;
 
@@ -56,9 +57,10 @@ function usage(): string {
     "  pwa-nav fill --snapshot <id> [--armed] <ref> <text>   |   fill [--armed] @<id> <text>",
     "  pwa-nav extract --snapshot <id> --mode text|links",
     "  pwa-nav act --snapshot <id> [--armed] <op>...   |   act [--armed] <semantic-op>...",
+    "  pwa-nav journey <name> [key=value...] [--armed] [--screen-map <file>] [--screens-dir <dir>]",
     "  pwa-nav qa run <check-file>",
     "",
-    "Global options (open, snapshot, click, fill, act):",
+    "Global options (open, snapshot, click, fill, act, journey):",
     "  --backend offline|bidi  Default bidi (live Firefox PWA); env PWA_NAV_BACKEND.",
     "  --port <n>              BiDi port 1024-65535 (default 9222); env PWA_NAV_PORT.",
     "  --context <id>          Browsing context id (required when the PWA has several top-level contexts).",
@@ -72,6 +74,7 @@ function usage(): string {
     "  fill            Same as click; typed text of password/sensitive fields is never printed.",
     "  extract         Read-only narrow extraction (text|links) from stored snapshot (never supersedes).",
     "  act             Run bulk ops (fill:<ref>=<text> click:<ref>); live: one session, one new snapshot.",
+    "  journey         Declarative multi-screen user journey; dry-run unless --armed.",
     "  qa run          Execute a JSON check file (offline backend; open/snapshot/click/fill/act/extract/",
     "                  assert-text), save evidence to .agent/evidence/<run-id>/ + result.json, exit 0/1.",
     "",
@@ -215,6 +218,12 @@ const LIVE_OPTIONS = {
 const SCREEN_OPTIONS = {
   "screen-map": { type: "string" },
   "screens-dir": { type: "string" },
+} as const satisfies ParseArgsOptionsConfig;
+
+const JOURNEY_OPTIONS = {
+  ...LIVE_OPTIONS,
+  ...SCREEN_OPTIONS,
+  armed: { type: "boolean" },
 } as const satisfies ParseArgsOptionsConfig;
 
 interface LiveConfig {
@@ -563,6 +572,28 @@ async function cmdExtract(rest: string[]): Promise<void> {
   }
 }
 
+async function cmdJourney(rest: string[]): Promise<void> {
+  const { values, positionals } = strictParse("journey", rest, JOURNEY_OPTIONS);
+  printHelpAndExit(values.help);
+  const [journeyName, ...inputEntries] = positionals;
+  if (journeyName === undefined || journeyName.length === 0) {
+    throw invalid("missing <name>.");
+  }
+  let inputs: Record<string, string> = {};
+  if (inputEntries.length > 0) {
+    inputs = parseFlowInputs(inputEntries);
+  }
+  const live = resolveLive(values);
+  const armed = values.armed === true;
+  const backend = makeBackend(live, { armed });
+  await performJourney(journeyName, inputs, {
+    backend,
+    armed,
+    screenMap: values["screen-map"],
+    screensDir: values["screens-dir"],
+  });
+}
+
 async function cmdQa(rest: string[]): Promise<void> {
   const { values, positionals } = strictParse("qa", rest, {
     help: { type: "boolean", short: "h" },
@@ -600,6 +631,8 @@ async function main(): Promise<void> {
       return cmdExtract(rest);
     case "act":
       return cmdAct(rest);
+    case "journey":
+      return cmdJourney(rest);
     case "qa":
       return cmdQa(rest);
     default:
