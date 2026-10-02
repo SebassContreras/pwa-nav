@@ -512,6 +512,7 @@ export async function mergeIntoMap(
       learnedAt: map?.app.learnedAt ?? stamp,
     },
     screens,
+    ...(map?.journeys !== undefined ? { journeys: map.journeys } : {}),
     ...(unmapped.length > 0 || map?.unmapped !== undefined ? { unmapped } : {}),
   };
   if (app.version !== undefined) {

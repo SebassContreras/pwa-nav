@@ -23,6 +23,7 @@ Schema: `schemas/screen-map.schema.json` (JSON Schema 2020-12, `additionalProper
 | `actions[]` | `kind` (submit/toggle/button), `effect` (none/ui-state/submit), `requires[]`, `locator` |
 | `links[]` | `href`, `external`, `locator` |
 | `flows[]` | `{id, description, humanOnly, inputSchema, steps[{op: fill\|click, target: @id, from?}]}`, shaped like MCP tool descriptors |
+| `journeys[]` | `{id, description, humanOnly?, inputSchema?, steps[{screenId, action, inputs?, expectScreen?}]}`, multi-screen declarative workflows |
 | `a11y[]` | findings (`code`, `target`, `detail`, `wcag`) |
 | `unmapped[]` | routes seen but not mapped, with a reason |
 
@@ -34,6 +35,7 @@ Locator = `{role, name, occurrence}`. Never a node handle or CSS class.
 - `requires` and flow/a11y targets exist; fill steps target fields, click steps target actions/links; fill steps have `from`.
 - `sensitive` implies `agentFillable: false`.
 - A flow touching a sensitive field is `humanOnly: true`.
+- Journey ids are unique; journey steps reference valid screen ids (`screenId` and `expectScreen`).
 - External link hrefs are origin-only (no path, query, fragment).
 - Fingerprint integrity: sha256 of sorted `role<TAB>name` lines of the screen's fields, actions and links is recomputed; a hand edit without a fingerprint update fails validation.
 
@@ -60,6 +62,7 @@ Lines: header (`id route access fp:<8 hex>`), then `fields`, `actions`, `links`,
 | `click @id`, `fill @id <text>` | Semantic targets; dry-run unless `--armed`. |
 | `act click:@id fill:@id=<text> ...` | Bulk semantic ops. Do not mix with plain refs. |
 | `act flow:<id> key=value ...` | Run a named flow; inputs validated against the flow's `inputSchema` before any step. |
+| `journey <name> [k=v...] [--armed]` | Run a multi-screen user journey across route transitions; dry-run unless `--armed`. |
 
 Flags:
 
@@ -159,5 +162,44 @@ Measured on a real web app (Sigestran Web) across both the public login screen a
 | Authenticated Dashboard (24 elements) | Compact view | 953 | 240 |
 
 Conclusion: the compact view reduces token volume by 57% compared to full DOM snapshots and 86% compared to raw map JSON. The major saving is round trips: a multi-step action sequence (`act click:@id fill:@id=text`) operates directly on semantic targets without intermediate snapshot round trips, returning a single compact view upon completion.
+
+## User Journeys (multi-screen flows)
+
+User Journeys are declarative multi-step workflows defined at the map root level (`journeys[]`):
+
+```json
+{
+  "journeys": [
+    {
+      "id": "search-and-select",
+      "description": "Search product and pick first result",
+      "inputSchema": {
+        "type": "object",
+        "required": ["term"],
+        "properties": { "term": { "type": "string" } }
+      },
+      "steps": [
+        {
+          "screenId": "home",
+          "action": "fill:@search-box=${inputs.term}",
+          "expectScreen": "search-results"
+        },
+        {
+          "screenId": "search-results",
+          "action": "click:@first-item",
+          "expectScreen": "product-detail"
+        }
+      ]
+    }
+  ]
+}
+```
+
+Key features:
+- **Action syntax**: `flow:<id>`, `click:@<id>`, `fill:@<id>=<val>`, `fill:@<id>`, or bare `@<id>`.
+- **Parameter interpolation**: Replaces `${inputs.param}` and `${param}` from journey inputs into step actions and step inputs.
+- **Screen transition assertions**: After every step, the engine waits for settle (network idle and DOM quiescence) and verifies the resulting route matches `expectScreen`. Mismatch aborts immediately with exit code 14 (`journey_step_failed`).
+- **Dry-run preview**: `pwa-nav journey <name> [key=value...]` outputs the full planned step sequence without touching the browser. Use `--armed` to execute.
+- **Dynamic MCP tools**: Non-human-only journeys are automatically exposed as callable tools (`journey_<id>`) on the MCP server with `destructiveHint: true`.
 
 > **Tip for PowerShell users:** Quote `@id` targets (e.g. `pwa-nav click '@show-password'`) to prevent PowerShell from interpreting `@` as a variable splatting operator.

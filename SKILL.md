@@ -21,6 +21,7 @@ All commands run from the repo root after `pnpm build` (`node ./dist/cli.js ...`
 - `fill --snapshot <id> [--armed] <ref> <text>`
 - `act --snapshot <id> [--armed] <op>...` — ops `fill:<ref>=<text>`, `click:<ref>`; live: one session, one new snapshot.
 - `extract --snapshot <id> --mode text|links`
+- `journey <name> [key=value...] [--armed]` — multi-screen user journey across route transitions.
 - `qa run <check-file>` — offline only; exit 0 pass / 1 fail.
 - Global (not on `extract`/`qa`): `--backend offline|bidi` (env `PWA_NAV_BACKEND`), `--port <n>` (default 9222, env `PWA_NAV_PORT`), `--context <id>` (needed with several top-level contexts).
 - Screen map: `snapshot --screen`, `snapshot --learn`, `click|fill @id`, `act click:@id fill:@id=<text> flow:<id> [k=v]` (see below).
@@ -43,7 +44,7 @@ When the `pwa-nav` MCP server is connected (`docs/mcp.md`), use `pwa_open`, `pwa
 - Errors arrive as `isError` with `structuredContent.code`; recovery is the table below.
 - `pwa_snapshot` returns the path and count, not elements: grep the file. `screen: true` returns the compact map view.
 - The server serializes calls but Firefox allows one BiDi session: do not run the CLI or `browser-bidi` at the same time (`session_busy`).
-- Non-human-only flows are tools named `flow_<screen>_<flow>`; human-only flows are not exposed (the user performs them). Resources: `pwa-nav://screens/<app-id>`, `pwa-nav://snapshot/latest`.
+- Non-human-only flows and journeys are tools named `flow_<screen>_<flow>` and `journey_<id>`; human-only flows/journeys are not exposed (the user performs them). Resources: `pwa-nav://screens/<app-id>`, `pwa-nav://snapshot/latest`.
 
 ## Offline fixtures
 
@@ -79,6 +80,7 @@ Refs are valid for ONE snapshot only. `click`/`fill`/`act` supersede the snapsho
 | 11 | sensitive_target | Sensitive field or human-only flow refused before any input. Ask the user to do it by hand. |
 | 12 | unknown_target | `@id` or flow not in the map (message lists available ids). Run `snapshot --screen` and pick a listed id. |
 | 13 | unmapped_screen | No map for the origin or no screen for the route. Use `snapshot -i`; `snapshot --learn` only per rule 4 above. |
+| 14 | journey_step_failed | Multi-screen journey step failed or route transition expectation mismatch. Verify current screen, step definition, or page state. |
 
 ## Checks and evidence
 

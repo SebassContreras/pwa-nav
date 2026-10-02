@@ -148,6 +148,19 @@
       ]
     }
   ],
+  "journeys": [
+    {
+      "id": "login-journey",
+      "description": "User login journey touching credentials; human-only",
+      "humanOnly": true,
+      "steps": [
+        {
+          "screenId": "login",
+          "action": "flow:login"
+        }
+      ]
+    }
+  ],
   "unmapped": [
     {
       "route": "/forgot-password",
