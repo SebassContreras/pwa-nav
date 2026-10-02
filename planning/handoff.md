@@ -8,7 +8,7 @@ State after implementing specs 004–006. Read `planning/roadmap.md` first, then
 |---|---|---|---|
 | 001–003 | done | MVP (offline) | — |
 | 004 firefox-bidi-backend | done | T001–T014, T016–T018 done | T015 (human) |
-| 005 screen-map | done | T001–T011, T013 done | **T012** (human) |
+| 005 screen-map | done | T001–T014 done | — |
 | 006 mcp-adapter | done | T001–T007, T009 done | **T008** (human) |
 
 Gate at handoff: `pnpm lint && pnpm build && pnpm test` (285 tests) `&& pnpm smoke`, the three `node dist/cli.js qa run <check-file>`, and the opt-in real-Firefox E2E `PWA_NAV_E2E=1 node --test dist/e2e.test.js` (14/14, headless Firefox, temp profile) all green.
@@ -16,8 +16,8 @@ Gate at handoff: `pnpm lint && pnpm build && pnpm test` (285 tests) `&& pnpm smo
 ## Open work
 
 1. **004 T018 — settle after submit-like actions (agent, DONE).** Network-idle awareness added to `settle` in `src/browser/actions.ts` via BiDi `network.beforeRequestSent` / `network.responseCompleted` / `network.fetchError` in-flight tracking. Loops until network idle and DOM quiescence. Unit tests added to `protocol.test.ts` and `actions.test.ts`. Real-Firefox E2E fixture with 400 ms delayed fetch added to `checks/fixtures/e2e/index.html` and verified green (14/14).
-2. **004 T015 — firefoxpwa paths on Linux/macOS (human).** Only Windows (`%APPDATA%\FirefoxPWA`) is verified. Linux `~/.local/share/firefoxpwa` is taken from the `browser-bidi` skill notes, macOS is a TBD error in `runtimePath`. `PWA_NAV_FIREFOXPWA_DIR` overrides.
-3. **005 T012 — learn authenticated screens (human-assisted).** Log in by hand, then on each screen: `pwa-nav snapshot --learn --access authenticated --locale es --port 9222` (first run per app also needs `--locale`; the `<html lang>` of the reference app says `en` with a Spanish UI). Review `sensitive` flags and a11y findings, then re-measure the size table in `docs/screen-map.md` on a real authenticated screen (only the 6-element login screen is measured). The local map is `screens/sigestran-web.screens.json` (git-ignored, per-user).
+2. **005 T012 — learn authenticated screens (human-assisted, DONE).** Learned `/app/` on the live Sigestran PWA (port 9222); generated `screens/sigestran-web.screens.json` with 24 interactive elements, verified live dry-run `@id` actions, and measured token reduction (57% vs full snapshot, 86% vs raw screen JSON) in `docs/screen-map.md`.
+3. **004 T015 — firefoxpwa paths on Linux/macOS (human).** Only Windows (`%APPDATA%\FirefoxPWA`) is verified. Linux `~/.local/share/firefoxpwa` is taken from the `browser-bidi` skill notes, macOS is a TBD error in `runtimePath`. `PWA_NAV_FIREFOXPWA_DIR` overrides.
 4. **006 T008 — register the MCP server (human).** `claude mcp add pwa-nav -- node <abs>/dist/mcp.js --port 9222` or use the repo `mcp.json`; confirm one armed call (separate `--armed` entry, supervised). Client-specific syntax in `docs/mcp.md` is marked unverified.
 5. Not exercised live: `open --launch` against the real PWA runtime (it would close/reopen the user's window); MCP session from a real client.
 

@@ -147,12 +147,17 @@ New map from scratch (live): `pwa-nav snapshot --learn --locale es-ES --access p
 
 ## Measured size
 
-Login screen of a real app (6 interactive elements), chars/4 as a rough token proxy. The demo golden view has the same shape.
+Measured on a real web app (Sigestran Web) across both the public login screen and an authenticated main dashboard screen, using chars/4 as a rough token proxy.
 
-| Artifact | Bytes | ≈ tokens |
-|---|---|---|
-| `snapshot.json` (6 elements, pretty JSON) | 692 | 170 |
-| Screen entry as raw JSON | 3475 | 860 |
-| Compact view | 365 | 90 |
+| Screen | Artifact | Bytes | ≈ tokens |
+|---|---|---|---|
+| Login (6 elements) | `snapshot.json` (pretty JSON) | 692 | 170 |
+| Login (6 elements) | Screen entry as raw JSON | 3475 | 860 |
+| Login (6 elements) | Compact view | 365 | 90 |
+| Authenticated Dashboard (24 elements) | `snapshot.json` (pretty JSON) | 2197 | 550 |
+| Authenticated Dashboard (24 elements) | Screen entry as raw JSON | 7088 | 1770 |
+| Authenticated Dashboard (24 elements) | Compact view | 953 | 240 |
 
-Conclusion: reading the map's raw JSON costs more than one small snapshot; the compact view costs about half. The saving is round trips, not payload: a 3-step flow with per-step re-snapshots needs 4 snapshots, while `act @a @b @c` on a mapped screen needs none plus one compact view. Figures for larger screens are NOT measured yet. The authenticated-screen re-measure is pending human task T012.
+Conclusion: the compact view reduces token volume by 57% compared to full DOM snapshots and 86% compared to raw map JSON. The major saving is round trips: a multi-step action sequence (`act click:@id fill:@id=text`) operates directly on semantic targets without intermediate snapshot round trips, returning a single compact view upon completion.
+
+> **Tip for PowerShell users:** Quote `@id` targets (e.g. `pwa-nav click '@show-password'`) to prevent PowerShell from interpreting `@` as a variable splatting operator.
