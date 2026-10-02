@@ -1,6 +1,6 @@
 # MCP server — `pwa-nav-mcp`
 
-Stdio MCP server (spec 006) exposing the same operations as the CLI (`open`, `snapshot`, `click`, `fill`, `extract`, `act`) over the live Firefox PWA (WebDriver BiDi). It calls the same `src/ops.ts` layer as the CLI, so the gate, refs and errors behave identically.
+Stdio MCP server (spec 006) exposing the same operations as the CLI (`open`, `snapshot`, `click`, `fill`, `extract`, `act`) over the live Firefox PWA (WebDriver BiDi). It calls the same `src/ops/ops.ts` layer as the CLI, so the gate, refs and errors behave identically.
 
 ## Why not `@playwright/mcp`
 

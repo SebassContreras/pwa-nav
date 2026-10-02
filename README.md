@@ -119,7 +119,16 @@ Later: native WebMCP tools, multi-session, full automatic notebook search (the p
 
 ## Layout
 
-- `src/` — CLI, snapshot normalizer, refs store, backends (offline, BiDi), gate, QA runner
+- `src/` — TypeScript source code organized in Clean Architecture layers:
+  - `core/` — domain models, snapshot contracts, errors, safety gate, stable ref store
+  - `screens/` — screen-map engine (validation, routing, view rendering, learn, merge, resolve)
+  - `bidi/` — W3C WebDriver BiDi transport, protocol client, session lifecycle
+  - `browser/` — Firefox PWA runtime discovery, DOM collection, actions with network-idle settle, backend
+  - `backend/` — abstract backend port and factory
+  - `ops/` — CLI/MCP shared operations (`perform*`) and QA engine (`qa.ts`)
+  - `cli/` — CLI commands, screen map subcommands, CLI tests
+  - `mcp/` — stdio MCP server, tool definitions, dynamic flow tools
+  - `cli.ts`, `mcp.ts`, `smoke.ts` — binary entrypoints
 - `checks/` — example QA checks + offline ARIA fixtures
 - `docs/` — Firefox PWA launch (`firefox-pwa.md`), screen map (`screen-map.md`), MCP setup (`mcp.md`), notebook pilot
 - `schemas/`, `examples/screens/` — screen-map JSON Schema and the demo reference map

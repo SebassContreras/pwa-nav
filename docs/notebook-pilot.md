@@ -9,7 +9,7 @@ Lawful use only: the user opens their own logged-in page; the agent never handle
 2. Agent runs `open` + `snapshot` + `extract --mode text` on it.
 3. Evidence saved under `.agent/evidence/<run-id>/` (per-step snapshot JSON + `result.json`).
 
-Real commands (`src/cli.ts`, shared `src/ops.ts` layer, same backend as `qa run`):
+Real commands (`src/cli.ts`, shared `src/ops/ops.ts` layer, same backend as `qa run`):
 
 ```sh
 pwa-nav open <notebook-url> --backend offline   # persists target URL to .agent/session.json
@@ -45,7 +45,7 @@ e6 paragraph "Evidence lands under .agent evidence run dir for audit."
 e7 link "Sources"
 ```
 
-Same flow via the qa runner (`src/qa.ts`):
+Same flow via the qa runner (`src/ops/qa.ts`):
 
 ```json
 {"steps": [

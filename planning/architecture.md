@@ -25,6 +25,24 @@ Local-only CLI + MCP adapter driving the user's own logged-in Firefox PWA (PWAsF
 
 TypeScript `strict: true`, `module/moduleResolution: nodenext`, `target: es2024` (the pinned TypeScript 5.x accepts at most es2024; see `tsconfig.json`). ESLint; no formatter is configured. All docs in English.
 
+### Codebase structure (Clean Architecture layers)
+
+All source files are partitioned strictly by responsibility under `src/`:
+
+| Layer | Directory | Responsibilities | Dependencies |
+|---|---|---|---|
+| Core Domain | `src/core/` | Snapshot data types, error taxonomy (`PwaNavError`), security gate, stable ref store and locator resolution | Zero external I/O |
+| Screens Subsystem | `src/screens/` | Screen map models, schema validation (Ajv), route matching, compact view renderer, learn & merge algorithms | `core` |
+| BiDi Protocol | `src/bidi/` | Low-level W3C WebDriver BiDi transport, framing, protocol commands, session lifecycle, test fake server | `core` |
+| Browser Automation | `src/browser/` | Firefox PWA runtime discovery, in-page DOM collection, element actions with network-idle settle, BiDi backend | `core`, `bidi` |
+| Backend Ports | `src/backend/` | `Backend` interface port, `createBackend` factory | `core`, `browser` |
+| Operations | `src/ops/` | High-level CLI/MCP operations (`perform*`), QA verification engine (`qa.ts`) | `core`, `screens`, `backend` |
+| CLI Adapter | `src/cli/` | CLI options, screen map subcommands, command tests | `core`, `screens`, `ops` |
+| MCP Adapter | `src/mcp/` | Stdio MCP server, tools, dynamic flow tool generator, MCP stdio tests | `core`, `screens`, `ops` |
+| Root Binaries | `src/` | Binary entrypoints: `cli.ts` (CLI), `mcp.ts` (MCP), `smoke.ts` (smoke test), `index.ts` (exports), `e2e.test.ts` (Firefox E2E) | Layer modules |
+
+Tests live colocated beside their corresponding unit (e.g. `src/core/gate.test.ts`, `src/browser/actions.test.ts`).
+
 ## Fixed rules
 
 - Lawful use only; no CAPTCHA/bot-wall bypass. Hard rule.
