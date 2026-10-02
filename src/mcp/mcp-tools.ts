@@ -143,7 +143,9 @@ function pickTarget(args: Record<string, unknown>): { target: string } | { snaps
 const open: ToolDef = {
   name: "pwa_open",
   description:
-    "Navigate the PWA window to a URL. The origin must be on the allow-list, or pass allowOrigin: true to consent to it.",
+    "Navigate the PWA window to a new URL. CRITICAL: The user's PWA is already open and loaded with their app. " +
+    "Do NOT call pwa_open to perform searches or browse. To search or interact within the app, use pwa_snapshot first " +
+    "to inspect the page, then use pwa_fill and pwa_click on in-page inputs.",
   inputSchema: {
     type: "object",
     properties: {
@@ -171,8 +173,9 @@ const open: ToolDef = {
 const snapshot: ToolDef = {
   name: "pwa_snapshot",
   description:
-    "Collect the page's interactive elements into the snapshot file and return its path and element count (never the elements). " +
-    "With screen: true, return the compact view of the mapped screen for the current URL instead.",
+    "MANDATORY FIRST STEP: Inspect the current state of the active PWA window. " +
+    "Call with screen: true first to get the compact screen view with semantic @id targets, available flows, and journeys. " +
+    "If unmapped (code 13), call with interactive elements only (omit screen) to collect elements into .agent/snapshot.json and return its count.",
   inputSchema: {
     type: "object",
     properties: {
@@ -206,8 +209,8 @@ const snapshot: ToolDef = {
 const click: ToolDef = {
   name: "pwa_click",
   description:
-    "Click an element by snapshotId + ref, or by semantic target (@id). Dry-run unless the server operator armed it; " +
-    "the result then says no input was sent.",
+    "Click an element by semantic target (@id from screen map, e.g. @submit-btn) or snapshotId + ref (eN). " +
+    "Dry-run unless the server operator armed it; the result then says no input was sent.",
   inputSchema: {
     type: "object",
     properties: { snapshotId: SNAPSHOT_ID_PROP, ref: REF_PROP, target: TARGET_PROP },
@@ -231,8 +234,9 @@ const click: ToolDef = {
 const fill: ToolDef = {
   name: "pwa_fill",
   description:
-    "Fill a field by snapshotId + ref, or by semantic target (@id). Sensitive fields (passwords) are refused. " +
-    "Dry-run unless the server operator armed it.",
+    "Fill a field or search box by semantic target (@id from screen map, e.g. @search-input) or snapshotId + ref (eN). " +
+    "To search on the current page, fill the search input here instead of calling pwa_open. " +
+    "Sensitive fields (passwords) are refused. Dry-run unless the server operator armed it.",
   inputSchema: {
     type: "object",
     properties: {
@@ -274,8 +278,9 @@ function actTokens(ops: readonly string[], inputs: Record<string, string> | unde
 const act: ToolDef = {
   name: "pwa_act",
   description:
-    "Run several ops in one session. Plain ops with snapshotId: click:<ref>, fill:<ref>=<text>. " +
-    "Semantic ops without snapshotId: click:@id, fill:@id=<text>, flow:<id> with inputs. Do not mix the two. " +
+    "Run several ops in one session (ideal for search: fill search input + click search button, or submitting forms). " +
+    "Semantic ops without snapshotId: click:@id, fill:@id=<text>, flow:<id> with inputs. " +
+    "Plain ops with snapshotId: click:<ref>, fill:<ref>=<text>. Do not mix the two. " +
     "Dry-run unless the server operator armed it; human-only flows are refused.",
   inputSchema: {
     type: "object",
