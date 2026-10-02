@@ -5,3 +5,4 @@ export * from "./screen-learn.js";
 export * from "./screen-merge.js";
 export * from "./screen-resolve.js";
 export * from "./screen-store.js";
+export * from "./screen-journey.js";
