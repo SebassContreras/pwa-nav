@@ -10,8 +10,14 @@
   "engines": {
     "node": ">=22"
   },
+  "files": [
+    "dist",
+    "SKILL.md",
+    "README.md",
+    "schemas"
+  ],
   "scripts": {
-    "build": "tsc -p tsconfig.json",
+    "build": "tsc -p tsconfig.json && node -e \"import('node:fs').then(fs => fs.copyFileSync('SKILL.md', 'dist/SKILL.md'))\"",
     "lint": "eslint .",
     "smoke": "node ./dist/smoke.js",
     "test": "node --test \"dist/**/*.test.js\""
