@@ -7,15 +7,15 @@ State after implementing specs 004–006. Read `planning/roadmap.md` first, then
 | Spec | Status | Agent work | Open |
 |---|---|---|---|
 | 001–003 | done | MVP (offline) | — |
-| 004 firefox-bidi-backend | in_progress | T001–T014, T016, T017 done | **T018** (agent), T015 (human) |
+| 004 firefox-bidi-backend | done | T001–T014, T016–T018 done | T015 (human) |
 | 005 screen-map | done | T001–T011, T013 done | **T012** (human) |
 | 006 mcp-adapter | done | T001–T007, T009 done | **T008** (human) |
 
-Gate at handoff: `pnpm lint && pnpm build && pnpm test` (281 tests) `&& pnpm smoke`, the three `node dist/cli.js qa run checks/*.json`, and the opt-in real-Firefox E2E `PWA_NAV_E2E=1 node --test dist/e2e.test.js` (13/13, headless Firefox 156.0.1, temp profile) all green.
+Gate at handoff: `pnpm lint && pnpm build && pnpm test` (285 tests) `&& pnpm smoke`, the three `node dist/cli.js qa run <check-file>`, and the opt-in real-Firefox E2E `PWA_NAV_E2E=1 node --test dist/e2e.test.js` (14/14, headless Firefox, temp profile) all green.
 
 ## Open work
 
-1. **004 T018 — settle after submit-like actions (agent).** Armed `click @submit` on a real login succeeded, but the CLI printed the login compact view: the SPA route changed after the quiescence window (async request). Add network-idle awareness to `settle` in `src/browser/actions.ts` (BiDi `network.beforeRequestSent` / `network.responseCompleted` in-flight tracking), keep a named cap, add an E2E fixture that navigates after a delayed fetch, re-measure. Today's constants: `SETTLE_WINDOW_MS=300`, `QUIET_MS=150`, `SETTLE_TIMEOUT_MS=5000` (evidence in comments).
+1. **004 T018 — settle after submit-like actions (agent, DONE).** Network-idle awareness added to `settle` in `src/browser/actions.ts` via BiDi `network.beforeRequestSent` / `network.responseCompleted` / `network.fetchError` in-flight tracking. Loops until network idle and DOM quiescence. Unit tests added to `protocol.test.ts` and `actions.test.ts`. Real-Firefox E2E fixture with 400 ms delayed fetch added to `checks/fixtures/e2e/index.html` and verified green (14/14).
 2. **004 T015 — firefoxpwa paths on Linux/macOS (human).** Only Windows (`%APPDATA%\FirefoxPWA`) is verified. Linux `~/.local/share/firefoxpwa` is taken from the `browser-bidi` skill notes, macOS is a TBD error in `runtimePath`. `PWA_NAV_FIREFOXPWA_DIR` overrides.
 3. **005 T012 — learn authenticated screens (human-assisted).** Log in by hand, then on each screen: `pwa-nav snapshot --learn --access authenticated --locale es --port 9222` (first run per app also needs `--locale`; the `<html lang>` of the reference app says `en` with a Spanish UI). Review `sensitive` flags and a11y findings, then re-measure the size table in `docs/screen-map.md` on a real authenticated screen (only the 6-element login screen is measured). The local map is `screens/sigestran-web.screens.json` (git-ignored, per-user).
 4. **006 T008 — register the MCP server (human).** `claude mcp add pwa-nav -- node <abs>/dist/mcp.js --port 9222` or use the repo `mcp.json`; confirm one armed call (separate `--armed` entry, supervised). Client-specific syntax in `docs/mcp.md` is marked unverified.
@@ -64,8 +64,7 @@ Loop logs per spec: `.specloop/logs/<id>.log` (git-ignored). Worker config: `.sp
 
 ## Suggested next steps
 
-1. Run the gate and the E2E to confirm the checkout.
-2. T018 (agent), then re-run the E2E and the login flow on the real app.
-3. T012: learn the main authenticated screens, review the map, re-measure tokens.
-4. T008: register the MCP server; try `screen: true` and an `@id` dry-run from the client.
-5. T015 when a Linux/macOS machine is available.
+1. T012: learn the main authenticated screens on your live PWA, review the map, re-measure tokens.
+2. T008: register the MCP server; try `screen: true` and an `@id` dry-run from the client.
+3. Live test: test the login flow on the real app to confirm that the new settle properly captures the authenticated dashboard.
+4. T015 when a Linux/macOS machine is available.

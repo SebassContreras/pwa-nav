@@ -24,6 +24,15 @@ export const NAVIGATION_EVENTS = [
 ] as const;
 export type NavigationEvent = (typeof NAVIGATION_EVENTS)[number];
 
+export const SETTLE_EVENTS = [
+  "browsingContext.navigationStarted",
+  "browsingContext.load",
+  "network.beforeRequestSent",
+  "network.responseCompleted",
+  "network.fetchError",
+] as const;
+export type SettleEvent = (typeof SETTLE_EVENTS)[number];
+
 // Never expand DOM nodes (node ids do not survive across sessions; the collector
 // returns plain data). Object depth 10 covers the collector payload
 // ({elements:[{locator:{...}}]}) with headroom while bounding pathological pages.
@@ -46,10 +55,16 @@ export interface NavigationWatch {
   readonly started: boolean;
   /** A load event was seen since the watch was created. */
   readonly loaded: boolean;
+  /** Number of in-flight network requests started since the watch was created. */
+  readonly inFlightCount: number;
+  /** Total number of network requests observed since the watch was created. */
+  readonly requestCount: number;
   /** Resolves true as soon as navigationStarted was seen, false after windowMs without it. */
   waitStarted(windowMs: number): Promise<boolean>;
   /** Resolves when a load was seen (possibly already); rejects with `timeout`. */
   waitLoaded(timeoutMs: number): Promise<void>;
+  /** Resolves true when inFlightCount reaches 0, or false if timeoutMs elapses. */
+  waitNetworkIdle(timeoutMs: number): Promise<boolean>;
   dispose(): void;
 }
 
@@ -187,6 +202,13 @@ function eventContext(params: unknown): string | undefined {
   return isRecord(params) && typeof params.context === "string" ? params.context : undefined;
 }
 
+function eventRequestId(params: unknown): string | undefined {
+  if (isRecord(params) && isRecord(params.request) && typeof params.request.request === "string") {
+    return params.request.request;
+  }
+  return undefined;
+}
+
 export class BidiClient {
   private readonly transport: BidiTransport;
 
@@ -277,16 +299,21 @@ export class BidiClient {
     return asRemote((raw as EvaluateSuccess).result);
   }
 
-  // Starts listening NOW for navigation events in `context`, so events fired while an
+  // Starts listening NOW for navigation and network events in `context`, so events fired while an
   // input command is still in flight are not missed (transport.waitFor does not buffer).
-  // Requires a prior subscribe to navigationStarted and load. Call dispose() when done.
+  // Requires a prior subscribe to navigation and network events. Call dispose() when done.
   watchNavigation(context?: string): NavigationWatch {
     let started = false;
     let loaded = false;
+    const inFlightRequests = new Set<string>();
+    let anonymousInFlight = 0;
+    let requestCount = 0;
     const waiters = new Set<() => void>();
     const wake = (): void => {
       for (const w of waiters) w();
     };
+    const inFlightCount = (): number => inFlightRequests.size + anonymousInFlight;
+
     const offs = [
       this.transport.on("browsingContext.navigationStarted", (params) => {
         if (context === undefined || eventContext(params) === context) {
@@ -298,6 +325,44 @@ export class BidiClient {
         if (context === undefined || eventContext(params) === context) {
           loaded = true;
           wake();
+        }
+      }),
+      this.transport.on("network.beforeRequestSent", (params) => {
+        if (context === undefined || eventContext(params) === context) {
+          const reqId = eventRequestId(params);
+          if (reqId !== undefined) {
+            inFlightRequests.add(reqId);
+          } else {
+            anonymousInFlight++;
+          }
+          requestCount++;
+          wake();
+        }
+      }),
+      this.transport.on("network.responseCompleted", (params) => {
+        const reqId = eventRequestId(params);
+        if (reqId !== undefined) {
+          if (inFlightRequests.delete(reqId)) {
+            wake();
+          }
+        } else if (context === undefined || eventContext(params) === context) {
+          if (anonymousInFlight > 0) {
+            anonymousInFlight--;
+            wake();
+          }
+        }
+      }),
+      this.transport.on("network.fetchError", (params) => {
+        const reqId = eventRequestId(params);
+        if (reqId !== undefined) {
+          if (inFlightRequests.delete(reqId)) {
+            wake();
+          }
+        } else if (context === undefined || eventContext(params) === context) {
+          if (anonymousInFlight > 0) {
+            anonymousInFlight--;
+            wake();
+          }
         }
       }),
     ];
@@ -325,15 +390,23 @@ export class BidiClient {
       get loaded() {
         return loaded;
       },
+      get inFlightCount() {
+        return inFlightCount();
+      },
+      get requestCount() {
+        return requestCount;
+      },
       waitStarted: (windowMs) => until(() => started, windowMs),
       async waitLoaded(timeoutMs) {
         if (!(await until(() => loaded, timeoutMs))) {
           throw new PwaNavError("timeout", `Timed out after ${String(timeoutMs)}ms waiting for browsingContext.load`);
         }
       },
+      waitNetworkIdle: (timeoutMs) => until(() => inFlightCount() === 0, timeoutMs),
       dispose() {
         for (const off of offs) off();
         waiters.clear();
+        inFlightRequests.clear();
       },
     };
   }

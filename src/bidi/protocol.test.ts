@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 import { PwaNavError } from "../errors.js";
 import { startFakeBidiServer, type FakeBidiServer } from "./fake-server.js";
-import { BidiClient, fromRemoteValue, SERIALIZATION_OPTIONS } from "./protocol.js";
+import { BidiClient, fromRemoteValue, SERIALIZATION_OPTIONS, SETTLE_EVENTS } from "./protocol.js";
 import { BidiTransport } from "./transport.js";
 
 async function withClient(fn: (client: BidiClient, server: FakeBidiServer) => Promise<void>): Promise<void> {
@@ -174,5 +174,82 @@ test("waitForLoad resolves on load and times out otherwise", async () => {
       client.waitForLoad(50),
       (e: unknown) => e instanceof PwaNavError && e.code === "timeout",
     );
+  });
+});
+
+test("watchNavigation: tracks navigation and network idle with in-flight count", async () => {
+  await withClient(async (client, server) => {
+    const tick = (): Promise<void> => new Promise((r) => setTimeout(r, 20));
+    server.handle("session.subscribe", () => ({}));
+    await client.subscribe(SETTLE_EVENTS, ["c1"]);
+    const watch = client.watchNavigation("c1");
+    assert.equal(watch.started, false);
+    assert.equal(watch.loaded, false);
+    assert.equal(watch.inFlightCount, 0);
+    assert.equal(watch.requestCount, 0);
+
+    // Request from another context is ignored
+    server.pushEvent("network.beforeRequestSent", {
+      context: "other",
+      request: { request: "req-other", url: "https://other/" },
+    });
+    await tick();
+    assert.equal(watch.inFlightCount, 0);
+    assert.equal(watch.requestCount, 0);
+
+    // Request in c1 starts
+    server.pushEvent("network.beforeRequestSent", {
+      context: "c1",
+      request: { request: "req-1", url: "https://a/api" },
+    });
+    await tick();
+    assert.equal(watch.inFlightCount, 1);
+    assert.equal(watch.requestCount, 1);
+
+    // Second request starts
+    server.pushEvent("network.beforeRequestSent", {
+      context: "c1",
+      request: { request: "req-2", url: "https://a/api2" },
+    });
+    await tick();
+    assert.equal(watch.inFlightCount, 2);
+    assert.equal(watch.requestCount, 2);
+
+    // waitNetworkIdle is waiting
+    let idleResolved = false;
+    const idleP = watch.waitNetworkIdle(1000).then((v) => {
+      idleResolved = v;
+    });
+
+    // req-1 completes
+    server.pushEvent("network.responseCompleted", {
+      context: "c1",
+      request: { request: "req-1", url: "https://a/api" },
+    });
+    await tick();
+    assert.equal(watch.inFlightCount, 1);
+    assert.equal(idleResolved, false);
+
+    // req-2 ends with fetchError
+    server.pushEvent("network.fetchError", {
+      context: "c1",
+      request: { request: "req-2", url: "https://a/api2" },
+    });
+    await tick();
+    assert.equal(watch.inFlightCount, 0);
+
+    await idleP;
+    assert.equal(idleResolved, true);
+
+    // Navigation events
+    server.pushEvent("browsingContext.navigationStarted", { context: "c1", navigation: "n1", url: "u1" });
+    assert.equal(await watch.waitStarted(100), true);
+    assert.equal(watch.started, true);
+
+    server.pushEvent("browsingContext.load", { context: "c1", navigation: "n1", url: "u1" });
+    await watch.waitLoaded(100);
+    assert.equal(watch.loaded, true);
+
+    watch.dispose();
   });
 });

@@ -25,6 +25,7 @@
         <input id="password" name="password" type="password" autocomplete="current-password" />
         <button type="button" id="toggle" aria-label="Show password"></button>
         <button type="button" id="signin">Sign in</button>
+        <button type="button" id="async-signin">Async sign in</button>
         <a href="/other.html">Other page</a>
         <button type="button" disabled>Disabled action</button>
         <button type="button" style="display: none">Hidden action</button>
@@ -67,6 +68,18 @@
         document.title = "E2E Welcome";
         document.getElementById("app").innerHTML =
           "<main><h1>Welcome back</h1><button type=\"button\">Sign out</button></main>";
+      });
+
+      // "Async sign in": delayed fetch (400 ms) followed by route change + re-render.
+      document.getElementById("async-signin").addEventListener("click", () => {
+        fetch("/api/login-delayed")
+          .catch(() => ({}))
+          .then(() => {
+            history.pushState({}, "", "/welcome-async");
+            document.title = "E2E Welcome Async";
+            document.getElementById("app").innerHTML =
+              "<main><h1>Welcome async</h1><button type=\"button\">Sign out</button></main>";
+          });
       });
     </script>
   </body>

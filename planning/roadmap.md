@@ -7,6 +7,6 @@ Index of every spec — status, dependencies, pipeline stage, and priority. Read
 | 001 | nav-snapshot | done | — | — | 1 |
 | 002 | nav-actions | done | 001 | — | 2 |
 | 003 | qa-loop | done | 002 | — | 3 |
-| 004 | firefox-bidi-backend | in_progress | 002 | looping | 4 |
+| 004 | firefox-bidi-backend | done | 002 | — | 4 |
 | 005 | screen-map | done | 004 | — | 5 |
 | 006 | mcp-adapter | done | 004, 005 | — | 6 |

@@ -127,6 +127,13 @@ describe("E2E: real Firefox over BiDi", { skip }, () => {
 
     const server = createHttpServer((req, res) => {
       const path = (req.url ?? "/").split("?")[0] ?? "/";
+      if (path === "/api/login-delayed") {
+        setTimeout(() => {
+          res.writeHead(200, { "content-type": "application/json" });
+          res.end(JSON.stringify({ ok: true }));
+        }, 400);
+        return;
+      }
       const file = path === "/other.html" ? "other.html" : "index.html"; // SPA fallback for /welcome
       readFile(join(FIXTURES, file)).then(
         (body) => {
@@ -160,16 +167,24 @@ describe("E2E: real Firefox over BiDi", { skip }, () => {
     if (child !== undefined) killTree(child);
     const server = http;
     if (server !== undefined) {
+      try {
+        server.closeAllConnections();
+      } catch {}
       await new Promise<void>((resolve) => {
+        const timer = setTimeout(resolve, 2000);
         server.close(() => {
+          clearTimeout(timer);
           resolve();
         });
-        server.closeAllConnections();
       });
     }
     // Windows may hold profile files briefly after the kill.
     for (const dir of [profile, cwd]) {
-      if (dir !== "") await rm(dir, { recursive: true, force: true, maxRetries: 10, retryDelay: 300 });
+      if (dir !== "") {
+        try {
+          await rm(dir, { recursive: true, force: true, maxRetries: 10, retryDelay: 300 });
+        } catch {}
+      }
     }
   });
 
@@ -304,6 +319,17 @@ describe("E2E: real Firefox over BiDi", { skip }, () => {
     assert.ok(full.elements.some((e) => e.role === "heading" && e.name === "Welcome back"));
     const old = await cli(["click", "--snapshot", s.snapshotId, "--armed", "e1"]);
     assert.equal(old.status, 3, old.stderr);
+  });
+
+  test("click Async sign in: SPA route change after delayed fetch settles correctly", async () => {
+    assert.equal((await cli(["open", `${base}/`])).status, 0);
+    const s = await snap();
+    const r = await cli(["click", "--snapshot", s.snapshotId, "--armed", ref(s, "button", "Async sign in")]);
+    assert.equal(r.status, 0, r.stderr);
+    const welcome = await snap();
+    assert.equal(welcome.url, `${base}/welcome-async`);
+    assert.equal(welcome.title, "E2E Welcome Async");
+    assert.ok(welcome.elements.some((e) => e.role === "button" && e.name === "Sign out"));
   });
 
   test("act: multi-op batch yields ONE new snapshot", async () => {

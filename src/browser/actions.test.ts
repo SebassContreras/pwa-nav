@@ -180,6 +180,85 @@ test("click: navigation events from other contexts are ignored", async () => {
   );
 });
 
+test("click: delayed network request waits for network idle before DOM quiescence", async () => {
+  let completed = false;
+  await harness(
+    {
+      onInput: (server) => {
+        server.pushEvent("network.beforeRequestSent", {
+          context: "ctx",
+          request: { request: "req-1", url: "https://app.test/api/login" },
+        });
+        setTimeout(() => {
+          completed = true;
+          server.pushEvent("network.responseCompleted", {
+            context: "ctx",
+            request: { request: "req-1", url: "https://app.test/api/login" },
+          });
+        }, 50);
+      },
+    },
+    async (client, server) => {
+      await clickLocator(client, "ctx", snapshot, { role: "button", name: "Go" });
+      assert.equal(completed, true, "network response must have completed before settle returns");
+      assert.equal(calls(server).filter(isQuiet).length, 1);
+    },
+  );
+});
+
+test("click: network request ending in fetchError is completed and proceeds to quiescence", async () => {
+  let completed = false;
+  await harness(
+    {
+      onInput: (server) => {
+        server.pushEvent("network.beforeRequestSent", {
+          context: "ctx",
+          request: { request: "req-err", url: "https://app.test/api/fail" },
+        });
+        setTimeout(() => {
+          completed = true;
+          server.pushEvent("network.fetchError", {
+            context: "ctx",
+            request: { request: "req-err", url: "https://app.test/api/fail" },
+          });
+        }, 50);
+      },
+    },
+    async (client, server) => {
+      await clickLocator(client, "ctx", snapshot, { role: "button", name: "Go" });
+      assert.equal(completed, true, "fetchError must complete in-flight tracking");
+      assert.equal(calls(server).filter(isQuiet).length, 1);
+    },
+  );
+});
+
+test("click: late navigation after network response waits for load", async () => {
+  await harness(
+    {
+      onInput: (server) => {
+        server.pushEvent("network.beforeRequestSent", {
+          context: "ctx",
+          request: { request: "req-nav", url: "https://app.test/api/auth" },
+        });
+        setTimeout(() => {
+          server.pushEvent("network.responseCompleted", {
+            context: "ctx",
+            request: { request: "req-nav", url: "https://app.test/api/auth" },
+          });
+          server.pushEvent("browsingContext.navigationStarted", { context: "ctx", navigation: "n2", url: "https://app.test/dash" });
+          setTimeout(() => {
+            server.pushEvent("browsingContext.load", { context: "ctx", navigation: "n2", url: "https://app.test/dash" });
+          }, 30);
+        }, 30);
+      },
+    },
+    async (client) => {
+      const res = await clickLocator(client, "ctx", snapshot, { role: "button", name: "Go" });
+      assert.equal(res.url, URL_A);
+    },
+  );
+});
+
 test("stale: missing locator, URL change, vanished node => StaleRefError before any input", async () => {
   await harness({}, async (client, server) => {
     await assert.rejects(clickLocator(client, "ctx", snapshot, { role: "button", name: "Nope" }), StaleRefError);

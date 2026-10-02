@@ -6,6 +6,7 @@
 // self-contained: no imports, no outer-scope references.
 import { PwaNavError } from "../errors.js";
 import type { BidiClient, NavigationWatch, NodeArgument } from "../bidi/protocol.js";
+import { SETTLE_EVENTS } from "../bidi/protocol.js";
 import { StaleRefError } from "../refs.js";
 import type { Locator } from "../screen-map.js";
 import type { Snapshot } from "../snapshot.js";
@@ -364,32 +365,62 @@ async function pageState(client: BidiClient, context: string): Promise<PageState
 }
 
 /**
- * Waits for the page to settle after an input. Navigation (started within
- * SETTLE_WINDOW_MS) -> wait for load. Otherwise wait for DOM quiescence (QUIET_MS without
- * mutations). Hitting SETTLE_TIMEOUT_MS during quiescence just returns: pages with
- * perpetual mutations (clocks, animations, polling) never go quiet, and the input already
- * happened, so failing would misreport a successful action. A load that never completes
- * after a navigation does raise `timeout`.
+ * Waits for the page to settle after an input.
+ * 1. Full navigation (started within SETTLE_WINDOW_MS) -> wait for load.
+ * 2. Otherwise, wait for network idle (in-flight requests reach 0) and DOM quiescence
+ *    (QUIET_MS without mutations). If a response triggers further requests or a late
+ *    navigation, loops until quiet or navigation loads.
+ * Hitting SETTLE_TIMEOUT_MS during quiescence/network idle returns the current page state:
+ * pages with perpetual mutations or polling never go quiet, and the input already
+ * happened, so failing would misreport a successful action.
+ * A load that never completes after a navigation does raise `timeout`.
  * `watch` must have been created before the input; without one, it starts now.
  */
 export async function settle(client: BidiClient, context: string, watch?: NavigationWatch): Promise<PageState> {
   let own: NavigationWatch | undefined;
   let w = watch;
   if (w === undefined) {
-    await client.subscribe(["browsingContext.navigationStarted", "browsingContext.load"], [context]);
+    await client.subscribe(SETTLE_EVENTS, [context]);
     own = client.watchNavigation(context);
     w = own;
   }
+  const startedAt = Date.now();
+  const remaining = (): number => Math.max(0, SETTLE_TIMEOUT_MS - (Date.now() - startedAt));
+
   try {
     if (await w.waitStarted(SETTLE_WINDOW_MS)) {
-      await w.waitLoaded(SETTLE_TIMEOUT_MS);
+      await w.waitLoaded(remaining());
     } else {
-      try {
-        await client.callFunction(context, WAIT_QUIET_SOURCE, [num(QUIET_MS), num(SETTLE_TIMEOUT_MS)]);
-      } catch (error) {
-        // The document may have been replaced mid-wait by a late navigation.
-        if (!w.started) throw error;
-        await w.waitLoaded(SETTLE_TIMEOUT_MS);
+      const navStarted = (): boolean => (w as { readonly started: boolean }).started;
+      const inFlight = (): number => (w as { readonly inFlightCount: number }).inFlightCount;
+      while (remaining() > 0) {
+        if (navStarted()) {
+          await w.waitLoaded(remaining());
+          break;
+        }
+        if (inFlight() > 0) {
+          await w.waitNetworkIdle(remaining());
+          if (navStarted()) {
+            await w.waitLoaded(remaining());
+            break;
+          }
+        }
+        try {
+          const capMs = remaining() >= SETTLE_TIMEOUT_MS - 500 ? SETTLE_TIMEOUT_MS : remaining();
+          await client.callFunction(context, WAIT_QUIET_SOURCE, [num(QUIET_MS), num(capMs)]);
+        } catch (error) {
+          // The document may have been replaced mid-wait by a late navigation.
+          if (!navStarted()) throw error;
+          await w.waitLoaded(remaining());
+          break;
+        }
+        if (navStarted()) {
+          await w.waitLoaded(remaining());
+          break;
+        }
+        if (inFlight() === 0) {
+          break;
+        }
       }
     }
     return await pageState(client, context);
@@ -399,7 +430,7 @@ export async function settle(client: BidiClient, context: string, watch?: Naviga
 }
 
 async function armWatch(client: BidiClient, context: string): Promise<NavigationWatch> {
-  await client.subscribe(["browsingContext.navigationStarted", "browsingContext.load"], [context]);
+  await client.subscribe(SETTLE_EVENTS, [context]);
   return client.watchNavigation(context);
 }
 
