@@ -3,6 +3,7 @@
 // Pure logic. Error messages and hints NEVER contain provided text values.
 import { Ajv2020 } from "ajv/dist/2020.js";
 import { PwaNavError } from "../core/errors.js";
+import { StaleRefError, type LocatorSidecar } from "../core/refs.js";
 import type { Locator, Screen } from "./screen-map.js";
 
 export type TargetKind = "field" | "action" | "link";
@@ -248,4 +249,23 @@ export function describeResolved(target: ResolvedTarget, intent: Intent): string
   const occurrence = target.locator.occurrence ?? 0;
   const warn = target.requiresSensitive ? " [submits sensitive fields]" : "";
   return `${intent} @${target.id}: ${target.role} "${target.name}" (${target.kind}, occurrence ${occurrence.toString()})${warn}`;
+}
+
+export function refFor(
+  sidecar: LocatorSidecar | null,
+  locator: Locator,
+  target: ResolvedTarget,
+  snapshotId: string,
+): string {
+  const want = locator.occurrence ?? 0;
+  for (const [ref, found] of Object.entries(sidecar?.locators ?? {})) {
+    if (found.role === locator.role && found.name === locator.name && (found.occurrence ?? 0) === want) {
+      return ref;
+    }
+  }
+  throw new StaleRefError(
+    snapshotId,
+    `mapped element @${target.id} (${locator.role} "${locator.name}") was not found on the live page ` +
+      "(screen drift or wrong screen); run: snapshot --learn to review the map",
+  );
 }

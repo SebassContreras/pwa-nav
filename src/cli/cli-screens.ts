@@ -8,12 +8,11 @@ import type { Backend } from "../backend/backend.js";
 import { PwaNavError } from "../core/errors.js";
 import { captureLiveSnapshot, performAct, performClick, performFill, performLiveSnapshot } from "../ops/ops.js";
 import type { ActOp } from "../ops/ops.js";
-import { load as loadSnapshot, loadLocators, StaleRefError } from "../core/refs.js";
-import type { LocatorSidecar } from "../core/refs.js";
-import type { Locator, Screen, ScreenMap } from "../screens/screen-map.js";
+import { load as loadSnapshot, loadLocators } from "../core/refs.js";
+import type { Screen, ScreenMap } from "../screens/screen-map.js";
 import { findScreen, loadExplicitMap, loadScreenMapsFromDir, resolveScreensDir, selectMap } from "../screens/screen-match.js";
 import { learnScreen, slugify } from "../screens/screen-learn.js";
-import { describeResolved, isSemanticToken, parseFlowInputs, parseSemanticAct, parseTarget, resolveFlow, resolveTarget } from "../screens/screen-resolve.js";
+import { describeResolved, isSemanticToken, parseFlowInputs, parseSemanticAct, parseTarget, refFor, resolveFlow, resolveTarget } from "../screens/screen-resolve.js";
 import type { Intent, ResolvedTarget } from "../screens/screen-resolve.js";
 import { learnIntoFile, renderDiff } from "../screens/screen-store.js";
 import { renderScreenView, renderUnmappedHint } from "../screens/screen-view.js";
@@ -177,17 +176,6 @@ interface Planned {
   text?: string;
 }
 
-function refFor(sidecar: LocatorSidecar | null, locator: Locator, target: ResolvedTarget, snapshotId: string): string {
-  const want = locator.occurrence ?? 0;
-  for (const [ref, found] of Object.entries(sidecar?.locators ?? {})) {
-    if (found.role === locator.role && found.name === locator.name && (found.occurrence ?? 0) === want) return ref;
-  }
-  throw new StaleRefError(
-    snapshotId,
-    `mapped element @${target.id} (${locator.role} "${locator.name}") was not found on the live page ` +
-      "(screen drift or wrong screen); run: snapshot --learn to review the map",
-  );
-}
 
 // Fresh snapshot (quiet) + refs for every planned target, then the existing eN action paths.
 async function execute(ctx: SemanticContext, planned: Planned[], mode: "single" | "batch"): Promise<void> {
