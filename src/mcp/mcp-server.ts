@@ -54,19 +54,19 @@ const BASE_INSTRUCTIONS =
   "Sensitive fields (passwords, tokens, payment) must be filled by the user, never by the agent. " +
   "Snapshots are files: read the returned path, do not expect elements inline. " +
   "CRITICAL OPERATIONAL RULES FOR THE AGENT: " +
-  "1. DO NOT NAVIGATE AWAY WITH pwa_open: The PWA window is already running and loaded with the user's target app. " +
-  "Never call pwa_open to perform searches, query external search engines, or navigate away. Only call pwa_open if the user explicitly asks to open a different website. " +
-  "2. MANDATORY FIRST STEP: Always start any task by calling pwa_snapshot with screen: true. " +
-  "This inspects the active window and returns the screen map showing semantic @id targets (e.g. @search-input, @submit-btn), available flows, and journeys. " +
-  "3. HOW TO SEARCH AND ENTER DATA: To search or enter data, find the input's semantic @id from the screen map and call pwa_fill(target: '@id', text: 'query'). " +
-  "Then click the search/submit button with pwa_click(target: '@submit-btn'), or combine them with pwa_act(ops: ['fill:@search-input=query', 'click:@submit-btn']). " +
-  "4. HOW TO EXECUTE JOURNEYS AND FLOWS: When multi-screen user journeys (tools named journey_*) or single-screen flows (tools named flow_*) are available, " +
-  "call them directly with their declared input arguments. Journeys handle multi-route transitions and destination verification automatically. " +
-  "5. UNMAPPED SCREENS & CREATING MAPS: If pwa_snapshot with screen: true returns exit code 13 (unmapped_screen), " +
-  "call pwa_learn (or pwa_snapshot with learn: true, locale: 'es') to immediately register and persist the screen map into screens/<app>.screens.json. " +
-  "This creates permanent semantic @id targets (e.g. @buscar, @carro) and eliminates stale eN refs! " +
-  "Alternatively, call pwa_snapshot without flags to inspect raw ephemeral eN refs in .agent/snapshot.json. " +
-  "6. INVALIDATION: Ephemeral eN refs expire immediately after any mutating action. You must re-snapshot before using eN refs again. " +
+  "1. STRICT TEXT-FIRST & NO-VISION DOCTRINE (NO RANDOM SCREENSHOTS): NEVER call pwa_screenshot to discover UI elements, inspect modals/dialogs, or check if an action succeeded. " +
+  "Many agent models are text-only and cannot process images, and screenshots waste large amounts of context tokens. " +
+  "Whenever you need to inspect page state, see if a dialog appeared, or discover new clickable elements, ALWAYS call pwa_snapshot to re-read the accessibility tree in pure text. " +
+  "2. AUTONOMOUS SCREEN MAPS (ZERO PROMPTING): The agent must autonomously maintain screen maps. Start with pwa_snapshot(screen: true) to get semantic @id targets. " +
+  "If the active screen or route is unmapped (exit code 13), autonomously call pwa_learn (or pwa_snapshot with learn: true, locale: 'es') immediately to register and persist screens/<app>.screens.json without bothering or prompting the user. " +
+  "Then continue using the permanent semantic @id targets (e.g. @cuadro-de-consulta, @enviar). " +
+  "3. WORK DIRECTLY IN THE OPEN APPLICATION: When the user asks to research, take notes, or create content in an open PWA (like Google NotebookLM), work directly within the app! " +
+  "Do NOT leave the app to run external web searches (e.g. Exa, Google). Use the PWA's own fields, in-app source discoverers, notes, and query boxes directly. " +
+  "4. NO ARBITRARY SLEEPS: Do not run arbitrary sleep commands (e.g. Start-Sleep 40s). " +
+  "WebDriver BiDi automatically waits for network idle and DOM settling. If waiting for an in-app async operation to complete, simply re-read the page with pwa_snapshot to inspect element status. " +
+  "5. HOW TO SEARCH AND ENTER DATA: To enter data, find the input's semantic @id and call pwa_fill(target: '@id', text: 'query'). " +
+  "Then click submit with pwa_click(target: '@submit-btn'), or combine them with pwa_act(ops: ['fill:@input=query', 'click:@submit-btn']). " +
+  "6. HOW TO EXECUTE JOURNEYS AND FLOWS: When multi-screen user journeys (tools named journey_*) or single-screen flows (tools named flow_*) are available, call them directly. " +
   "7. SAFETY: Present dry-run action plans to the user before armed execution. On exit code 11 (sensitive_target), ask the user to type the value manually.";
 
 /** Tool error: code + message + hint only. Never tool argument values. */

@@ -40,7 +40,7 @@ Choose the interface based on your environment:
 | **Click element** | `pwa-nav click <target> [--armed]` | `pwa_click` (`target`) | Target can be semantic `'@id'` or ephemeral `eN`. |
 | **Fill input** | `pwa-nav fill <target> <text> [--armed]` | `pwa_fill` (`target`, `text`) | Rejects sensitive fields (exit 11). |
 | **Upload files** | `pwa-nav upload <target> <path...> [--armed]` | `pwa_upload` (`target`, `files`) | Sets files on file inputs. Safe paths only. |
-| **Capture screenshot** | `pwa-nav screenshot [--out <path>]` | `pwa_screenshot` (`path`, `format`) | Saves binary PNG to disk; returns `{ path, width, height }`. |
+| **Capture screenshot** | `pwa-nav screenshot [--out <path>]` | `pwa_screenshot` (`path`, `format`) | Saves binary PNG to disk. **NEVER use for navigation or state inspection** (breaks text-only agents). |
 | **Batch actions** | `pwa-nav act <ops...> [--armed]` | `pwa_act` (`ops`) | Combines clicks, fills, uploads, and flows. |
 | **Read page content** | `pwa-nav extract --mode text\|links` | `pwa_extract` (`mode`) | Read-only; does not invalidate snapshots. |
 | **Multi-screen journey** | `pwa-nav journey <name> [k=v] [--armed]` | `journey_<name>` (`params`) | Executes multi-route journeys with screen validation. |
@@ -85,21 +85,22 @@ Always follow this decision path to minimize token consumption and avoid breakin
                                        +----------------------------+
 ```
 
-### Loop A: Semantic Screen Map Loop (Preferred)
-1. Run `pwa-nav snapshot --screen` (or `pwa_snapshot(screen: true)`).
-2. It prints a compact listing of available semantic targets (e.g. `'@search-bar'`, `'@cart-button'`), required inputs, and available flows/journeys.
-3. Plan actions using `'@id'` targets or invoke journeys:
+### Loop A: Semantic Screen Map Loop (Preferred & Autonomous)
+1. Run `pwa_snapshot({ screen: true })` (or CLI `pwa-nav snapshot --screen`).
+2. If the screen is new or the route changed (`unmapped_screen`), the agent autonomously calls `pwa_learn({ locale: "es" })` (or CLI `snapshot --learn`) to register `screens/<app>.screens.json` without asking the user.
+3. Plan actions using `'@id'` targets or invoke journeys/flows:
+   - In MCP: `pwa_click({ target: "@submit-btn" })` or `pwa_fill({ target: "@query", text: "term" })`
    - In CLI: `pwa-nav click --snapshot <id> '@submit-btn'`
    - Batch: `pwa-nav act --snapshot <id> "fill:'@query'=laptop" "click:'@search-btn'"`
    - Journey: `pwa-nav journey checkout address="Main St 12"`
-4. Armed execution updates the screen state and outputs the new compact screen view automatically.
+4. **State Change Inspection (Zero Screenshots)**: When an action causes a modal, dialog, or view change, **call `pwa_snapshot` again** to inspect the new DOM in pure text. **NEVER take a screenshot**.
 
-### Loop B: Raw Accessibility Loop (Fallback)
-1. When a screen is not yet mapped (exit 13) or if an `@id` becomes stale due to UI redesign:
+### Loop B: Raw Accessibility Loop (Fallback for Ephemeral Elements)
+1. When targeting transient non-mapped items or inspecting raw element hierarchies:
 2. Run `pwa-nav snapshot -i` (or `pwa_snapshot(interactiveOnly: true)`).
 3. Inspect `.agent/snapshot.json` by searching for specific elements (`grep` / `Select-String`). **NEVER** dump the entire JSON into context.
-4. Target ephemeral refs (`e1`, `e2`, etc.):
-   - `pwa-nav click --snapshot <id> e5`
+4. Target ephemeral refs (`e1`, `e2`, etc.) or visible text directly:
+   - `pwa-nav click --snapshot <id> e5` or MCP `pwa_click({ ref: "Cerrar" })`
 5. **Invalidation Rule (Hard)**: Ephemeral `eN` refs are valid for **ONE snapshot only**. Any mutation (`click`, `fill`, `act`) invalidates the snapshot immediately. You **must** re-snapshot before the next mutation.
 
 ---
@@ -139,6 +140,9 @@ In PowerShell, the `@` symbol is reserved for array sub-expressions and variable
 5. **Kill Switch**: If `.agent/kill` or `PWA_NAV_KILL_SWITCH` exists, all actions halt immediately (exit 7). Never delete the kill switch yourself; the user must remove it.
 6. **Single BiDi Client**: Firefox allows only one WebDriver BiDi session. If `session_busy` (exit 5) occurs, ensure no other CLI, MCP server, or bridge is running.
 7. **File Upload Security Boundary**: File uploads (`pwa_upload`, `upload`) are strictly restricted to files within allowed safe directories (workspace root or `.agent/`). Files attempting path traversal (`..`) or targeting sensitive files (`.env*`, private keys) are rejected with exit code 15 (`file_upload_blocked`).
+8. **Text-First, Vision-Free Autonomous Operation**: NEVER take screenshots (`pwa_screenshot`) to discover UI elements, inspect modals/dialogs, or check if an action succeeded. Screenshots waste massive amounts of tokens and completely fail on text-only LLM models. Always use `pwa_snapshot` to inspect state. When encountering an unmapped screen, autonomously call `pwa_learn` to generate the screen map without prompting the user.
+9. **Direct In-App Operation**: Work directly within the open application. Do NOT diverge into external search engines (Exa, Google) when the task is to research and write inside the open PWA (like Google NotebookLM).
+10. **Zero Arbitrary Sleep Delays**: Never run shell pauses (`Start-Sleep 40s`). WebDriver BiDi settles network and DOM automatically. Verify asynchronous updates by re-reading `pwa_snapshot`.
 
 ---
 

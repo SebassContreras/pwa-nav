@@ -97,7 +97,7 @@ Schemas are in `tools/list`. All results are `content` text plus `structuredCont
 | `pwa_click` | `snapshotId` + `ref`, or `target` (`@id`) | destructive, open-world | `{dryRun, snapshotId, path, url}`. |
 | `pwa_fill` | `snapshotId` + `ref`, or `target`; `text` (required) | destructive, open-world | Same. Sensitive fields (passwords) refused. |
 | `pwa_upload` | `files[]` (required), `snapshotId` + `ref`, or `target` (`@id`) | destructive, open-world | `{dryRun, snapshotId, path, files}`. Sets files on file inputs. Safe paths only. |
-| `pwa_screenshot` | `path?`, `format?` (`png\|jpeg\|webp`) | read-only, not destructive | `{path, width, height}`. Saves binary PNG/image to disk; never leaks base64 into context. |
+| `pwa_screenshot` | `path?`, `format?` (`png\|jpeg\|webp`) | read-only, not destructive | `{path, width, height}`. Saves binary PNG to disk. **DO NOT use for navigation, state inspection, or discovering elements** (preserves tokens and supports text-only agents). |
 | `pwa_extract` | `snapshotId`, `mode` `text\|links` (required), `limit?` (1-100) | read-only, idempotent | Up to 100 lines inline; `{total, returned, omitted}`, rest stays in the snapshot file. |
 | `pwa_act` | `ops[]` (required), `snapshotId?`, `inputs?` | destructive, open-world | Same as click. Plain ops need `snapshotId`: `click:<ref>`, `fill:<ref>=<text>`, `upload:<ref>=<path>`. Semantic ops (no `snapshotId`): `click:@id`, `fill:@id=<text>`, `upload:@id=<path>`, `flow:<id>` with `inputs`. Do not mix. |
 
@@ -129,7 +129,9 @@ Screen learning is available both via CLI (`pwa-nav snapshot --learn`) and via M
 - Origin allow-list `.agent/allow.json`: armed actions and `pwa_open` need the origin listed. Consent via `pwa_open` with `allowOrigin: true` (only with the user's OK). Refused otherwise with `origin_blocked`.
 - Kill-switch: file `.agent/kill` or path in `PWA_NAV_KILL_SWITCH`. Present = `kill_switch`, also blocks `pwa_open`. Only the user removes it.
 - File upload security boundary: `pwa_upload` is strictly restricted to files within allowed safe directories (workspace root or `.agent/`). Traversals (`..`) and sensitive files (`.env*`, private keys) are blocked immediately (exit 15 `file_upload_blocked`).
-- Visual screenshot storage: `pwa_screenshot` writes binary images directly to disk and returns metadata `{path, width, height}`. Raw image bytes or base64 strings are never dumped into context.
+- Text-First & Vision-Free Automation: `pwa_screenshot` writes binary images to disk and is reserved for explicit user visual artifact requests only. **NEVER use screenshots to inspect state or discover UI elements**; this breaks on text-only LLMs and wastes tokens. ALWAYS use `pwa_snapshot` to re-read the accessibility tree.
+- Autonomous Screen Learning: When navigating to a new route, agents should autonomously call `pwa_learn` to map and persist screens without waiting for human prompting.
+- In-App Operation & Zero Arbitrary Sleeps: Operates directly inside the open PWA without leaving to external search engines. No `Start-Sleep` pauses; WebDriver BiDi automatically settles network and DOM.
 - Dry-run: unarmed writes return `dryRun: true`; no input is sent.
 - Reads (`pwa_snapshot`, `pwa_screenshot`, `pwa_extract`) need none of this.
 

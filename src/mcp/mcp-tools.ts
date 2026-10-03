@@ -189,10 +189,11 @@ const open: ToolDef = {
 const snapshot: ToolDef = {
   name: "pwa_snapshot",
   description:
-    "MANDATORY FIRST STEP: Inspect the active PWA window. Three modes:\n" +
+    "MANDATORY FIRST STEP & STATE INSPECTION: Inspect the active PWA window in text (DOM/accessibility tree). " +
+    "DO NOT take screenshots to discover elements; use this tool instead (preserves tokens and supports text-only agents).\n" +
     "- { screen: true } -> Return compact screen-map view with semantic @id targets, flows, and journeys.\n" +
     "- { learn: true } -> Learn the current screen into screens/<app>.screens.json (generates permanent @id targets).\n" +
-    "- default (no flags) -> Collect raw interactive elements into .agent/snapshot.json and return its count.",
+    "- default (no flags) -> Collect raw interactive elements into .agent/snapshot.json and return its count and snapshotId.",
   inputSchema: {
     type: "object",
     properties: {
@@ -382,7 +383,10 @@ const upload: ToolDef = {
 const screenshotTool: ToolDef = {
   name: "pwa_screenshot",
   description:
-    "Capture a visual screenshot of the current page and save it to disk. Returns the saved file path and image dimensions (never returns base64 bytes inline to preserve context tokens).",
+    "DO NOT USE FOR NAVIGATION, DISCOVERY, OR STATE INSPECTION. " +
+    "Capture a visual screenshot ONLY when explicitly requested by the user. " +
+    "Many agents cannot process images, and screenshots waste massive amounts of tokens. " +
+    "To check if an action succeeded, discover new elements, or inspect popups/dialogs, ALWAYS call pwa_snapshot instead.",
   inputSchema: {
     type: "object",
     properties: {

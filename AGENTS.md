@@ -74,25 +74,24 @@ When configuring `pwa-nav` as an MCP server for any agent environment:
 
 Agents operate through two complementary navigation layers:
 
-### 1. Screen Map & User Journey Loop (Recommended for known apps)
-1. **Inspect Screen**: Run `pwa-nav snapshot --screen` (reads URL only; returns compact text view with fields, actions, links, and flows).
+#### 1. Screen Map & User Journey Loop (Recommended & Autonomous)
+1. **Inspect / Auto-Learn Screen**: Run `pwa_snapshot({ screen: true })` (in CLI: `pwa-nav snapshot --screen`). If the screen or route is unmapped, the agent autonomously calls `pwa_learn({ locale: "es" })` (or CLI `pwa-nav snapshot --learn`) to learn and persist `screens/<app>.screens.json`, returning semantic `@id` targets without asking the user.
 2. **Execute Semantic Action**: Use semantic `@id` targets:
-   - `pwa-nav click '@sign-in'` (dry-run preview).
-   - `pwa-nav fill '@email' "user@example.com"` (dry-run preview).
+   - `pwa-nav click '@sign-in'` or MCP `pwa_click({ target: "@sign-in" })` (dry-run preview).
+   - `pwa-nav fill '@email' "user@example.com"` or MCP `pwa_fill({ target: "@email", text: "..." })`.
    - `pwa-nav upload '@resume' ./file.pdf` (dry-run preview; safe paths only).
    - `pwa-nav act flow:login-flow username="alice"` (single-screen flow).
    - `pwa-nav journey checkout-journey term="shoes"` (multi-screen declarative user journey across route transitions).
-   - `pwa-nav screenshot` (captures visual PNG to `.agent/screenshot.png` directly).
 3. **Execute Armed**: Only after presenting the dry-run plan to the user and receiving explicit permission, run with `--armed`.
-4. **Transition Verification**: Multi-screen journeys automatically wait for network-idle and DOM quiescence (`settle`), and assert the destination screen matches `expectScreen` (fails fast with code 14 if route drifts).
+4. **Transition & Modal Verification (Zero Screenshots)**: Multi-screen journeys and actions automatically settle network and DOM. When verifying popups, dialogs, or state changes, **call `pwa_snapshot` again** to inspect the updated accessibility tree in pure text. **NEVER take a screenshot**.
 
-### 2. Direct & Raw Interaction Loop (For exploration, unmapped screens, or MCP)
-1. **Capture Snapshot**: `pwa-nav snapshot` (or MCP `pwa_snapshot()`). Collects interactive elements into `.agent/snapshot.json` and returns the absolute file path.
+### 2. Direct & Raw Interaction Loop (For exploration or unmapped transient elements)
+1. **Capture Snapshot**: `pwa-nav snapshot` (or MCP `pwa_snapshot()`). Collects interactive elements into `.agent/snapshot.json` and returns element count and path.
 2. **Interact Directly**:
    - In MCP: call `pwa_click({ ref: "e1" })`, `pwa_click({ ref: "Sign in" })`, or `pwa_click({ target: "@sign-in" })` directly without requiring `snapshotId` (it resolves to the latest snapshot automatically).
    - In CLI: use `pwa-nav click --snapshot <id> <ref>` or semantic `pwa-nav click '@target'`.
 3. **Smart PWA Navigation & Assisted Auth**: Pass URL or installed app slug directly: `pwa-nav open notebook` or `pwa_open({ url: "notebook" })`. For login-walled apps (Google, bot walls), use `pwa-nav auth <app>` or MCP `pwa_auth` to launch in clean mode for user login and re-attach in debug mode.
-4. **Learn Screen**: When on a stable, new screen, run `pwa-nav snapshot --learn --locale <bcp47>` (or in MCP call `pwa_learn` / `pwa_snapshot(learn: true)`) to register it into `screens/<app>.screens.json` and generate permanent `@id` targets.
+4. **Learn Screen**: When on a stable, new screen, run `pwa_learn` (or CLI `pwa-nav snapshot --learn --locale <bcp47>`) to register it into `screens/<app>.screens.json`.
 
 ---
 
@@ -107,7 +106,9 @@ Agents operate through two complementary navigation layers:
 7. **Secrets**: Never commit secrets, `.env` files, or user cookies.
 8. **Windows PowerShell Splatting**: In PowerShell, `@id` without quotes is treated as an empty splatting variable. **Always quote semantic targets in shell commands**: `'@id'` or `click:'@id'`.
 9. **File Upload Security Boundary**: File uploads (`upload`, `pwa_upload`) are strictly restricted to files within allowed safe directories (workspace root or `.agent/`). Paths with traversal (`..`) or targeting sensitive files (`.env*`, private keys) are blocked immediately (exit code 15 `file_upload_blocked`).
-10. **Absolute Paths & Visual Economy**: MCP returns absolute file paths for snapshots, sessions, and screenshots. Screenshots are written directly to disk (`.agent/screenshot.png`). Binary image data or base64 strings are **never** dumped into agent context.
+10. **Text-First & Vision-Free Automation (Zero Random Screenshots)**: `pwa_screenshot` is strictly restricted to explicit user visual artifact requests. Agents **MUST NEVER** use screenshots to discover UI elements, inspect modals/dialogs, or check state. Many agents cannot process images, and screenshots waste thousands of tokens. Always re-inspect state using `pwa_snapshot`.
+11. **Direct In-App Execution**: When tasked with research or content generation inside an open PWA (like Google NotebookLM), operate directly within the application's native inputs and notes. Do NOT diverge to external search engines (Exa, Google).
+12. **Zero Arbitrary Sleep Delays**: Never run shell pauses (`Start-Sleep 40s`). WebDriver BiDi automatically settles network and DOM. Verify asynchronous updates by re-reading `pwa_snapshot`.
 
 ---
 
