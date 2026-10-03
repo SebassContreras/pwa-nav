@@ -1,12 +1,14 @@
 import assert from "node:assert/strict";
 import type { ChildProcess } from "node:child_process";
-import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { test } from "node:test";
 import { PwaNavError } from "../core/errors.js";
 import {
   buildLaunchArgs,
+  ensureDebuggingPortConfigured,
+  ensureStealthPrefsConfigured,
   findSite,
   firefoxPwaDir,
   launchCommandHint,
@@ -323,3 +325,31 @@ test("launchPwa refuses when port already listening", async () => {
     );
   });
 });
+
+test("ensureStealthPrefsConfigured and ensureDebuggingPortConfigured write stealth prefs and port", async () => {
+  await withDir(async (dir) => {
+    const profileDir = join(dir, "profiles", "01TESTPROFILEAAAAAAAAAAAA");
+    await mkdir(profileDir, { recursive: true });
+
+    // Initial run adds port and stealth prefs
+    const updated = await ensureDebuggingPortConfigured(dir, 9222);
+    assert.equal(updated, true);
+
+    const userJs = await readFile(join(profileDir, "user.js"), "utf8");
+    assert.match(userJs, /remote\.prefs\.recommended.*false/);
+    assert.match(userJs, /dom\.webdriver\.enabled.*false/);
+
+    const cfgText = await readFile(join(dir, "config.json"), "utf8");
+    const cfg = JSON.parse(cfgText) as { arguments?: string[] };
+    assert.deepEqual(cfg.arguments, ["--remote-debugging-port", "9222"]);
+
+    // Second run is idempotent (no changes)
+    const second = await ensureDebuggingPortConfigured(dir, 9222);
+    assert.equal(second, false);
+
+    // ensureStealthPrefsConfigured directly returns false when already configured
+    const stealth = await ensureStealthPrefsConfigured(dir);
+    assert.equal(stealth, false);
+  });
+});
+
