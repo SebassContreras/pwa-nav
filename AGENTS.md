@@ -59,7 +59,7 @@ This file is the single agent-instructions entrypoint; there is no `CLAUDE.md`. 
 When configuring `pwa-nav` as an MCP server for any agent environment:
 
 - **Command**: `node <abs-path>/dist/mcp.js` (transport: stdio).
-- **Default Port & Zero-Config Firefox PWA**: Defaults to port `9222`. Passing `--port 9222` is optional because the server automatically reads FirefoxPWA's `config.json` on launch and injects `--remote-debugging-port 9222` into global arguments if absent.
+- **Default Port & Zero-Config Firefox PWA**: Defaults to port `9222`. Passing `--port 9222` is optional. The runtime binary is spawned with `--remote-debugging-port 9222` on demand, keeping FirefoxPWA's `config.json` clean so normal manual browsing and logins (like Google Accounts) remain unblocked.
 - **Available Server Flags (`args`)**:
   - `--armed` (or env `PWA_NAV_ARMED=1`): Run in armed mode. By default, the server runs in safe **dry-run** mode (previews mutations). Use `--armed` only when permitted by the user.
   - `--port <n>`: Override BiDi debugging port (default: `9222`).
@@ -91,7 +91,7 @@ Agents operate through two complementary navigation layers:
 2. **Interact Directly**:
    - In MCP: call `pwa_click({ ref: "e1" })`, `pwa_click({ ref: "Sign in" })`, or `pwa_click({ target: "@sign-in" })` directly without requiring `snapshotId` (it resolves to the latest snapshot automatically).
    - In CLI: use `pwa-nav click --snapshot <id> <ref>` or semantic `pwa-nav click '@target'`.
-3. **Smart PWA Navigation**: Pass URL or installed app slug directly: `pwa-nav open notebook` or `pwa_open({ url: "notebook" })`. Installed FirefoxPWA apps are automatically discovered, launched if closed, and auto-whitelisted without extra flags.
+3. **Smart PWA Navigation & Assisted Auth**: Pass URL or installed app slug directly: `pwa-nav open notebook` or `pwa_open({ url: "notebook" })`. For login-walled apps (Google, bot walls), use `pwa-nav auth <app>` or MCP `pwa_auth` to launch in clean mode for user login and re-attach in debug mode.
 4. **Learn Screen**: When on a stable, new screen, run `pwa-nav snapshot --learn --locale <bcp47>` (or in MCP call `pwa_learn` / `pwa_snapshot(learn: true)`) to register it into `screens/<app>.screens.json` and generate permanent `@id` targets.
 
 ---

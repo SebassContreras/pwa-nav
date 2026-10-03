@@ -172,6 +172,7 @@ test("tools/list: names, schemas compile under Ajv 2020, annotations, no armed f
     const { tools } = await client.listTools();
     assert.deepEqual(tools.map((t) => t.name).sort(), [
       "pwa_act",
+      "pwa_auth",
       "pwa_click",
       "pwa_extract",
       "pwa_fill",
@@ -492,7 +493,7 @@ test("flow tools: listed with the flow's own inputSchema; humanOnly flows are no
     assert.match(flow.description ?? "", /^Run flow "search" on screen "search" of app "synthetic"/);
     assert.match(flow.description ?? "", /Search for a term\./);
     assert.ok(!(flow.description ?? "").includes("Query"), "element names never reach descriptions");
-    assert.equal(tools.length, 10);
+    assert.equal(tools.length, 11);
     const ajv = new Ajv2020({ allErrors: true, strict: true });
     for (const tool of tools) assert.doesNotThrow(() => ajv.compile(tool.inputSchema), tool.name);
     assert.match(client.getInstructions() ?? "", /dry-run/i);
@@ -501,7 +502,7 @@ test("flow tools: listed with the flow's own inputSchema; humanOnly flows are no
   // The demo map only has a humanOnly flow: no flow tool, but instructions + resource mention it.
   await withMcp({}, async ({ client }) => {
     const { tools } = await client.listTools();
-    assert.equal(tools.length, 9);
+    assert.equal(tools.length, 10);
     assert.ok(!tools.some((t) => t.name.startsWith("flow_")));
     assert.match(client.getInstructions() ?? "", /Human-only flows exist.*login \(screen login\)/);
     const { resources } = await client.listResources();
@@ -624,7 +625,7 @@ test("startup tolerates missing, invalid, ambiguous and Ajv-invalid maps (no flo
   for (const [label, maps, expected] of cases) {
     await withMcp({ maps }, async ({ client, logs }) => {
       const { tools } = await client.listTools();
-      assert.equal(tools.length, 9, label);
+      assert.equal(tools.length, 10, label);
       assert.ok(logs.some((l) => expected.test(l)), `${label}: ${logs.join(" | ")}`);
       const { resources } = await client.listResources();
       assert.deepEqual(resources.map((r) => r.uri), ["pwa-nav://snapshot/latest"], label);

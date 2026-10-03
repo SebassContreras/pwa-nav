@@ -6,13 +6,15 @@ import { join } from "node:path";
 import { test } from "node:test";
 import { PwaNavError } from "../core/errors.js";
 import {
+  buildCleanLaunchArgs,
   buildLaunchArgs,
-  ensureDebuggingPortConfigured,
-  ensureStealthPrefsConfigured,
+  cleanDebuggingPortConfigured,
   findSite,
   firefoxPwaDir,
+  isLoginBarrier,
   launchCommandHint,
   launchPwa,
+  launchPwaClean,
   parseConfig,
   readConfig,
   runtimePath,
@@ -326,30 +328,60 @@ test("launchPwa refuses when port already listening", async () => {
   });
 });
 
-test("ensureStealthPrefsConfigured and ensureDebuggingPortConfigured write stealth prefs and port", async () => {
+test("cleanDebuggingPortConfigured removes port flags from config.json", async () => {
   await withDir(async (dir) => {
-    const profileDir = join(dir, "profiles", "01TESTPROFILEAAAAAAAAAAAA");
-    await mkdir(profileDir, { recursive: true });
+    // Write config with dirty arguments
+    const configPath = join(dir, "config.json");
+    await writeFile(
+      configPath,
+      JSON.stringify({ ...fixture, arguments: ["--some-flag", "--remote-debugging-port", "9222"] }),
+    );
 
-    // Initial run adds port and stealth prefs
-    const updated = await ensureDebuggingPortConfigured(dir, 9222);
-    assert.equal(updated, true);
+    const cleaned = await cleanDebuggingPortConfigured(dir);
+    assert.equal(cleaned, true);
 
-    const userJs = await readFile(join(profileDir, "user.js"), "utf8");
-    assert.match(userJs, /remote\.prefs\.recommended.*false/);
-    assert.match(userJs, /dom\.webdriver\.enabled.*false/);
-
-    const cfgText = await readFile(join(dir, "config.json"), "utf8");
+    const cfgText = await readFile(configPath, "utf8");
     const cfg = JSON.parse(cfgText) as { arguments?: string[] };
-    assert.deepEqual(cfg.arguments, ["--remote-debugging-port", "9222"]);
+    assert.deepEqual(cfg.arguments, ["--some-flag"]);
 
-    // Second run is idempotent (no changes)
-    const second = await ensureDebuggingPortConfigured(dir, 9222);
+    // Idempotent second run
+    const second = await cleanDebuggingPortConfigured(dir);
     assert.equal(second, false);
-
-    // ensureStealthPrefsConfigured directly returns false when already configured
-    const stealth = await ensureStealthPrefsConfigured(dir);
-    assert.equal(stealth, false);
   });
 });
+
+test("buildCleanLaunchArgs and launchPwaClean omit debugging port", async () => {
+  const args = buildCleanLaunchArgs({ profileDir: "/tmp/profile", siteId: "01SITE" });
+  assert.deepEqual(args, ["--profile", "/tmp/profile", "--pwa", "01SITE"]);
+
+  await withDir(async (dir) => {
+    const spawned: { binary?: string; args?: string[] } = {};
+    const fake = { pid: 99, on: () => fake, unref: () => undefined } as unknown as ChildProcess;
+    const res = await launchPwaClean({
+      origin: "http://localhost:8080",
+      platform: "linux",
+      env: { PWA_NAV_FIREFOXPWA_DIR: dir },
+      spawnFn: (binary, a) => {
+        spawned.binary = binary;
+        spawned.args = a;
+        return fake;
+      },
+    });
+    assert.equal(res.siteId, SITE_A);
+    assert.equal(res.pid, 99);
+    assert.ok(spawned.args?.includes("--pwa"));
+    assert.ok(!spawned.args?.includes("--remote-debugging-port"));
+  });
+});
+
+test("isLoginBarrier detects google accounts, auth routes and security strings", () => {
+  assert.equal(isLoginBarrier("https://accounts.google.com/signin/v2/identifier"), true);
+  assert.equal(isLoginBarrier("https://app.example.com/login"), true);
+  assert.equal(isLoginBarrier("https://app.example.com/signin"), true);
+  assert.equal(isLoginBarrier("https://notebook.google.com/u/0/"), false);
+  assert.equal(isLoginBarrier("https://app.example.com/", "This browser or app may not be secure"), true);
+  assert.equal(isLoginBarrier("https://app.example.com/", "Es posible que este navegador o aplicación no sea seguro"), true);
+  assert.equal(isLoginBarrier("https://app.example.com/", "Welcome back to your dashboard"), false);
+});
+
 

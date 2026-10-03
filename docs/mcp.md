@@ -49,7 +49,7 @@ Relative paths resolve from the working directory: the client must start the ser
 }
 ```
 
-- `--port 9222` is optional and assumed by default. On startup, the server automatically inspects FirefoxPWA's `config.json` and injects `--remote-debugging-port 9222` into global arguments if absent.
+- `--port 9222` is optional and assumed by default. The PWA runtime is spawned with `--remote-debugging-port 9222` on demand, keeping FirefoxPWA's `config.json` clean so manual browsing and logins (like Google Accounts) remain unblocked.
 - `--armed` is never in the shipped file. Arming is an operator decision (see below).
 - Clients that read `mcpServers` JSON can use it as is, or copy it to their own config. Where the file must live: check your client's docs.
 
@@ -90,7 +90,8 @@ Schemas are in `tools/list`. All results are `content` text plus `structuredCont
 
 | Tool | Args | Annotations | Returns |
 |---|---|---|---|
-| `pwa_open` | `url` (required), `launch?`, `allowOrigin?` | not read-only, not destructive, open-world | `structuredContent {url, path}`. `launch` starts the PWA runtime if nothing listens; `allowOrigin` adds the origin to the allow-list after navigating. |
+| `pwa_open` | `url` (required), `launch?`, `allowOrigin?` | not read-only, not destructive, open-world | `structuredContent {url, path}`. `launch` starts the PWA runtime if nothing listens; `allowOrigin` adds the origin to the allow-list after navigating. Detects login barriers (`loginBarrier: true`). |
+| `pwa_auth` | `action` (`clean\|debug`), `app?` | not read-only, not destructive, open-world | Assisted auth for login-walled PWAs (Google, bot walls). `clean` launches unmonitored for manual user login; `debug` re-attaches with port 9222. |
 | `pwa_snapshot` | `all?`, `screen?`, `learn?` (mutually exclusive), `locale?`, `appId?`, `appName?`, `access?`, `prune?` | read-only (unless `learn`), idempotent | Snapshot path + `elementCount` + `snapshotId` + `url`. `screen: true`: compact screen-map view. `learn: true`: learns screen into `screens/<app>.screens.json`. |
 | `pwa_learn` | `locale?`, `appId?`, `appName?`, `access?`, `prune?` | idempotent | Learn and persist the current screen into `screens/<app>.screens.json`. Returns diff and sets up permanent `@id` targets. |
 | `pwa_click` | `snapshotId` + `ref`, or `target` (`@id`) | destructive, open-world | `{dryRun, snapshotId, path, url}`. |

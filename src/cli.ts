@@ -9,6 +9,7 @@
 // is PwaNavError("invalid_args") -> exit 2.
 import { fstatSync } from "node:fs";
 import { readFile } from "node:fs/promises";
+import * as readline from "node:readline";
 import { parseArgs, type ParseArgsOptionsConfig } from "node:util";
 import { createBackend, DEFAULT_PORT } from "./backend/backend-factory.js";
 import type { Backend } from "./backend/backend.js";
@@ -19,6 +20,7 @@ import {
   loadSession,
   parseActOp,
   performAct,
+  performAuthRelay,
   performClick,
   performExtract,
   performFill,
@@ -63,6 +65,7 @@ function usage(): string {
     "  pwa-nav extract --snapshot <id> --mode text|links",
     "  pwa-nav act --snapshot <id> [--armed] <op>...   |   act [--armed] <semantic-op>...",
     "  pwa-nav journey <name> [key=value...] [--armed] [--screen-map <file>] [--screens-dir <dir>]",
+    "  pwa-nav auth [<app-or-url>] [--clean] [--debug] [--port <n>]",
     "  pwa-nav qa run <check-file>",
     "",
     "Global options (open, snapshot, click, fill, upload, screenshot, act, journey):",
@@ -73,6 +76,8 @@ function usage(): string {
     "",
     "Commands:",
     "  open <url>      Live: navigate the PWA window. Offline: persist URL to .agent/session.json.",
+    "  auth            Assisted login for login-walled PWAs (Google accounts, anti-bot walls).",
+    "                  Launches clean PWA, prompts for login, then restarts in debug mode.",
     "  snapshot        Live (no --input, no piped stdin): collect the DOM, write .agent/snapshot.json.",
     "                  With --input <file> or piped stdin: normalize an ARIA tree offline.",
     "  click           Live: dry-run unless --armed. Offline: log intent, supersede snapshot.",
@@ -678,6 +683,34 @@ async function cmdQa(rest: string[]): Promise<void> {
   }
 }
 
+async function cmdAuth(rest: string[]): Promise<void> {
+  const { values, positionals } = strictParse("auth", rest, {
+    clean: { type: "boolean" },
+    debug: { type: "boolean" },
+    port: { type: "string" },
+    help: { type: "boolean", short: "h" },
+  });
+  printHelpAndExit(values.help);
+  const target = positionals[0];
+  const port = values.port !== undefined ? Number(values.port) : undefined;
+
+  if (values.clean) {
+    await performAuthRelay({ appOrUrl: target, action: "clean", port });
+    return;
+  }
+  if (values.debug) {
+    await performAuthRelay({ appOrUrl: target, action: "debug", port });
+    return;
+  }
+
+  await performAuthRelay({ appOrUrl: target, action: "clean", port });
+  console.log("\nPress [Enter] after completing sign-in in the browser window to re-attach in debug mode...");
+  const rl = readline.createInterface({ input: process.stdin, output: process.stdout });
+  await new Promise((resolve) => rl.once("line", resolve));
+  rl.close();
+  await performAuthRelay({ appOrUrl: target, action: "debug", port });
+}
+
 async function main(): Promise<void> {
   const [, , command, ...rest] = process.argv;
   if (command === undefined || command === "-h" || command === "--help") {
@@ -687,6 +720,8 @@ async function main(): Promise<void> {
   switch (command) {
     case "open":
       return cmdOpen(rest);
+    case "auth":
+      return cmdAuth(rest);
     case "snapshot":
       return cmdSnapshot(rest);
     case "click":

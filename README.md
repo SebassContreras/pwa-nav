@@ -52,18 +52,20 @@ pnpm smoke
 2. Install it as a PWA using the PWAsForFirefox extension button in the address bar.
 3. Log in to the application normally.
 
-### Step 3: Launch Your PWA with Remote Debugging (Zero-Friction Setup)
-You can configure FirefoxPWA once to **always** start with port 9222 ready. Open `%APPDATA%\FirefoxPWA\config.json` (or Linux/macOS equivalent) and set:
-```json
-"arguments": ["--remote-debugging-port", "9222"]
-```
-Now, whenever you open any installed PWA from your Start Menu or Taskbar, port `9222` is automatically open!
+### Step 3: Launch Your PWA (On-Demand & Assisted Auth)
 
-Alternatively, launch your installed PWA on demand:
+Launch your installed PWA on demand with remote debugging enabled:
 ```powershell
 pwa-nav open notebook
 ```
-*(Automatically resolves installed apps like Gemini Notebook, launches the runtime if closed, and connects immediately).*
+*(Automatically resolves installed apps like Gemini Notebook, launches the runtime with port 9222 if closed, and connects immediately).*
+
+> [!TIP]
+> **Assisted Login for Google & Login-Walled Apps**: If an app uses Google Sign-In or strict bot walls that block interactive logins when debugging ports are open, run:
+> ```powershell
+> pwa-nav auth notebook
+> ```
+> This opens the PWA in clean mode for you to log in normally, and re-attaches in debug mode once authenticated.
 
 ### Step 4: Your First Navigation Loop
 
@@ -146,7 +148,7 @@ Add to your client config (`mcp.json`, `claude_desktop_config.json`, or `.vscode
 ```
 
 > [!TIP]
-> **Zero Manual Firefox Configuration**: You do not need to specify `"--port", "9222"`. The server defaults to port `9222` and **automatically configures FirefoxPWA's `config.json`** on startup by injecting `--remote-debugging-port 9222` into global arguments if absent!
+> **Zero Manual Firefox Configuration**: You do not need to specify `"--port", "9222"`. The server defaults to port `9222`. The runtime binary is spawned with `--remote-debugging-port 9222` on demand, keeping your Firefox profile and `config.json` clean so normal manual browsing and logins (like Google Accounts) remain unblocked.
 
 ### Server Flags & Options
 

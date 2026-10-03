@@ -3,7 +3,7 @@
 // Never writes to the profile (no user.js/prefs.js).
 import { spawn, type ChildProcess } from "node:child_process";
 import { existsSync } from "node:fs";
-import { readdir, readFile, writeFile } from "node:fs/promises";
+import { readFile, writeFile } from "node:fs/promises";
 import { connect } from "node:net";
 import { join } from "node:path";
 import { PwaNavError } from "../core/errors.js";
@@ -147,48 +147,8 @@ export function parseConfig(raw: unknown): PwaConfig {
   return { sites };
 }
 
-export async function ensureStealthPrefsConfigured(dir: string): Promise<boolean> {
-  const profilesDir = join(dir, "profiles");
-  try {
-    const entries = await readdir(profilesDir, { withFileTypes: true });
-    let updatedAny = false;
-    for (const entry of entries) {
-      if (!entry.isDirectory()) continue;
-      const userJsPath = join(profilesDir, entry.name, "user.js");
-      let content = "";
-      try {
-        content = await readFile(userJsPath, "utf8");
-      } catch {
-        // file does not exist yet
-      }
-      let needsUpdate = false;
-      let newContent = content;
-      if (!newContent.includes("remote.prefs.recommended")) {
-        newContent +=
-          (newContent.length > 0 && !newContent.endsWith("\n") ? "\n" : "") +
-          'user_pref("remote.prefs.recommended", false);\n';
-        needsUpdate = true;
-      }
-      if (!newContent.includes("dom.webdriver.enabled")) {
-        newContent +=
-          (newContent.length > 0 && !newContent.endsWith("\n") ? "\n" : "") +
-          'user_pref("dom.webdriver.enabled", false);\n';
-        needsUpdate = true;
-      }
-      if (needsUpdate) {
-        await writeFile(userJsPath, newContent, "utf8");
-        updatedAny = true;
-      }
-    }
-    return updatedAny;
-  } catch {
-    return false;
-  }
-}
-
-export async function ensureDebuggingPortConfigured(
+export async function cleanDebuggingPortConfigured(
   dir?: string,
-  port: number = 9222,
   platform: string = process.platform,
   env: Env = process.env,
 ): Promise<boolean> {
@@ -200,28 +160,27 @@ export async function ensureDebuggingPortConfigured(
       return false;
     }
   }
-  let modified = false;
   const file = join(targetDir, "config.json");
   try {
     const text = await readFile(file, "utf8");
     const json: unknown = JSON.parse(text);
-    if (isRecord(json)) {
-      const args = Array.isArray(json["arguments"]) ? (json["arguments"] as unknown[]) : [];
-      const hasFlag = args.some(
-        (a) => typeof a === "string" && (a === "--remote-debugging-port" || a.includes("--remote-debugging-port")),
-      );
-      if (!hasFlag) {
-        json["arguments"] = [...args, "--remote-debugging-port", String(port)];
-        await writeFile(file, JSON.stringify(json, null, 2) + "\n", "utf8");
-        modified = true;
-      }
+    if (!isRecord(json)) return false;
+    const args = Array.isArray(json["arguments"]) ? (json["arguments"] as unknown[]) : [];
+    const filtered = args.filter(
+      (a) => typeof a !== "string" || (!a.includes("--remote-debugging-port") && !/^\d{4,5}$/.test(a)),
+    );
+    if (filtered.length !== args.length) {
+      json["arguments"] = filtered;
+      await writeFile(file, JSON.stringify(json, null, 2) + "\n", "utf8");
+      return true;
     }
   } catch {
-    // ignore read/write error for config.json
+    return false;
   }
-  const stealthModified = await ensureStealthPrefsConfigured(targetDir);
-  return modified || stealthModified;
+  return false;
 }
+
+export const ensureDebuggingPortConfigured = cleanDebuggingPortConfigured;
 
 export async function readConfig(dir: string): Promise<PwaConfig> {
   const file = join(dir, "config.json");
@@ -450,4 +409,70 @@ export async function launchPwa(options: LaunchOptions): Promise<LaunchResult> {
     ...(options.intervalMs === undefined ? {} : { intervalMs: options.intervalMs }),
   });
   return { siteId: site.ulid, port: options.port, command, pid: child.pid };
+}
+
+export interface CleanLaunchArgsInput {
+  profileDir: string;
+  siteId: string;
+  headless?: boolean;
+}
+
+export function buildCleanLaunchArgs(input: CleanLaunchArgsInput): string[] {
+  const args = ["--profile", input.profileDir, "--pwa", input.siteId];
+  if (input.headless === true) args.push("--headless");
+  return args;
+}
+
+export interface CleanLaunchOptions {
+  origin: string;
+  siteId?: string;
+  headless?: boolean;
+  platform?: string;
+  env?: Env;
+  spawnFn?: (binary: string, args: string[]) => ChildProcess;
+}
+
+export interface CleanLaunchResult {
+  siteId: string;
+  command: string;
+  pid: number | undefined;
+}
+
+export async function launchPwaClean(options: CleanLaunchOptions): Promise<CleanLaunchResult> {
+  const platform = options.platform ?? process.platform;
+  const env = options.env ?? process.env;
+  const dir = firefoxPwaDir(platform, env);
+  const site = findSite(await readConfig(dir), options.origin, options.siteId);
+  const binary = runtimePath(dir, platform);
+  const args = buildCleanLaunchArgs({
+    profileDir: profileDirOf(dir, site),
+    siteId: site.ulid,
+    ...(options.headless === undefined ? {} : { headless: options.headless }),
+  });
+  const command = launchCommandHint(binary, args, platform);
+  const child = (options.spawnFn ?? defaultSpawn)(binary, args);
+  child.on("error", () => undefined);
+  child.unref();
+  return { siteId: site.ulid, command, pid: child.pid };
+}
+
+export function isLoginBarrier(url: string, pageText?: string): boolean {
+  try {
+    const parsed = new URL(url.startsWith("http") ? url : `https://${url}`);
+    if (parsed.hostname.toLowerCase().includes("accounts.google.com")) return true;
+    if (/\/(login|signin|sign-in|auth0|oauth)/i.test(parsed.pathname)) return true;
+  } catch {
+    // not a valid URL
+  }
+  if (pageText !== undefined) {
+    if (
+      pageText.includes("This browser or app may not be secure") ||
+      pageText.includes("no sea seguro") ||
+      pageText.includes("Sign in with Google") ||
+      pageText.includes("Iniciar sesión con Google")
+    ) {
+      return true;
+    }
+  }
+  return false;
 }

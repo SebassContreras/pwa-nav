@@ -10,6 +10,7 @@ import { PwaNavError } from "../core/errors.js";
 import {
   parseActOp,
   performAct,
+  performAuthRelay,
   performClick,
   performExtract,
   performFill,
@@ -21,6 +22,7 @@ import {
 import type { ActOp } from "../ops/ops.js";
 import { latestSnapshotId, load as loadSnapshot } from "../core/refs.js";
 import { isSemanticToken } from "../screens/screen-resolve.js";
+import { isLoginBarrier } from "../browser/pwa-runtime.js";
 
 /** Max extract lines returned inline; the rest stays in the snapshot file. */
 export const EXTRACT_INLINE_CAP = 100;
@@ -168,7 +170,19 @@ const open: ToolDef = {
     }
     const backend = ctx.backendFactory({ armed: false, ...(launch ? { launch: true } : {}) });
     const session = await performOpen(url, { backend, allowOrigin });
-    return { structured: { url: session.url, path: resolve(agentPath(backend.agentDir, "session.json")) } };
+    const barrier = isLoginBarrier(session.url);
+    return {
+      structured: {
+        url: session.url,
+        path: resolve(agentPath(backend.agentDir, "session.json")),
+        ...(barrier
+          ? {
+              loginBarrier: true,
+              hint: "Login barrier detected (e.g. Google accounts login). Use pwa_auth({ action: 'clean' }) to switch to clean mode for manual user login, then pwa_auth({ action: 'debug' }) to resume automation.",
+            }
+          : {}),
+      },
+    };
   },
 };
 
@@ -224,12 +238,19 @@ const snapshot: ToolDef = {
       return { structured: { screen: true, path: resolve(agentPath(backend.agentDir, "snapshot.json")) } };
     }
     const taken = await performLiveSnapshot(backend, { includeAll: all });
+    const barrier = isLoginBarrier(taken.url);
     return {
       structured: {
         snapshotId: taken.snapshotId,
         path: resolve(agentPath(backend.agentDir, "snapshot.json")),
         elementCount: taken.elements.length,
         url: taken.url,
+        ...(barrier
+          ? {
+              loginBarrier: true,
+              hint: "Login barrier detected (e.g. Google accounts login). Use pwa_auth({ action: 'clean' }) to switch to clean mode for manual user login, then pwa_auth({ action: 'debug' }) to resume automation.",
+            }
+          : {}),
       },
     };
   },
@@ -533,8 +554,46 @@ const learnTool: ToolDef = {
   },
 };
 
+const authTool: ToolDef = {
+  name: "pwa_auth",
+  description:
+    "Assisted authentication workflow for login-walled PWAs (such as Google NotebookLM) where Google or anti-bot defenses block automated login. " +
+    "Action 'clean' launches the PWA without debugging flags so the user can log in manually without security blocks. " +
+    "Action 'debug' re-attaches the PWA with debugging port 9222 active, preserving the logged-in session.",
+  inputSchema: {
+    type: "object",
+    properties: {
+      action: {
+        enum: ["clean", "debug"],
+        description: "clean: launch PWA in clean mode for manual user login. debug: relaunch in debug mode after user is logged in.",
+      },
+      app: {
+        type: "string",
+        description: "App name, slug, or URL (e.g. 'notebook'). Defaults to the installed PWA.",
+      },
+    },
+    additionalProperties: false,
+  },
+  annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: false, openWorldHint: true },
+  async handler(args) {
+    const action = str(args, "action") === "debug" ? "debug" : "clean";
+    const app = str(args, "app");
+    const result = await performAuthRelay({ appOrUrl: app, action });
+    return {
+      text: result.message,
+      structured: {
+        status: result.status,
+        message: result.message,
+        ...(result.command ? { command: result.command } : {}),
+        ...(result.siteId ? { siteId: result.siteId } : {}),
+      },
+    };
+  },
+};
+
 export const TOOLS: readonly ToolDef[] = [
   open,
+  authTool,
   snapshot,
   click,
   fill,

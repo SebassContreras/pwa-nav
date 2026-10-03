@@ -30,6 +30,15 @@ import {
   saveLive,
   StaleRefError,
 } from "../core/refs.js";
+import { PwaNavError } from "../core/errors.js";
+import {
+  cleanDebuggingPortConfigured,
+  findSite,
+  firefoxPwaDir,
+  launchPwa,
+  launchPwaClean,
+  readConfig,
+} from "../browser/pwa-runtime.js";
 
 // Re-exported so existing callers keep their imports.
 export { ensureParentDir, isHttpUrl, loadSession, parseSession };
@@ -366,3 +375,57 @@ export async function performScreenshot(
     ...(dims !== null ? { width: dims.width, height: dims.height } : {}),
   };
 }
+
+export interface AuthRelayOptions {
+  appOrUrl?: string;
+  action: "clean" | "debug";
+  port?: number;
+  quiet?: boolean;
+}
+
+export interface AuthRelayResult {
+  status: "clean_started" | "debug_resumed";
+  message: string;
+  command?: string;
+  siteId?: string;
+}
+
+export async function performAuthRelay(options: AuthRelayOptions): Promise<AuthRelayResult> {
+  const pwaDir = firefoxPwaDir(process.platform, process.env);
+  const cfg = await readConfig(pwaDir);
+  const target = options.appOrUrl ?? (cfg.sites[0]?.name || cfg.sites[0]?.origin);
+  if (!target) {
+    throw new PwaNavError("no_browser", "no installed Firefox PWA found to authenticate");
+  }
+  const site = findSite(cfg, target);
+
+  if (options.action === "clean") {
+    await cleanDebuggingPortConfigured();
+    const res = await launchPwaClean({ origin: site.origin, siteId: site.ulid });
+    const msg = `PWA '${site.name ?? site.origin}' launched in clean mode (no debugging port). Please sign in manually in the browser window. When finished, re-run with '--debug' or call pwa_auth({ action: 'debug' }) to resume automation.`;
+    if (options.quiet !== true) {
+      console.log(msg);
+    }
+    return {
+      status: "clean_started",
+      message: msg,
+      command: res.command,
+      siteId: site.ulid,
+    };
+  }
+
+  // action === "debug"
+  const port = options.port ?? 9222;
+  const res = await launchPwa({ origin: site.origin, siteId: site.ulid, port });
+  const msg = `PWA '${site.name ?? site.origin}' restarted in debug mode on port ${String(res.port)}. Session preserved from clean login. Ready for automation.`;
+  if (options.quiet !== true) {
+    console.log(msg);
+  }
+  return {
+    status: "debug_resumed",
+    message: msg,
+    command: res.command,
+    siteId: site.ulid,
+  };
+}
+
