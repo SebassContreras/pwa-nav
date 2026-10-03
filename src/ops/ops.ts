@@ -110,6 +110,8 @@ export interface LiveSnapshotOptions {
   /** Extra copy of snapshot.json; the store under backend.agentDir is always written. */
   outPath?: string;
   quiet?: boolean;
+  query?: string;
+  role?: string;
 }
 
 // Live snapshot: collect from the backend's DOM, store snapshot + locator sidecar (+ extras).
@@ -141,7 +143,25 @@ export async function performLiveSnapshot(
   backend: Backend,
   options: LiveSnapshotOptions & { includeAll?: boolean } = {},
 ): Promise<Snapshot> {
-  return (await captureLiveSnapshot(backend, options)).snapshot;
+  const { snapshot } = await captureLiveSnapshot(backend, options);
+  if (options.query === undefined && options.role === undefined) {
+    return snapshot;
+  }
+  let elements = snapshot.elements;
+  if (options.role !== undefined && options.role.trim().length > 0) {
+    const r = options.role.trim().toLowerCase();
+    elements = elements.filter((el) => el.role.toLowerCase() === r);
+  }
+  if (options.query !== undefined && options.query.trim().length > 0) {
+    const q = options.query.trim().toLowerCase();
+    elements = elements.filter(
+      (el) =>
+        el.name.toLowerCase().includes(q) ||
+        (el.value ?? "").toLowerCase().includes(q) ||
+        el.ref.toLowerCase() === q,
+    );
+  }
+  return { ...snapshot, elements };
 }
 
 export async function performSnapshot(
@@ -303,21 +323,37 @@ function formatExtractLine(element: {
   role: string;
   name: string;
   value?: string;
+  disabled?: boolean;
 }): string {
+  const disabledTag = element.disabled === true ? " [disabled]" : "";
   if (element.name.length > 0 && element.value !== undefined && element.value.length > 0) {
-    return `${element.ref} ${element.role} "${element.name}": ${element.value}`;
+    return `${element.ref} ${element.role}${disabledTag} "${element.name}": ${element.value}`;
   }
   if (element.name.length > 0) {
-    return `${element.ref} ${element.role} "${element.name}"`;
+    return `${element.ref} ${element.role}${disabledTag} "${element.name}"`;
   }
-  return `${element.ref} ${element.role}: ${element.value ?? ""}`;
+  return `${element.ref} ${element.role}${disabledTag}: ${element.value ?? ""}`;
 }
 
-export async function performExtract(
+export interface ExtractOptions extends OpOptions {
+  query?: string;
+  role?: string;
+  offset?: number;
+  limit?: number;
+}
+
+export interface ExtractDetailedResult {
+  lines: string[];
+  total: number;
+  offset: number;
+  returned: number;
+}
+
+export async function performExtractDetailed(
   snapshotId: string | undefined,
   mode: ExtractMode,
-  options: OpOptions = {},
-): Promise<string[]> {
+  options: ExtractOptions = {},
+): Promise<ExtractDetailedResult> {
   const backend = backendOf(options);
   const resolvedSnapshotId = await resolveSnapshotId(backend, snapshotId);
   const snapshot = await loadSnapshot(resolvedSnapshotId, {
@@ -326,17 +362,170 @@ export async function performExtract(
   if (snapshot === null) {
     throw new StaleRefError(resolvedSnapshotId, `unknown snapshotId "${resolvedSnapshotId}"`);
   }
+  let baseElements = snapshot.elements;
   if (mode === "text") {
-    return snapshot.elements
-      .filter((element) => element.name.length > 0 || (element.value ?? "").length > 0)
-      .map(formatExtractLine);
+    baseElements = baseElements.filter((el) => el.name.length > 0 || (el.value ?? "").length > 0);
+  } else {
+    baseElements = baseElements.filter(
+      (el) => (el.role === "link" || el.role === "button") && el.name.length > 0,
+    );
   }
-  return snapshot.elements
-    .filter(
-      (element) =>
-        (element.role === "link" || element.role === "button") && element.name.length > 0,
-    )
-    .map(formatExtractLine);
+
+  if (options.role !== undefined && options.role.trim().length > 0) {
+    const r = options.role.trim().toLowerCase();
+    baseElements = baseElements.filter((el) => el.role.toLowerCase() === r);
+  }
+
+  if (options.query !== undefined && options.query.trim().length > 0) {
+    const q = options.query.trim().toLowerCase();
+    baseElements = baseElements.filter(
+      (el) =>
+        el.name.toLowerCase().includes(q) ||
+        (el.value ?? "").toLowerCase().includes(q) ||
+        el.ref.toLowerCase() === q,
+    );
+  }
+
+  const total = baseElements.length;
+  const offset = Math.max(0, options.offset ?? 0);
+  const sliced =
+    options.limit !== undefined
+      ? baseElements.slice(offset, offset + Math.max(1, options.limit))
+      : offset > 0
+        ? baseElements.slice(offset)
+        : baseElements;
+
+  const lines = sliced.map(formatExtractLine);
+  return { lines, total, offset, returned: lines.length };
+}
+
+export async function performExtract(
+  snapshotId: string | undefined,
+  mode: ExtractMode,
+  options: ExtractOptions = {},
+): Promise<string[]> {
+  const result = await performExtractDetailed(snapshotId, mode, options);
+  return result.lines;
+}
+
+export interface WaitOptions extends OpOptions {
+  target?: string;
+  query?: string;
+  state?: "visible" | "hidden" | "enabled";
+  timeoutMs?: number;
+  intervalMs?: number;
+  quiet?: boolean;
+}
+
+export interface WaitResult {
+  status: "ok";
+  elapsedMs: number;
+  matchedRef?: string;
+  matchedName?: string;
+  matchedRole?: string;
+}
+
+function findWaitMatch(
+  snapshot: Snapshot,
+  token: string,
+  isQuery: boolean,
+): { ref: string; name: string; role: string; disabled?: boolean } | undefined {
+  if (isQuery) {
+    const q = token.trim().toLowerCase();
+    return snapshot.elements.find(
+      (el) =>
+        el.name.toLowerCase().includes(q) ||
+        (el.value ?? "").toLowerCase().includes(q) ||
+        el.ref.toLowerCase() === q,
+    );
+  }
+  const raw = token.trim();
+  if (/^e\d+$/i.test(raw)) {
+    return snapshot.elements.find((el) => el.ref.toLowerCase() === raw.toLowerCase());
+  }
+  if (raw.startsWith("@")) {
+    const slug = raw.slice(1).toLowerCase();
+    const exactSlug = snapshot.elements.find(
+      (el) => el.name.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "") === slug,
+    );
+    if (exactSlug) return exactSlug;
+  }
+  const norm = raw.toLowerCase();
+  const exact = snapshot.elements.find((el) => el.name.toLowerCase() === norm);
+  if (exact) return exact;
+  return snapshot.elements.find((el) => el.name.toLowerCase().includes(norm));
+}
+
+async function getWaitSnapshot(backend: Backend): Promise<Snapshot | null> {
+  if (backend instanceof OfflineBackend) {
+    const id = await latestSnapshotId({ agentDir: backend.agentDir });
+    return id !== null ? await loadSnapshot(id, { agentDir: backend.agentDir }) : null;
+  }
+  try {
+    const { snapshot } = await captureLiveSnapshot(backend, { quiet: true });
+    return snapshot;
+  } catch (err) {
+    const id = await latestSnapshotId({ agentDir: backend.agentDir });
+    if (id !== null) {
+      return await loadSnapshot(id, { agentDir: backend.agentDir });
+    }
+    throw err;
+  }
+}
+
+export async function performWait(
+  targetOrQuery: string | undefined,
+  options: WaitOptions = {},
+): Promise<WaitResult> {
+  const backend = backendOf(options);
+  const rawItem = targetOrQuery ?? options.target ?? options.query;
+  if (!rawItem || rawItem.trim().length === 0) {
+    throw new PwaNavError("invalid_args", "wait requires a target or query to wait for");
+  }
+  const isQuery = options.query !== undefined && targetOrQuery === undefined;
+  const state = options.state ?? "visible";
+  const timeoutMs = Math.min(60000, Math.max(50, options.timeoutMs ?? 15000));
+  const intervalMs = Math.min(5000, Math.max(25, options.intervalMs ?? 1000));
+
+  const startTime = Date.now();
+  for (;;) {
+    const snap = await getWaitSnapshot(backend);
+    if (snap !== null) {
+      const match = findWaitMatch(snap, rawItem, isQuery);
+      let conditionMet = false;
+      if (state === "visible" && match !== undefined) {
+        conditionMet = true;
+      } else if (state === "hidden" && match === undefined) {
+        conditionMet = true;
+      } else if (state === "enabled" && match !== undefined && match.disabled !== true) {
+        conditionMet = true;
+      }
+
+      if (conditionMet) {
+        const elapsedMs = Date.now() - startTime;
+        if (options.quiet !== true) {
+          console.log(`wait ok: ${state} "${rawItem}" (${elapsedMs.toString()}ms)`);
+        }
+        return {
+          status: "ok",
+          elapsedMs,
+          ...(match !== undefined
+            ? { matchedRef: match.ref, matchedName: match.name, matchedRole: match.role }
+            : {}),
+        };
+      }
+    }
+
+    const elapsed = Date.now() - startTime;
+    if (elapsed >= timeoutMs) {
+      throw new PwaNavError(
+        "timeout",
+        `wait timed out after ${elapsed.toString()}ms waiting for condition "${state}" on "${rawItem}"`,
+      );
+    }
+    const sleepDuration = Math.min(intervalMs, timeoutMs - elapsed);
+    await new Promise((resolve) => setTimeout(resolve, sleepDuration));
+  }
 }
 
 export function readPngDimensions(buffer: Buffer): { width: number; height: number } | null {

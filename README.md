@@ -165,7 +165,7 @@ The MCP server accepts the following command-line flags in `"args"`:
 | `--backend offline\|bidi` | - | `bidi` | Use `offline` for testing against static fixtures without a browser. |
 
 The MCP server exposes:
-- **Core tools**: `pwa_open`, `pwa_snapshot`, `pwa_click`, `pwa_fill`, `pwa_upload`, `pwa_screenshot`, `pwa_extract`, `pwa_act`, `pwa_learn`.
+- **Core tools**: `pwa_open`, `pwa_snapshot`, `pwa_click`, `pwa_fill`, `pwa_upload`, `pwa_screenshot`, `pwa_extract`, `pwa_act`, `pwa_learn`, `pwa_wait`.
 - **Dynamic flow tools**: `flow_<screen>_<flow>` for single-screen mapped tasks.
 - **Dynamic journey tools**: `journey_<id>` for multi-screen workflows with `destructiveHint: true`.
 - **Resources**: `pwa-nav://screens/<app-id>` and `pwa-nav://snapshot/latest`.
@@ -177,7 +177,7 @@ The MCP server exposes:
 | Command | Description |
 |---|---|
 | `pwa-nav open <url> [--launch] [--site <ULID>] [--allow-origin]` | Navigate to URL. Requires origin in `.agent/allow.json` or explicit `--allow-origin`. |
-| `pwa-nav snapshot [-i \| --all] [--json] [--out <path>]` | Capture live accessibility DOM snapshot. `-i` interactive elements only (default). |
+| `pwa-nav snapshot [-i \| --all] [--query <str>] [--role <str>] [--json] [--out <path>]` | Capture live accessibility DOM snapshot. `-i` interactive elements only (default). Optional `--query` and `--role` filters. |
 | `pwa-nav snapshot --screen [--screen-map <f>]` | Print compact view of mapped screen matching current URL (no DOM dump). |
 | `pwa-nav snapshot --learn [--prune] [--locale <lang>]` | Learn live screen into `screens/<app>.screens.json` and show diff. |
 | `pwa-nav click --snapshot <id> [--armed] <ref>` | Click element by snapshot ref (e.g. `e3`). Dry-run unless `--armed`. |
@@ -190,7 +190,8 @@ The MCP server exposes:
 | `pwa-nav act [--armed] <semantic-ops...>` | Batch semantic ops (`click:'@id'`, `fill:'@id'=val`, `upload:'@id'=path`, `flow:<id>`). |
 | `pwa-nav journey <name> [key=value...] [--armed]` | Execute declarative multi-screen user journey across route transitions. |
 | `pwa-nav screenshot [--out <path>] [--format png\|jpeg\|webp]` | Capture visual screenshot to disk (`.agent/screenshot.png` by default). |
-| `pwa-nav extract --snapshot <id> --mode text\|links` | Fast read-only text or links extraction from stored snapshot. |
+| `pwa-nav extract [--snapshot <id>] --mode text\|links [--query <str>] [--role <str>] [--offset <n>] [--limit <n>]` | Fast read-only text or links extraction with query/role filtering and pagination. |
+| `pwa-nav wait <target> [--state visible\|hidden\|enabled] [--timeout <ms>] [--interval <ms>]` | Wait deterministically for an element or query to become visible, hidden, or enabled. |
 | `pwa-nav qa run <check-file>` | Run offline JSON check file and save per-step evidence to `.agent/evidence/`. |
 
 ### Global Flags

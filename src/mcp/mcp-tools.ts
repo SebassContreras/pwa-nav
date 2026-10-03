@@ -12,12 +12,13 @@ import {
   performAct,
   performAuthRelay,
   performClick,
-  performExtract,
+  performExtractDetailed,
   performFill,
   performLiveSnapshot,
   performOpen,
   performScreenshot,
   performUpload,
+  performWait,
 } from "../ops/ops.js";
 import type { ActOp } from "../ops/ops.js";
 import { latestSnapshotId, load as loadSnapshot } from "../core/refs.js";
@@ -200,6 +201,8 @@ const snapshot: ToolDef = {
       all: { type: "boolean", description: "Full tree (headings, images) instead of interactive elements only." },
       screen: { type: "boolean", description: "Return the compact screen-map view inline instead of collecting a snapshot." },
       learn: { type: "boolean", description: "Learn current screen into screens/<app>.screens.json (eliminates expiring eN refs)." },
+      query: { type: "string", description: "Optional substring filter to return matching elements inline in the output." },
+      role: { type: "string", description: "Optional role filter (e.g. 'button', 'textbox') to return matching elements." },
       locale: { type: "string", description: "BCP 47 tag (e.g. 'es' or 'en') for new map. Defaults to 'es'." },
       appId: { type: "string", description: "Optional lowercase app ID slug (e.g. 'mercadona')." },
       appName: { type: "string", description: "Optional human-readable app name." },
@@ -223,7 +226,7 @@ const snapshot: ToolDef = {
       const appName = str(args, "appName");
       const access = str(args, "access");
       const prune = flag(args, "prune");
-      await runLearn(backend, {
+      const res = await runLearn(backend, {
         outPath: agentPath(backend.agentDir, "snapshot.json"),
         prune,
         locale,
@@ -232,20 +235,47 @@ const snapshot: ToolDef = {
         ...(access === undefined ? {} : { access }),
         ...ctx.screens,
       });
-      return { structured: { learned: true, path: resolve(agentPath(backend.agentDir, "snapshot.json")) } };
+      const textLines = [
+        `learned screen "${res.title}" with ${res.targets.length.toString()} targets: ${res.targets.join(", ")}`,
+        `screen map: ${res.path} (${res.written ? "written" : "unchanged"})`,
+      ];
+      return {
+        text: textLines.join("\n"),
+        structured: {
+          learned: true,
+          path: resolve(agentPath(backend.agentDir, "snapshot.json")),
+          mapPath: res.path,
+          screenId: res.screenId,
+          title: res.title,
+          targets: res.targets,
+        },
+      };
     }
     if (screen) {
       await runScreenView(backend, ctx.screens);
       return { structured: { screen: true, path: resolve(agentPath(backend.agentDir, "snapshot.json")) } };
     }
-    const taken = await performLiveSnapshot(backend, { includeAll: all });
+    const query = str(args, "query");
+    const role = str(args, "role");
+    const taken = await performLiveSnapshot(backend, { includeAll: all, query, role });
     const barrier = isLoginBarrier(taken.url);
+    const hasFilter = query !== undefined || role !== undefined;
+    const matchLines = hasFilter
+      ? taken.elements
+          .slice(0, 50)
+          .map((e) => `${e.ref} ${e.role}${e.disabled === true ? " [disabled]" : ""} "${e.name}"${e.value ? `: ${e.value}` : ""}`)
+      : [];
+    const textOut = hasFilter
+      ? `${taken.elements.length.toString()} matches:\n${matchLines.join("\n")}${taken.elements.length > 50 ? `\n… and ${(taken.elements.length - 50).toString()} more` : ""}`
+      : undefined;
     return {
+      ...(textOut !== undefined ? { text: textOut } : {}),
       structured: {
         snapshotId: taken.snapshotId,
         path: resolve(agentPath(backend.agentDir, "snapshot.json")),
         elementCount: taken.elements.length,
         url: taken.url,
+        ...(hasFilter ? { matches: taken.elements.slice(0, 50) } : {}),
         ...(barrier
           ? {
               loginBarrier: true,
@@ -461,7 +491,11 @@ const act: ToolDef = {
   },
   annotations: ACTION_HINTS,
   async handler(args, ctx) {
-    const ops = (args["ops"] as string[]).slice();
+    const rawOps = args["ops"];
+    if (!Array.isArray(rawOps) || rawOps.length === 0) {
+      throw invalid("missing ops (expected non-empty array of operations, e.g. ['click:@btn'] or ['fill:@input=text']).");
+    }
+    const ops = (rawOps as string[]).slice();
     const inputs = args["inputs"] as Record<string, string> | undefined;
     const snapshotId = str(args, "snapshotId");
     const backend = ctx.backendFactory({ armed: ctx.armed });
@@ -491,32 +525,54 @@ const act: ToolDef = {
 const extract: ToolDef = {
   name: "pwa_extract",
   description:
-    `Read-only: list text or links from a stored snapshot (at most ${EXTRACT_INLINE_CAP.toString()} lines inline; ` +
-    "the rest stays in the snapshot file). Never changes the snapshot.",
+    "Read-only: list text or links from a stored snapshot (at most 200 lines inline with filters, " +
+    "or 100 without; the rest stays in the snapshot file). Supports query substring filter, role filter, and offset pagination. " +
+    "snapshotId is optional and defaults to the latest snapshot.",
   inputSchema: {
     type: "object",
     properties: {
       snapshotId: SNAPSHOT_ID_PROP,
       mode: { enum: ["text", "links"], description: "text: named elements and values; links: links and buttons." },
-      limit: { type: "integer", minimum: 1, maximum: EXTRACT_INLINE_CAP, description: "Max lines to return." },
+      query: { type: "string", description: "Case-insensitive substring to filter element name, value, or ref." },
+      role: { type: "string", description: "Filter elements by role (e.g. 'button', 'textbox', 'link')." },
+      offset: { type: "integer", minimum: 0, description: "Starting element offset for pagination (default: 0)." },
+      limit: { type: "integer", minimum: 1, maximum: EXTRACT_INLINE_CAP, description: `Max lines to return (default: ${EXTRACT_INLINE_CAP.toString()}).` },
     },
-    required: ["snapshotId", "mode"],
+    required: ["mode"],
     additionalProperties: false,
   },
   annotations: { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false },
   async handler(args, ctx) {
-    const snapshotId = str(args, "snapshotId") ?? "";
+    const rawSnapshotId = str(args, "snapshotId");
     const mode = args["mode"] === "links" ? "links" : "text";
-    const limit = typeof args["limit"] === "number" ? args["limit"] : EXTRACT_INLINE_CAP;
+    const query = str(args, "query");
+    const role = str(args, "role");
+    const offset = typeof args["offset"] === "number" ? Math.max(0, args["offset"]) : 0;
+    const limit = typeof args["limit"] === "number" ? Math.min(EXTRACT_INLINE_CAP, Math.max(1, args["limit"])) : EXTRACT_INLINE_CAP;
     const backend = ctx.backendFactory({ armed: false });
-    const lines = await performExtract(snapshotId, mode, { backend });
-    const shown = lines.slice(0, limit);
-    const omitted = lines.length - shown.length;
+    const snapshotId = rawSnapshotId ?? (await latestSnapshotId({ agentDir: backend.agentDir })) ?? undefined;
+    const detailed = await performExtractDetailed(snapshotId, mode, {
+      backend,
+      query,
+      role,
+      offset,
+      limit,
+    });
+    const omitted = detailed.total - (detailed.offset + detailed.returned);
     const text = [
-      ...shown,
+      ...detailed.lines,
       ...(omitted > 0 ? [`… ${omitted.toString()} more omitted, see ${agentPath(backend.agentDir, "snapshot.json")}`] : []),
     ].join("\n");
-    return { text: text === "" ? "0 lines" : text, structured: { total: lines.length, returned: shown.length, omitted } };
+    return {
+      text: text === "" ? "0 matching lines" : text,
+      structured: {
+        total: detailed.total,
+        returned: detailed.returned,
+        offset: detailed.offset,
+        omitted: Math.max(0, omitted),
+        ...(snapshotId !== undefined ? { snapshotId } : {}),
+      },
+    };
   },
 };
 
@@ -545,7 +601,7 @@ const learnTool: ToolDef = {
     const access = str(args, "access");
     const prune = flag(args, "prune");
     const backend = ctx.backendFactory({ armed: false });
-    await runLearn(backend, {
+    const res = await runLearn(backend, {
       outPath: agentPath(backend.agentDir, "snapshot.json"),
       prune,
       locale,
@@ -554,7 +610,56 @@ const learnTool: ToolDef = {
       ...(access === undefined ? {} : { access }),
       ...ctx.screens,
     });
-    return { structured: { learned: true, path: agentPath(backend.agentDir, "snapshot.json") } };
+    const textLines = [
+      `learned screen "${res.title}" with ${res.targets.length.toString()} targets: ${res.targets.join(", ")}`,
+      `screen map: ${res.path} (${res.written ? "written" : "unchanged"})`,
+    ];
+    return {
+      text: textLines.join("\n"),
+      structured: {
+        learned: true,
+        path: agentPath(backend.agentDir, "snapshot.json"),
+        mapPath: res.path,
+        screenId: res.screenId,
+        title: res.title,
+        targets: res.targets,
+        written: res.written,
+      },
+    };
+  },
+};
+
+const waitTool: ToolDef = {
+  name: "pwa_wait",
+  description:
+    "Wait for a DOM condition or asynchronous generation to complete in the PWA window without arbitrary shell pauses. " +
+    "Crucial for waiting on background AI generation, Fast Research, video/audio rendering, modal appearance, or button enabling. " +
+    "Specify target (@id, eN, visible text) OR query (substring). " +
+    "State can be 'visible' (default), 'hidden' (e.g. wait for 'Generando...' notice to disappear), or 'enabled'.",
+  inputSchema: {
+    type: "object",
+    properties: {
+      target: { type: "string", description: "Semantic target (@id), element ref (eN), or visible text to watch." },
+      query: { type: "string", description: "Substring of text to search for on the page." },
+      state: { enum: ["visible", "hidden", "enabled"], description: "Condition to wait for (default: visible)." },
+      timeoutMs: { type: "integer", minimum: 250, maximum: 60000, description: "Maximum wait time in ms (default: 15000)." },
+      intervalMs: { type: "integer", minimum: 50, maximum: 5000, description: "Polling interval in ms (default: 1000)." },
+    },
+    additionalProperties: false,
+  },
+  annotations: { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false },
+  async handler(args, ctx) {
+    const target = str(args, "target");
+    const query = str(args, "query");
+    const state = (str(args, "state") as "visible" | "hidden" | "enabled" | undefined) ?? "visible";
+    const timeoutMs = typeof args["timeoutMs"] === "number" ? args["timeoutMs"] : undefined;
+    const intervalMs = typeof args["intervalMs"] === "number" ? args["intervalMs"] : undefined;
+    const backend = ctx.backendFactory({ armed: false });
+    const result = await performWait(target, { backend, query, state, timeoutMs, intervalMs });
+    return {
+      text: `wait ok: ${state} "${target ?? query ?? ""}" (${result.elapsedMs.toString()}ms)`,
+      structured: { ...result },
+    };
   },
 };
 
@@ -606,4 +711,5 @@ export const TOOLS: readonly ToolDef[] = [
   extract,
   act,
   learnTool,
+  waitTool,
 ];

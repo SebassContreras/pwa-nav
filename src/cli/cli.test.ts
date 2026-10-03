@@ -510,3 +510,62 @@ test("cli: snapshot with --screenshot flag", async () => {
   });
 });
 
+test("cli: extract with --query, --role and pagination", async () => {
+  const dir = await mkdtemp(join(tmpdir(), "pwa-nav-cli-extract-"));
+  try {
+    const snapPath = join(dir, "tree.txt");
+    await writeFile(
+      snapPath,
+      `- heading "Dashboard" [ref=e1]
+- textbox "Search files" [ref=e2]: admin
+- button "Submit query" [ref=e3]
+- button "Delete file" [disabled] [ref=e4]
+- button "Generate video" [ref=e5]
+`,
+      "utf8",
+    );
+    const snap = runSync(dir, ["snapshot", "--input", snapPath, "--json"]);
+    assert.equal(snap.status, 0, snap.stderr);
+    const { snapshotId } = JSON.parse(snap.stdout) as { snapshotId: string };
+
+    // Query filter
+    const queryRes = runSync(dir, ["extract", "--snapshot", snapshotId, "--mode", "text", "--query", "video"]);
+    assert.equal(queryRes.status, 0, queryRes.stderr);
+    assert.equal(queryRes.stdout.trim(), 'e5 button "Generate video"');
+
+    // Role filter
+    const roleRes = runSync(dir, ["extract", "--snapshot", snapshotId, "--mode", "text", "--role", "textbox"]);
+    assert.equal(roleRes.status, 0, roleRes.stderr);
+    assert.equal(roleRes.stdout.trim(), 'e2 textbox "Search files": admin');
+  } finally {
+    await rm(dir, { recursive: true, force: true });
+  }
+});
+
+test("cli: wait command finds element or times out", async () => {
+  const dir = await mkdtemp(join(tmpdir(), "pwa-nav-cli-wait-"));
+  try {
+    const snapPath = join(dir, "tree.txt");
+    await writeFile(
+      snapPath,
+      `- heading "Dashboard" [ref=e1]
+- button "Submit query" [ref=e2]
+`,
+      "utf8",
+    );
+    runSync(dir, ["snapshot", "--input", snapPath]);
+
+    // Success in offline mode
+    const okRes = runSync(dir, ["wait", "--backend", "offline", "--query", "Submit", "--timeout", "500ms"]);
+    assert.equal(okRes.status, 0, okRes.stderr);
+    assert.match(okRes.stdout, /wait ok: visible "Submit"/);
+
+    // Timeout when not found
+    const timeoutRes = runSync(dir, ["wait", "--backend", "offline", "--query", "NonExistent", "--timeout", "100ms"]);
+    assert.equal(timeoutRes.status, 9, timeoutRes.stderr);
+    assert.match(timeoutRes.stderr, /timed out/);
+  } finally {
+    await rm(dir, { recursive: true, force: true });
+  }
+});
+

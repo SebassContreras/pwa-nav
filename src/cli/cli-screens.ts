@@ -114,8 +114,16 @@ const LOCALE_REQUIRED =
   "a NEW screen map needs --locale <bcp47> (for example en or es-ES). The page lang attribute is not " +
   "trustworthy (measured on a real Spanish app whose <html lang> said \"en\"), so it is never inferred.";
 
+export interface LearnResult {
+  path: string;
+  written: boolean;
+  targets: string[];
+  screenId: string;
+  title: string;
+}
+
 /** `snapshot --learn`: normal live snapshot, then learn the screen from the same collection. */
-export async function runLearn(backend: Backend, o: LearnOptions): Promise<void> {
+export async function runLearn(backend: Backend, o: LearnOptions): Promise<LearnResult> {
   validateLearnFlags(o);
   const { snapshot, raw } = await captureLiveSnapshot(backend, { outPath: o.outPath });
   const page = new URL(snapshot.url);
@@ -161,6 +169,18 @@ export async function runLearn(backend: Backend, o: LearnOptions): Promise<void>
   const result = await learnIntoFile({ path, learned, app, ...(o.prune ? { prune: true } : {}) });
   console.log(renderDiff(result.diff));
   console.log(`screen map: ${path} (${result.written ? "written" : "unchanged"})`);
+  const targets = [
+    ...Object.keys(learned.fields).map((id) => `@${id}`),
+    ...Object.keys(learned.actions).map((id) => `@${id}`),
+    ...Object.keys(learned.links).map((id) => `@${id}`),
+  ];
+  return {
+    path,
+    written: result.written,
+    targets,
+    screenId: learned.id,
+    title: learned.title,
+  };
 }
 
 // --- @id targets ---

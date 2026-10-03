@@ -86,12 +86,13 @@ Agents operate through two complementary navigation layers:
 4. **Transition & Modal Verification (Zero Screenshots)**: Multi-screen journeys and actions automatically settle network and DOM. When verifying popups, dialogs, or state changes, **call `pwa_snapshot` again** to inspect the updated accessibility tree in pure text. **NEVER take a screenshot**.
 
 ### 2. Direct & Raw Interaction Loop (For exploration or unmapped transient elements)
-1. **Capture Snapshot**: `pwa-nav snapshot` (or MCP `pwa_snapshot()`). Collects interactive elements into `.agent/snapshot.json` and returns element count and path.
-2. **Interact Directly**:
+1. **Capture Snapshot / Filter**: `pwa-nav snapshot [--query <str>]` (or MCP `pwa_snapshot({ query: "..." })`). Collects interactive elements and filters matching items. Inspect elements with `pwa_extract({ query: "...", role: "..." })` without writing Python or terminal scripts.
+2. **Wait for Async Operations**: Use `pwa-nav wait <target> [--state visible|hidden|enabled]` or MCP `pwa_wait({ query: "...", state: "visible" })` to wait for background operations (Fast Research, AI synthesis, video/audio generation). Never use shell pauses (`Start-Sleep`).
+3. **Interact Directly**:
    - In MCP: call `pwa_click({ ref: "e1" })`, `pwa_click({ ref: "Sign in" })`, or `pwa_click({ target: "@sign-in" })` directly without requiring `snapshotId` (it resolves to the latest snapshot automatically).
    - In CLI: use `pwa-nav click --snapshot <id> <ref>` or semantic `pwa-nav click '@target'`.
-3. **Smart PWA Navigation & Assisted Auth**: Pass URL or installed app slug directly: `pwa-nav open notebook` or `pwa_open({ url: "notebook" })`. For login-walled apps (Google, bot walls), use `pwa-nav auth <app>` or MCP `pwa_auth` to launch in clean mode for user login and re-attach in debug mode.
-4. **Learn Screen**: When on a stable, new screen, run `pwa_learn` (or CLI `pwa-nav snapshot --learn --locale <bcp47>`) to register it into `screens/<app>.screens.json`.
+4. **Smart PWA Navigation & Assisted Auth**: Pass URL or installed app slug directly: `pwa-nav open notebook` or `pwa_open({ url: "notebook" })`. For login-walled apps (Google, bot walls), use `pwa-nav auth <app>` or MCP `pwa_auth` to launch in clean mode for user login and re-attach in debug mode.
+5. **Learn Screen**: When on a stable, new screen, run `pwa_learn` (or CLI `pwa-nav snapshot --learn --locale <bcp47>`) to register it into `screens/<app>.screens.json`.
 
 ---
 
@@ -108,7 +109,7 @@ Agents operate through two complementary navigation layers:
 9. **File Upload Security Boundary**: File uploads (`upload`, `pwa_upload`) are strictly restricted to files within allowed safe directories (workspace root or `.agent/`). Paths with traversal (`..`) or targeting sensitive files (`.env*`, private keys) are blocked immediately (exit code 15 `file_upload_blocked`).
 10. **Text-First & Vision-Free Automation (Zero Random Screenshots)**: `pwa_screenshot` is strictly restricted to explicit user visual artifact requests. Agents **MUST NEVER** use screenshots to discover UI elements, inspect modals/dialogs, or check state. Many agents cannot process images, and screenshots waste thousands of tokens. Always re-inspect state using `pwa_snapshot`.
 11. **Direct In-App Execution**: When tasked with research or content generation inside an open PWA (like Google NotebookLM), operate directly within the application's native inputs and notes. Do NOT diverge to external search engines (Exa, Google).
-12. **Zero Arbitrary Sleep Delays**: Never run shell pauses (`Start-Sleep 40s`). WebDriver BiDi automatically settles network and DOM. Verify asynchronous updates by re-reading `pwa_snapshot`.
+12. **Zero Arbitrary Sleep Delays & Zero Python Inspection Scripts (Hard Invariant)**: Never run shell pauses (`Start-Sleep 40s`, `sleep`). Use `pwa_wait` or `pwa-nav wait` to wait for asynchronous updates (Fast Research, AI synthesis, video/audio render, button enabling). NEVER write ad-hoc Python scripts or PowerShell one-liners to inspect `.agent/snapshot.json`. Use `pwa_extract` with `query`/`role` filters or `pwa_snapshot({ query })`.
 
 ---
 

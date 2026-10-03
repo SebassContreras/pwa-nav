@@ -14,3 +14,4 @@ Index of every spec — status, dependencies, pipeline stage, and priority. Read
 | 008 | file-uploads | done | 004 | — | 8 |
 | 009 | visual-qa-screenshots | done | 003, 004 | — | 9 |
 | 010 | cross-platform-runtime | done | 004 | — | 10 |
+| 011 | fast-exploration-and-wait | done | 006 | — | 11 |

@@ -29,6 +29,7 @@ import {
   performScreenshot,
   performSnapshot,
   performUpload,
+  performWait,
 } from "./ops/ops.js";
 import type { ActOp, ExtractMode } from "./ops/ops.js";
 import { runCheck } from "./ops/qa.js";
@@ -62,13 +63,15 @@ function usage(): string {
     "  pwa-nav fill --snapshot <id> [--armed] <ref> <text>   |   fill [--armed] @<id> <text>",
     "  pwa-nav upload --snapshot <id> [--armed] <ref> <path>...   |   upload [--armed] @<id> <path>...",
     "  pwa-nav screenshot [--out <path>] [--format png|jpeg|webp]",
-    "  pwa-nav extract --snapshot <id> --mode text|links",
+    "  pwa-nav extract --snapshot <id> --mode text|links [--query <str>] [--role <str>] [--offset <n>] [--limit <n>]",
+    "  pwa-nav wait <target> [--state visible|hidden|enabled] [--timeout <ms|s>] [--interval <ms|s>]",
+    "  pwa-nav wait --query <str> [--state visible|hidden|enabled] [--timeout <ms|s>] [--interval <ms|s>]",
     "  pwa-nav act --snapshot <id> [--armed] <op>...   |   act [--armed] <semantic-op>...",
     "  pwa-nav journey <name> [key=value...] [--armed] [--screen-map <file>] [--screens-dir <dir>]",
     "  pwa-nav auth [<app-or-url>] [--clean] [--debug] [--port <n>]",
     "  pwa-nav qa run <check-file>",
     "",
-    "Global options (open, snapshot, click, fill, upload, screenshot, act, journey):",
+    "Global options (open, snapshot, click, fill, upload, screenshot, act, journey, wait):",
     "  --backend offline|bidi  Default bidi (live Firefox PWA); env PWA_NAV_BACKEND.",
     "  --port <n>              BiDi port 1024-65535 (default 9222); env PWA_NAV_PORT.",
     "  --context <id>          Browsing context id (required when the PWA has several top-level contexts).",
@@ -85,6 +88,7 @@ function usage(): string {
     "  upload          Live: dry-run unless --armed. Sets files on <input type=\"file\"> via input.setFiles.",
     "  screenshot      Capture a visual screenshot of the current page; saves PNG to disk.",
     "  extract         Read-only narrow extraction (text|links) from stored snapshot (never supersedes).",
+    "  wait            Wait for a DOM element/condition or asynchronous background generation.",
     "  act             Run bulk ops (fill:<ref>=<text> click:<ref> upload:<ref>=<path>); live: one session, one new snapshot.",
     "  journey         Declarative multi-screen user journey; dry-run unless --armed.",
     "  qa run          Execute a JSON check file (offline backend; open/snapshot/click/fill/act/extract/",
@@ -349,6 +353,8 @@ async function cmdSnapshot(rest: string[]): Promise<void> {
     access: { type: "string" },
     "app-id": { type: "string" },
     "app-name": { type: "string" },
+    query: { type: "string" },
+    role: { type: "string" },
     screenshot: { type: "boolean" },
   });
   printHelpAndExit(values.help);
@@ -428,16 +434,24 @@ async function cmdSnapshot(rest: string[]): Promise<void> {
 
   if (rawTree === null) {
     const backend = makeBackend(live);
+    const query = requireNonEmpty("--query", values.query);
+    const role = requireNonEmpty("--role", values.role);
     const snapshot = await performLiveSnapshot(backend, {
       outPath,
       quiet: asJson,
       includeAll: values.all === true,
+      ...(query !== undefined ? { query } : {}),
+      ...(role !== undefined ? { role } : {}),
     });
     if (values.screenshot === true) {
       await performScreenshot({ backend });
     }
     if (asJson) {
       console.log(JSON.stringify(snapshot));
+    } else if (query !== undefined || role !== undefined) {
+      for (const el of snapshot.elements) {
+        console.log(`${el.ref} ${el.role}${el.disabled === true ? " [disabled]" : ""} "${el.name}"${el.value ? `: ${el.value}` : ""}`);
+      }
     }
     return;
   }
@@ -622,6 +636,10 @@ async function cmdExtract(rest: string[]): Promise<void> {
   const { values, positionals } = strictParse("extract", rest, {
     snapshot: { type: "string" },
     mode: { type: "string" },
+    query: { type: "string" },
+    role: { type: "string" },
+    offset: { type: "string" },
+    limit: { type: "string" },
     help: { type: "boolean", short: "h" },
   });
   printHelpAndExit(values.help);
@@ -637,10 +655,79 @@ async function cmdExtract(rest: string[]): Promise<void> {
   if (mode !== "text" && mode !== "links") {
     throw invalid("missing --mode text|links.");
   }
-  const lines = await performExtract(snapshotId, mode satisfies ExtractMode);
+  const query = requireNonEmpty("--query", values.query);
+  const role = requireNonEmpty("--role", values.role);
+  const offsetStr = requireNonEmpty("--offset", values.offset);
+  const limitStr = requireNonEmpty("--limit", values.limit);
+  const offset = offsetStr !== undefined ? parseInt(offsetStr, 10) : undefined;
+  if (offset !== undefined && (isNaN(offset) || offset < 0)) {
+    throw invalid(`invalid --offset: ${offsetStr ?? ""} (expected non-negative integer).`);
+  }
+  const limit = limitStr !== undefined ? parseInt(limitStr, 10) : undefined;
+  if (limit !== undefined && (isNaN(limit) || limit < 1)) {
+    throw invalid(`invalid --limit: ${limitStr ?? ""} (expected positive integer).`);
+  }
+  const lines = await performExtract(snapshotId, mode satisfies ExtractMode, {
+    query,
+    role,
+    offset,
+    limit,
+  });
   for (const line of lines) {
     console.log(line);
   }
+}
+
+async function cmdWait(rest: string[]): Promise<void> {
+  const { values, positionals } = strictParse("wait", rest, {
+    ...LIVE_OPTIONS,
+    target: { type: "string" },
+    query: { type: "string" },
+    state: { type: "string" },
+    timeout: { type: "string" },
+    interval: { type: "string" },
+    help: { type: "boolean", short: "h" },
+  });
+  printHelpAndExit(values.help);
+  const positionalTarget = positionals[0];
+  const target = requireNonEmpty("--target", values.target) ?? positionalTarget;
+  const query = requireNonEmpty("--query", values.query);
+  if (target === undefined && query === undefined) {
+    throw invalid("missing <target> or --query.");
+  }
+  const rawState = requireNonEmpty("--state", values.state);
+  let state: "visible" | "hidden" | "enabled" | undefined;
+  if (rawState !== undefined) {
+    if (rawState !== "visible" && rawState !== "hidden" && rawState !== "enabled") {
+      throw invalid(`invalid --state: ${rawState} (expected visible|hidden|enabled).`);
+    }
+    state = rawState;
+  }
+  const timeoutStr = requireNonEmpty("--timeout", values.timeout);
+  let timeoutMs: number | undefined;
+  if (timeoutStr !== undefined) {
+    timeoutMs = parseInt(timeoutStr.replace(/ms$/i, "").replace(/s$/i, "000"), 10);
+    if (isNaN(timeoutMs) || timeoutMs < 50) {
+      throw invalid(`invalid --timeout: ${timeoutStr} (expected positive duration in ms or seconds).`);
+    }
+  }
+  const intervalStr = requireNonEmpty("--interval", values.interval);
+  let intervalMs: number | undefined;
+  if (intervalStr !== undefined) {
+    intervalMs = parseInt(intervalStr.replace(/ms$/i, "").replace(/s$/i, "000"), 10);
+    if (isNaN(intervalMs) || intervalMs < 25) {
+      throw invalid(`invalid --interval: ${intervalStr} (expected positive duration in ms or seconds).`);
+    }
+  }
+  const live = resolveLive(values);
+  const backend = makeBackend(live);
+  await performWait(target, {
+    backend,
+    query,
+    state,
+    timeoutMs,
+    intervalMs,
+  });
 }
 
 async function cmdJourney(rest: string[]): Promise<void> {
@@ -734,6 +821,8 @@ async function main(): Promise<void> {
       return cmdScreenshot(rest);
     case "extract":
       return cmdExtract(rest);
+    case "wait":
+      return cmdWait(rest);
     case "act":
       return cmdAct(rest);
     case "journey":

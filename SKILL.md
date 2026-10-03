@@ -35,17 +35,18 @@ Choose the interface based on your environment:
 | Capability | CLI Command | MCP Tool Name | Notes |
 |---|---|---|---|
 | **Navigate** | `pwa-nav open <url> [--allow-origin]` | `pwa_open` (`url`, `allowOrigin`) | Origin must be in `.agent/allow.json` or approved. |
-| **Inspect screen map** | `pwa-nav snapshot --screen` | `pwa_snapshot` (`screen: true`) | Compact view of semantic `@id` targets, flows, journeys. |
-| **Raw accessibility tree** | `pwa-nav snapshot -i [--all]` | `pwa_snapshot` (`interactiveOnly: true`) | Writes `.agent/snapshot.json`. Returns element count and path. |
+| **Inspect screen map** | `pwa-nav snapshot --screen [--query <str>]` | `pwa_snapshot` (`screen: true`, `query`, `role`) | Compact view of semantic `@id` targets, flows, journeys, inline query filter. |
+| **Raw accessibility tree** | `pwa-nav snapshot -i [--all] [--query <str>]` | `pwa_snapshot` (`interactiveOnly: true`, `query`, `role`) | Writes `.agent/snapshot.json`. Returns element count, path, and filtered matches. |
+| **Wait condition** | `pwa-nav wait <target> [--state visible\|hidden\|enabled]` | `pwa_wait` (`target`, `query`, `state`, `timeoutMs`) | Wait for element/state or async AI background ops without shell sleep. |
 | **Click element** | `pwa-nav click <target> [--armed]` | `pwa_click` (`target`) | Target can be semantic `'@id'` or ephemeral `eN`. |
 | **Fill input** | `pwa-nav fill <target> <text> [--armed]` | `pwa_fill` (`target`, `text`) | Rejects sensitive fields (exit 11). |
 | **Upload files** | `pwa-nav upload <target> <path...> [--armed]` | `pwa_upload` (`target`, `files`) | Sets files on file inputs. Safe paths only. |
 | **Capture screenshot** | `pwa-nav screenshot [--out <path>]` | `pwa_screenshot` (`path`, `format`) | Saves binary PNG to disk. **NEVER use for navigation or state inspection** (breaks text-only agents). |
 | **Batch actions** | `pwa-nav act <ops...> [--armed]` | `pwa_act` (`ops`) | Combines clicks, fills, uploads, and flows. |
-| **Read page content** | `pwa-nav extract --mode text\|links` | `pwa_extract` (`mode`) | Read-only; does not invalidate snapshots. |
+| **Read page content** | `pwa-nav extract --mode text\|links [--query <str>] [--role <str>]` | `pwa_extract` (`mode`, `query`, `role`, `offset`, `limit`) | Read-only; supports query and role filtering, offset pagination. |
 | **Multi-screen journey** | `pwa-nav journey <name> [k=v] [--armed]` | `journey_<name>` (`params`) | Executes multi-route journeys with screen validation. |
 | **Single-screen flow** | `pwa-nav act flow:<id> [k=v] [--armed]` | `flow_<screen>_<id>` (`params`) | Reusable parameterized screen flow. |
-| **Learn / update map** | `pwa-nav snapshot --learn [--locale <code>]` | `pwa_learn` / `pwa_snapshot(learn: true)` | Generates/updates `screens/<app>.screens.json` with `@id` targets. |
+| **Learn / update map** | `pwa-nav snapshot --learn [--locale <code>]` | `pwa_learn` / `pwa_snapshot(learn: true)` | Generates/updates `screens/<app>.screens.json` with `@id` targets returned inline. |
 | **QA offline suite** | `pwa-nav qa run <check-file>` | *CLI only* | Executes offline check suites against fixtures. |
 
 ---
@@ -97,8 +98,8 @@ Always follow this decision path to minimize token consumption and avoid breakin
 
 ### Loop B: Raw Accessibility Loop (Fallback for Ephemeral Elements)
 1. When targeting transient non-mapped items or inspecting raw element hierarchies:
-2. Run `pwa-nav snapshot -i` (or `pwa_snapshot(interactiveOnly: true)`).
-3. Inspect `.agent/snapshot.json` by searching for specific elements (`grep` / `Select-String`). **NEVER** dump the entire JSON into context.
+2. Run `pwa-nav snapshot -i [--query <str>]` (or `pwa_snapshot({ query: "..." })`).
+3. Search and extract elements directly using `pwa_extract({ query: "...", role: "..." })` or CLI `pwa-nav extract --query <str>`. **NEVER** write Python scripts or PowerShell one-liners to parse `.agent/snapshot.json`.
 4. Target ephemeral refs (`e1`, `e2`, etc.) or visible text directly:
    - `pwa-nav click --snapshot <id> e5` or MCP `pwa_click({ ref: "Cerrar" })`
 5. **Invalidation Rule (Hard)**: Ephemeral `eN` refs are valid for **ONE snapshot only**. Any mutation (`click`, `fill`, `act`) invalidates the snapshot immediately. You **must** re-snapshot before the next mutation.
@@ -142,7 +143,7 @@ In PowerShell, the `@` symbol is reserved for array sub-expressions and variable
 7. **File Upload Security Boundary**: File uploads (`pwa_upload`, `upload`) are strictly restricted to files within allowed safe directories (workspace root or `.agent/`). Files attempting path traversal (`..`) or targeting sensitive files (`.env*`, private keys) are rejected with exit code 15 (`file_upload_blocked`).
 8. **Text-First, Vision-Free Autonomous Operation**: NEVER take screenshots (`pwa_screenshot`) to discover UI elements, inspect modals/dialogs, or check if an action succeeded. Screenshots waste massive amounts of tokens and completely fail on text-only LLM models. Always use `pwa_snapshot` to inspect state. When encountering an unmapped screen, autonomously call `pwa_learn` to generate the screen map without prompting the user.
 9. **Direct In-App Operation**: Work directly within the open application. Do NOT diverge into external search engines (Exa, Google) when the task is to research and write inside the open PWA (like Google NotebookLM).
-10. **Zero Arbitrary Sleep Delays**: Never run shell pauses (`Start-Sleep 40s`). WebDriver BiDi settles network and DOM automatically. Verify asynchronous updates by re-reading `pwa_snapshot`.
+10. **Zero Arbitrary Sleep Delays & Zero Python Inspection Scripts (Hard Invariant)**: Never run shell pauses (`Start-Sleep 40s`, `sleep`). Use `pwa_wait` (or CLI `pwa-nav wait`) to wait for asynchronous updates (Fast Research, AI synthesis, video/audio render, button enabling). NEVER write ad-hoc Python scripts or PowerShell one-liners to inspect `.agent/snapshot.json`. Use `pwa_extract` with `query`/`role` filters or `pwa_snapshot({ query })`.
 
 ---
 

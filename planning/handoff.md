@@ -14,8 +14,9 @@ State after implementing specs 004–007. Read `planning/roadmap.md` first, then
 | 008 file-uploads | done | T001–T008 done | — | — |
 | 009 visual-qa-screenshots | done | T001–T008 done | — | — |
 | 010 cross-platform-runtime | done | T001–T004, T006 done | T005 (human live test on native Mac/Linux) | — |
+| 011 fast-exploration-and-wait | done | T001–T006 done | — | — |
 
-Gate at handoff: `pnpm lint && pnpm build && pnpm test` (328 tests) `&& pnpm smoke`, `node dist/cli.js qa run <check-file>`, and the opt-in real-Firefox E2E `PWA_NAV_E2E=1 node --test dist/e2e.test.js` (15 tests) all green.
+Gate at handoff: `pnpm lint && pnpm build && pnpm test` (342 tests) `&& pnpm smoke`, `node dist/cli.js qa run <check-file>`, and the opt-in real-Firefox E2E `PWA_NAV_E2E=1 node --test dist/e2e.test.js` all green.
 
 ## Spec 010 Deliverables (Cross-Platform Runtime Discovery)
 

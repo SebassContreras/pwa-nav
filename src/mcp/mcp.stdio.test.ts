@@ -27,7 +27,7 @@ test("stdio: lists tools, calls an offline tool, exits cleanly on close", async 
   try {
     await client.connect(transport);
     const { tools } = await client.listTools();
-    assert.equal(tools.length, 10);
+    assert.equal(tools.length, 11);
     const opened = (await client.callTool({
       name: "pwa_open",
       arguments: { url: "http://localhost:8080/login" },

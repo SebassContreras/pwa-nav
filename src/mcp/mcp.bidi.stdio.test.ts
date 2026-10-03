@@ -200,6 +200,7 @@ test("stdio+bidi: tools/resources, open blocked then allowed, snapshot, dry-run 
         "pwa_screenshot",
         "pwa_snapshot",
         "pwa_upload",
+        "pwa_wait",
       ]);
       assert.match(client.getInstructions() ?? "", /private \(screen search\)/);
       const { resources } = await client.listResources();
@@ -325,7 +326,7 @@ test("stdio+bidi: ambiguous screens dir logs one stderr line and starts without 
     try {
       await client.connect(transport);
       const { tools } = await client.listTools();
-      assert.equal(tools.length, 10);
+      assert.equal(tools.length, 11);
       assert.deepEqual((await client.listResources()).resources.map((r) => r.uri), ["pwa-nav://snapshot/latest"]);
       assert.match(stderr, /2 screen maps/);
     } finally {
