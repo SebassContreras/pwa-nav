@@ -43,19 +43,20 @@ Relative paths resolve from the working directory: the client must start the ser
   "mcpServers": {
     "pwa-nav": {
       "command": "node",
-      "args": ["dist/mcp.js", "--port", "9222"]
+      "args": ["dist/mcp.js"]
     }
   }
 }
 ```
 
+- `--port 9222` is optional and assumed by default. On startup, the server automatically inspects FirefoxPWA's `config.json` and injects `--remote-debugging-port 9222` into global arguments if absent.
 - `--armed` is never in the shipped file. Arming is an operator decision (see below).
 - Clients that read `mcpServers` JSON can use it as is, or copy it to their own config. Where the file must live: check your client's docs.
 
 ### Claude Code
 
 ```bash
-claude mcp add pwa-nav -- node C:/path/to/pwa-nav/dist/mcp.js --port 9222
+claude mcp add pwa-nav -- node C:/path/to/pwa-nav/dist/mcp.js
 ```
 
 - Project scope: a `.mcp.json` at the project root with the same `mcpServers` shape (copy this repo's `mcp.json`; Claude Code starts project servers from the project root, so the relative path works there). Claude Code asks for approval of project-scoped servers.

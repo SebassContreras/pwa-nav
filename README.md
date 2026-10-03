@@ -52,45 +52,36 @@ pnpm smoke
 2. Install it as a PWA using the PWAsForFirefox extension button in the address bar.
 3. Log in to the application normally.
 
-### Step 3: Launch Your PWA with Remote Debugging
-To allow `pwa-nav` to attach, launch your installed PWA with `--remote-debugging-port 9222`.
+### Step 3: Launch Your PWA with Remote Debugging (Zero-Friction Setup)
+You can configure FirefoxPWA once to **always** start with port 9222 ready. Open `%APPDATA%\FirefoxPWA\config.json` (or Linux/macOS equivalent) and set:
+```json
+"arguments": ["--remote-debugging-port", "9222"]
+```
+Now, whenever you open any installed PWA from your Start Menu or Taskbar, port `9222` is automatically open!
 
-**Windows (PowerShell):**
+Alternatively, launch your installed PWA on demand:
 ```powershell
-$FFPWA = "$env:APPDATA\FirefoxPWA"
-# Find your site ULID using: firefoxpwa sites
-Start-Process -FilePath "$FFPWA\runtime\firefox.exe" -ArgumentList @("--pwa","<SITE-ULID>","--remote-debugging-port","9222")
+pwa-nav open notebook
 ```
-
-**Linux (Bash / Zsh):**
-```bash
-"${XDG_DATA_HOME:-$HOME/.local/share}/firefoxpwa/runtime/firefox" --pwa <SITE-ULID> --remote-debugging-port 9222 &
-```
-
-**macOS (Zsh):**
-```zsh
-"$HOME/Library/Application Support/firefoxpwa/runtime/Firefox.app/Contents/MacOS/firefox" --pwa <SITE-ULID> --remote-debugging-port 9222 &
-```
-
-*(Alternatively, use `pwa-nav open <url> --launch --allow-origin` to start the runtime automatically on any OS).*
+*(Automatically resolves installed apps like Gemini Notebook, launches the runtime if closed, and connects immediately).*
 
 ### Step 4: Your First Navigation Loop
 
 ```powershell
-# 1. Allow and verify navigation to origin
-pwa-nav open https://app.example.com --allow-origin
+# 1. Connect / Navigate to your installed PWA (auto-whitelisted)
+pwa-nav open notebook
 
 # 2. Take an accessibility snapshot
-pwa-nav snapshot -i
+pwa-nav snapshot
 
 # 3. Dry-run an action (prints the execution plan, sends NO input)
-pwa-nav click --snapshot <snapshotId> e3
+pwa-nav click '@sign-in'
 
 # 4. Execute the action for real (armed)
-pwa-nav click --snapshot <snapshotId> e3 --armed
+pwa-nav click '@sign-in' --armed
 
-# 5. Re-snapshot after mutation (refs of the previous snapshot are invalidated)
-pwa-nav snapshot -i
+# 5. Re-snapshot after mutation
+pwa-nav snapshot
 ```
 
 ---
@@ -135,9 +126,11 @@ If a step fails or the destination route does not match `expectScreen`, the jour
 
 ## 🤖 MCP Server Integration (AI Agents)
 
-`pwa-nav` includes an MCP stdio server (`pwa-nav-mcp`) ready for Claude Desktop, Cursor, or Antigravity.
+`pwa-nav` includes a standard W3C BiDi MCP server (`pwa-nav-mcp`) over stdio for Claude Desktop, Cursor, Windsurf, Claude Code, or Antigravity.
 
-Add to your `mcp.json` or `claude_desktop_config.json`:
+### Adding to Your Agent / MCP Client
+
+Add to your client config (`mcp.json`, `claude_desktop_config.json`, or `.vscode/mcp.json`):
 
 ```json
 {
@@ -145,14 +138,29 @@ Add to your `mcp.json` or `claude_desktop_config.json`:
     "pwa-nav": {
       "command": "node",
       "args": [
-        "C:/path/to/pwa-nav/dist/mcp.js",
-        "--port",
-        "9222"
+        "C:/path/to/pwa-nav/dist/mcp.js"
       ]
     }
   }
 }
 ```
+
+> [!TIP]
+> **Zero Manual Firefox Configuration**: You do not need to specify `"--port", "9222"`. The server defaults to port `9222` and **automatically configures FirefoxPWA's `config.json`** on startup by injecting `--remote-debugging-port 9222` into global arguments if absent!
+
+### Server Flags & Options
+
+The MCP server accepts the following command-line flags in `"args"`:
+
+| Flag | Env Variable | Default | Purpose |
+|---|---|---|---|
+| *(none)* | - | - | Minimal invocation: `node <path>/dist/mcp.js`. Runs in safe dry-run mode on port 9222. |
+| `--armed` | `PWA_NAV_ARMED=1` | *off* (dry-run) | **Enable real browser mutations.** Without this flag, clicks, fills, uploads, and flows only preview actions. |
+| `--port <n>` | - | `9222` | Optional. Override BiDi port only if your PWA uses a non-standard port (1024-65535). |
+| `--screens-dir <dir>` | `PWA_NAV_SCREENS_DIR` | `./screens` | Directory where screen maps (`*.screens.json`) are stored. |
+| `--screen-map <file>` | - | *auto-discovery* | Explicit path to a single screen map file. |
+| `--agent-dir <dir>` | - | `.agent` | Output directory for `.agent/allow.json`, sessions, and screenshots. |
+| `--backend offline\|bidi` | - | `bidi` | Use `offline` for testing against static fixtures without a browser. |
 
 The MCP server exposes:
 - **Core tools**: `pwa_open`, `pwa_snapshot`, `pwa_click`, `pwa_fill`, `pwa_upload`, `pwa_screenshot`, `pwa_extract`, `pwa_act`, `pwa_learn`.

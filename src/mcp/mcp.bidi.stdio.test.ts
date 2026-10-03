@@ -3,6 +3,7 @@
 // with the SDK client over the real pipe. Children are always killed in `finally`.
 import assert from "node:assert/strict";
 import { spawn, type ChildProcess } from "node:child_process";
+import { existsSync } from "node:fs";
 import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
@@ -15,7 +16,9 @@ import type { RawElement } from "../browser/collector.js";
 import { learnScreen } from "../screens/screen-learn.js";
 import type { ScreenMap } from "../screens/screen-map.js";
 
-const MCP = join(dirname(fileURLToPath(import.meta.url)), "..", "mcp.js");
+const MCP = existsSync(join(dirname(fileURLToPath(import.meta.url)), "..", "mcp.js"))
+  ? join(dirname(fileURLToPath(import.meta.url)), "..", "mcp.js")
+  : join(dirname(fileURLToPath(import.meta.url)), "../../dist/mcp.js");
 const ORIGIN = "http://localhost:8080";
 
 function remote(value: unknown): unknown {

@@ -1,6 +1,7 @@
 // MCP tool table (spec 006, T001-T003). Thin adapter: every handler calls the shared ops layer
 // (src/ops.ts, src/cli-screens.ts); no browser, gate or ref logic lives here.
 // Page content is untrusted: descriptions are static strings, results echo only what ops prints.
+import { resolve } from "node:path";
 import type { Backend } from "../backend/backend.js";
 import { agentPath } from "../backend/backend.js";
 import { NO_INPUT_LINE, runLearn, runScreenView, runSemanticAct, runSemanticClick, runSemanticFill, runSemanticUpload } from "../cli/cli-screens.js";
@@ -64,16 +65,15 @@ const TARGET_PATTERN = "^@[a-z0-9]+(-[a-z0-9]+)*$";
 const TARGET_PROP = {
   type: "string",
   pattern: TARGET_PATTERN,
-  description: "Semantic target from the screen map, such as @sign-in. Use instead of snapshotId + ref.",
+  description: "Semantic target from the screen map, such as @sign-in. Use instead of ref.",
 };
-const SNAPSHOT_ID_PROP = { type: "string", minLength: 1, description: "snapshotId of the snapshot the ref belongs to." };
-const REF_PROP = { type: "string", minLength: 1, description: "Element ref (eN) from that snapshot." };
+const SNAPSHOT_ID_PROP = { type: "string", description: "Optional snapshotId. Defaults to the latest snapshot." };
+const REF_PROP = { type: "string", minLength: 1, description: "Element ref (eN) or visible text from the snapshot." };
 
-// Either a semantic target or snapshotId + ref (exclusivity is enforced by the handler).
-// Properties are repeated as `true` so Ajv strictRequired accepts the subschemas.
+// Either a target or ref (snapshotId is optional and defaults to latest snapshot).
 const TARGET_ALTERNATIVES = [
   { required: ["target"], properties: { target: true } },
-  { required: ["snapshotId", "ref"], properties: { snapshotId: true, ref: true } },
+  { required: ["ref"], properties: { ref: true, snapshotId: true } },
 ];
 
 export const ACTION_HINTS: ToolAnnotations = {
@@ -106,7 +106,7 @@ export async function actionOutcome(ctx: ToolContext, backend: Backend, snapshot
     structured: {
       dryRun: isDryRun(ctx),
       ...(id === null ? {} : { snapshotId: id }),
-      path: agentPath(backend.agentDir, "snapshot.json"),
+      path: resolve(agentPath(backend.agentDir, "snapshot.json")),
       ...(snapshot === null ? {} : { url: snapshot.url }),
     },
   };
@@ -125,21 +125,21 @@ function noInputNote(ctx: ToolContext): void {
   if (isDryRun(ctx)) console.log(NO_INPUT_LINE);
 }
 
-// Either a semantic target or snapshotId + ref; never both, never neither.
-function pickTarget(args: Record<string, unknown>): { target: string } | { snapshotId: string; ref: string } {
+// Either a target or ref; snapshotId is optional.
+function pickTarget(args: Record<string, unknown>): { target: string } | { snapshotId?: string; ref: string } {
   const target = str(args, "target");
   const snapshotId = str(args, "snapshotId");
   const ref = str(args, "ref");
   if (target !== undefined) {
-    if (snapshotId !== undefined || ref !== undefined) {
-      throw invalid("pass either target or snapshotId + ref, not both.");
+    if (ref !== undefined) {
+      throw invalid("pass either target or ref, not both.");
     }
     return { target };
   }
-  if (snapshotId === undefined || ref === undefined) {
-    throw invalid("pass target (@id) or both snapshotId and ref.");
+  if (ref !== undefined) {
+    return { ...(snapshotId !== undefined ? { snapshotId } : {}), ref };
   }
-  return { snapshotId, ref };
+  throw invalid("pass target (@id or visible text) or ref (eN).");
 }
 
 const open: ToolDef = {
@@ -168,7 +168,7 @@ const open: ToolDef = {
     }
     const backend = ctx.backendFactory({ armed: false, ...(launch ? { launch: true } : {}) });
     const session = await performOpen(url, { backend, allowOrigin });
-    return { structured: { url: session.url, path: agentPath(backend.agentDir, "session.json") } };
+    return { structured: { url: session.url, path: resolve(agentPath(backend.agentDir, "session.json")) } };
   },
 };
 
@@ -217,17 +217,17 @@ const snapshot: ToolDef = {
         ...(access === undefined ? {} : { access }),
         ...ctx.screens,
       });
-      return { structured: { learned: true, path: agentPath(backend.agentDir, "snapshot.json") } };
+      return { structured: { learned: true, path: resolve(agentPath(backend.agentDir, "snapshot.json")) } };
     }
     if (screen) {
       await runScreenView(backend, ctx.screens);
-      return { structured: { screen: true } };
+      return { structured: { screen: true, path: resolve(agentPath(backend.agentDir, "snapshot.json")) } };
     }
     const taken = await performLiveSnapshot(backend, { includeAll: all });
     return {
       structured: {
         snapshotId: taken.snapshotId,
-        path: agentPath(backend.agentDir, "snapshot.json"),
+        path: resolve(agentPath(backend.agentDir, "snapshot.json")),
         elementCount: taken.elements.length,
         url: taken.url,
       },
@@ -238,7 +238,7 @@ const snapshot: ToolDef = {
 const click: ToolDef = {
   name: "pwa_click",
   description:
-    "Click an element by semantic target (@id from screen map, e.g. @submit-btn) or snapshotId + ref (eN). " +
+    "Click an element by semantic target (@id), visible text ('Sign in'), or ref (eN). " +
     "Dry-run unless the server operator armed it; the result then says no input was sent.",
   inputSchema: {
     type: "object",
@@ -251,8 +251,13 @@ const click: ToolDef = {
     const picked = pickTarget(args);
     const backend = ctx.backendFactory({ armed: ctx.armed });
     if ("target" in picked) {
-      await runSemanticClick(semanticContext(ctx, backend), picked.target.slice(1));
-      return actionOutcome(ctx, backend, null);
+      if (picked.target.startsWith("@")) {
+        await runSemanticClick(semanticContext(ctx, backend), picked.target.slice(1));
+        return actionOutcome(ctx, backend, null);
+      }
+      const next = await performClick(undefined, picked.target, { backend, armed: ctx.armed });
+      noInputNote(ctx);
+      return actionOutcome(ctx, backend, next);
     }
     const next = await performClick(picked.snapshotId, picked.ref, { backend, armed: ctx.armed });
     noInputNote(ctx);
@@ -263,7 +268,7 @@ const click: ToolDef = {
 const fill: ToolDef = {
   name: "pwa_fill",
   description:
-    "Fill a field or search box by semantic target (@id from screen map, e.g. @search-input) or snapshotId + ref (eN). " +
+    "Fill a field or search box by semantic target (@id), visible text, or ref (eN). " +
     "To search on the current page, fill the search input here instead of calling pwa_open. " +
     "Sensitive fields (passwords) are refused. Dry-run unless the server operator armed it.",
   inputSchema: {
@@ -284,8 +289,13 @@ const fill: ToolDef = {
     const text = str(args, "text") ?? "";
     const backend = ctx.backendFactory({ armed: ctx.armed });
     if ("target" in picked) {
-      await runSemanticFill(semanticContext(ctx, backend), picked.target.slice(1), text);
-      return actionOutcome(ctx, backend, null);
+      if (picked.target.startsWith("@")) {
+        await runSemanticFill(semanticContext(ctx, backend), picked.target.slice(1), text);
+        return actionOutcome(ctx, backend, null);
+      }
+      const next = await performFill(undefined, picked.target, text, { backend, armed: ctx.armed });
+      noInputNote(ctx);
+      return actionOutcome(ctx, backend, next);
     }
     const next = await performFill(picked.snapshotId, picked.ref, text, { backend, armed: ctx.armed });
     noInputNote(ctx);
@@ -296,7 +306,7 @@ const fill: ToolDef = {
 const upload: ToolDef = {
   name: "pwa_upload",
   description:
-    "Upload one or more local files to a file input (<input type=\"file\">) by semantic target (@id from screen map, e.g. @avatar) or snapshotId + ref (eN). " +
+    "Upload one or more local files to a file input (<input type=\"file\">) by semantic target (@id), visible text, or ref (eN). " +
     "Files must be inside allowed directories (workspace or .agent/). Dry-run unless the server operator armed it.",
   inputSchema: {
     type: "object",
@@ -334,8 +344,13 @@ const upload: ToolDef = {
     }
     const backend = ctx.backendFactory({ armed: ctx.armed });
     if ("target" in picked) {
-      await runSemanticUpload(semanticContext(ctx, backend), picked.target.slice(1), files);
-      return actionOutcome(ctx, backend, null);
+      if (picked.target.startsWith("@")) {
+        await runSemanticUpload(semanticContext(ctx, backend), picked.target.slice(1), files);
+        return actionOutcome(ctx, backend, null);
+      }
+      const next = await performUpload(undefined, picked.target, files, { backend, armed: ctx.armed });
+      noInputNote(ctx);
+      return actionOutcome(ctx, backend, next);
     }
     const next = await performUpload(picked.snapshotId, picked.ref, files, { backend, armed: ctx.armed });
     noInputNote(ctx);

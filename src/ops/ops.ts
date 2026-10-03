@@ -24,6 +24,7 @@ import {
 import type { RawElement } from "../browser/collector.js";
 import { buildLiveSnapshot } from "../browser/live-snapshot.js";
 import {
+  latestSnapshotId,
   load as loadSnapshot,
   save as saveSnapshot,
   saveLive,
@@ -152,39 +153,74 @@ export async function performSnapshot(
   return snapshot;
 }
 
+export async function resolveSnapshotId(backend: Backend, snapshotId?: string): Promise<string> {
+  if (snapshotId !== undefined && snapshotId.length > 0) {
+    return snapshotId;
+  }
+  const latest = await latestSnapshotId({ agentDir: backend.agentDir });
+  if (latest !== null) {
+    return latest;
+  }
+  const live = await captureLiveSnapshot(backend);
+  return live.snapshot.snapshotId;
+}
+
+export async function resolveRef(backend: Backend, snapshotId: string, refOrTarget: string): Promise<string> {
+  if (/^e\d+$/i.test(refOrTarget)) {
+    return refOrTarget;
+  }
+  try {
+    const snap = await loadSnapshot(snapshotId, { agentDir: backend.agentDir });
+    if (snap !== null) {
+      const norm = refOrTarget.trim().toLowerCase();
+      const exact = snap.elements.find((el) => el.name.toLowerCase() === norm);
+      if (exact !== undefined) return exact.ref;
+      const partial = snap.elements.find((el) => el.name.toLowerCase().includes(norm));
+      if (partial !== undefined) return partial.ref;
+    }
+  } catch {
+    // fallback to original ref
+  }
+  return refOrTarget;
+}
+
 export async function performClick(
-  snapshotId: string,
+  snapshotId: string | undefined,
   ref: string,
   options: OpOptions = {},
 ): Promise<string> {
-  // Throws StaleRefError on unknown/superseded snapshotId or ref.
   const backend = backendOf(options);
-  const result = await backend.click(snapshotId, ref, actionContext(options));
+  const resolvedSnapshotId = await resolveSnapshotId(backend, snapshotId);
+  const resolvedRef = await resolveRef(backend, resolvedSnapshotId, ref);
+  const result = await backend.click(resolvedSnapshotId, resolvedRef, actionContext(options));
   console.log(reportLine("click", result, backend.agentDir));
   return result.snapshotId;
 }
 
 export async function performFill(
-  snapshotId: string,
+  snapshotId: string | undefined,
   ref: string,
   text: string,
   options: OpOptions = {},
 ): Promise<string> {
-  // Throws StaleRefError on unknown/superseded snapshotId or ref.
   const backend = backendOf(options);
-  const result = await backend.fill(snapshotId, ref, text, actionContext(options));
+  const resolvedSnapshotId = await resolveSnapshotId(backend, snapshotId);
+  const resolvedRef = await resolveRef(backend, resolvedSnapshotId, ref);
+  const result = await backend.fill(resolvedSnapshotId, resolvedRef, text, actionContext(options));
   console.log(reportLine("fill", result, backend.agentDir));
   return result.snapshotId;
 }
 
 export async function performUpload(
-  snapshotId: string,
+  snapshotId: string | undefined,
   ref: string,
   files: readonly string[],
   options: OpOptions = {},
 ): Promise<string> {
   const backend = backendOf(options);
-  const result = await backend.upload(snapshotId, ref, files, actionContext(options));
+  const resolvedSnapshotId = await resolveSnapshotId(backend, snapshotId);
+  const resolvedRef = await resolveRef(backend, resolvedSnapshotId, ref);
+  const result = await backend.upload(resolvedSnapshotId, resolvedRef, files, actionContext(options));
   console.log(reportLine("upload", result, backend.agentDir));
   return result.snapshotId;
 }
@@ -227,14 +263,19 @@ export function parseActOp(token: string): ActOp {
 }
 
 export async function performAct(
-  snapshotId: string,
+  snapshotId: string | undefined,
   ops: ActOp[],
   options: OpOptions = {},
 ): Promise<string> {
-  // Offline: sequential click/fill on the evolving snapshot id. Live: one session, one new
-  // snapshot at the end. First error aborts the sequence (non-zero exit via caller).
   const backend = backendOf(options);
-  const act = await backend.act(snapshotId, ops, {
+  const resolvedSnapshotId = await resolveSnapshotId(backend, snapshotId);
+  const resolvedOps = await Promise.all(
+    ops.map(async (op) => {
+      const resolvedRef = await resolveRef(backend, resolvedSnapshotId, op.ref);
+      return { ...op, ref: resolvedRef };
+    }),
+  );
+  const act = await backend.act(resolvedSnapshotId, resolvedOps, {
     ...actionContext(options),
     onResult: (op, result) => {
       console.log(reportLine(op.kind, result, backend.agentDir));
@@ -264,17 +305,17 @@ function formatExtractLine(element: {
 }
 
 export async function performExtract(
-  snapshotId: string,
+  snapshotId: string | undefined,
   mode: ExtractMode,
   options: OpOptions = {},
 ): Promise<string[]> {
-  // Read-only: load the stored snapshot, never supersede/invalidate it.
-  // Unknown snapshotId fails fast with the same stale_ref format as click/fill.
-  const snapshot = await loadSnapshot(snapshotId, {
-    agentDir: options.backend?.agentDir ?? ".agent",
+  const backend = backendOf(options);
+  const resolvedSnapshotId = await resolveSnapshotId(backend, snapshotId);
+  const snapshot = await loadSnapshot(resolvedSnapshotId, {
+    agentDir: backend.agentDir,
   });
   if (snapshot === null) {
-    throw new StaleRefError(snapshotId, `unknown snapshotId "${snapshotId}"`);
+    throw new StaleRefError(resolvedSnapshotId, `unknown snapshotId "${resolvedSnapshotId}"`);
   }
   if (mode === "text") {
     return snapshot.elements

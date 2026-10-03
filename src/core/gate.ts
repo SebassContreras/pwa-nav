@@ -79,33 +79,40 @@ function isMissing(error: unknown): boolean {
   return (error as NodeJS.ErrnoException).code === "ENOENT";
 }
 
-export async function loadAllowList(agentDir: string = DEFAULT_AGENT_DIR): Promise<string[]> {
+export async function loadAllowList(
+  agentDir: string = DEFAULT_AGENT_DIR,
+  extraOrigins: readonly string[] = [],
+): Promise<string[]> {
   const file = allowListPath(agentDir);
   let raw: string;
+  let origins: string[] = [];
   try {
     raw = await readFile(file, "utf8");
-  } catch (error) {
-    if (isMissing(error)) {
-      return [];
+    let parsed: unknown;
+    try {
+      parsed = JSON.parse(raw);
+    } catch (error) {
+      throw new PwaNavError("invalid_args", `malformed ${file}: invalid JSON`, {
+        hint: 'expected {"origins": ["https://example.com"]}',
+        cause: error,
+      });
     }
-    throw new PwaNavError("invalid_args", `cannot read ${file}`, { cause: error });
-  }
-  let parsed: unknown;
-  try {
-    parsed = JSON.parse(raw);
+    const rawOrigins = (parsed as { origins?: unknown } | null)?.origins;
+    if (!Array.isArray(rawOrigins) || !rawOrigins.every((o): o is string => typeof o === "string")) {
+      throw new PwaNavError("invalid_args", `malformed ${file}: "origins" must be a string array`, {
+        hint: 'expected {"origins": ["https://example.com"]}',
+      });
+    }
+    origins = rawOrigins;
   } catch (error) {
-    throw new PwaNavError("invalid_args", `malformed ${file}: invalid JSON`, {
-      hint: 'expected {"origins": ["https://example.com"]}',
-      cause: error,
-    });
+    if (!isMissing(error) && error instanceof PwaNavError) {
+      throw error;
+    }
+    if (!isMissing(error)) {
+      throw new PwaNavError("invalid_args", `cannot read ${file}`, { cause: error });
+    }
   }
-  const origins = (parsed as { origins?: unknown } | null)?.origins;
-  if (!Array.isArray(origins) || !origins.every((o): o is string => typeof o === "string")) {
-    throw new PwaNavError("invalid_args", `malformed ${file}: "origins" must be a string array`, {
-      hint: 'expected {"origins": ["https://example.com"]}',
-    });
-  }
-  return origins;
+  return [...new Set([...origins, ...extraOrigins])];
 }
 
 // Adds a normalized http(s) origin; idempotent, sorted, temp file + rename.
@@ -136,6 +143,7 @@ export interface AssertArmedOptions {
   origin: string;
   agentDir?: string;
   env?: NodeJS.ProcessEnv;
+  extraOrigins?: readonly string[];
 }
 
 // Per-action check: re-reads kill-switch and allow-list each call, so a
@@ -146,7 +154,7 @@ export async function assertArmedAllowed(options: AssertArmedOptions): Promise<G
   }
   const [killSwitchActive, allowedOrigins] = await Promise.all([
     isKillSwitchActive(killSwitchPath(options.env)),
-    loadAllowList(options.agentDir),
+    loadAllowList(options.agentDir, options.extraOrigins),
   ]);
   return decideAction({
     armed: true,
@@ -163,6 +171,7 @@ export interface AssertNavigationOptions {
   allowOrigin: boolean;
   agentDir?: string;
   env?: NodeJS.ProcessEnv;
+  extraOrigins?: readonly string[];
 }
 
 // `open` navigates the user's real window: kill-switch blocks it, and the origin must be
@@ -178,7 +187,7 @@ export async function assertNavigationAllowed(options: AssertNavigationOptions):
     throw new PwaNavError("invalid_args", `invalid URL (expected http/https): ${options.url}`);
   }
   if (options.allowOrigin) return;
-  const allowed = (await loadAllowList(options.agentDir)).map(normalizeOrigin);
+  const allowed = (await loadAllowList(options.agentDir, options.extraOrigins)).map(normalizeOrigin);
   if (!allowed.includes(origin)) {
     throw new PwaNavError("origin_blocked", `origin not allow-listed: ${origin}`, {
       hint: "re-run: open <url> --allow-origin to allow this origin",

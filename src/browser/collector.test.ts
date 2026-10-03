@@ -25,7 +25,7 @@ test("collector is self-contained: shipped source matches direct call", () => {
   const direct = collect(html);
   const dom = new JSDOM(html, { runScripts: "outside-only" });
   const win = dom.window as unknown as { Function: new (body: string) => () => unknown; document: Document };
-  const shipped = new win.Function(`return ${COLLECTOR_SOURCE}`)() as (d: Document) => unknown;
+  const shipped = new win.Function(`var __name = typeof __name !== "undefined" ? __name : (fn) => fn; return ${COLLECTOR_SOURCE}`)() as (d: Document) => unknown;
   const viaSource: unknown = JSON.parse(JSON.stringify(shipped(win.document)));
   assert.deepEqual(viaSource, direct);
 });
@@ -166,7 +166,7 @@ test("collectNodes returns the same elements in the same order as collectInterac
 test("COLLECT_NODES_SOURCE is self-contained and matches direct call", () => {
   const dom = new JSDOM(fixture("login.html"), { runScripts: "outside-only" });
   const win = dom.window as unknown as { Function: new (body: string) => () => unknown; document: Document };
-  const shipped = new win.Function(`return ${COLLECT_NODES_SOURCE}`)() as (d: Document) => Element[];
+  const shipped = new win.Function(`var __name = typeof __name !== "undefined" ? __name : (fn) => fn; return ${COLLECT_NODES_SOURCE}`)() as (d: Document) => Element[];
   const nodes = shipped(win.document);
   assert.equal(nodes.length, collectInteractive(win.document).length);
   assert.deepEqual(

@@ -48,7 +48,7 @@ function isHttpUrl(value: string): boolean {
 }
 
 function cliPath(): string {
-  return join(dirname(fileURLToPath(import.meta.url)), "cli.js");
+  return resolve(dirname(fileURLToPath(import.meta.url)), "../dist/cli.js");
 }
 
 function parseArgs(argv: string[]): { demoUrl: string; ownUrl: string } {

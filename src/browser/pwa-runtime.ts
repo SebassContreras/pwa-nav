@@ -3,7 +3,7 @@
 // Never writes to the profile (no user.js/prefs.js).
 import { spawn, type ChildProcess } from "node:child_process";
 import { existsSync } from "node:fs";
-import { readFile } from "node:fs/promises";
+import { readFile, writeFile } from "node:fs/promises";
 import { connect } from "node:net";
 import { join } from "node:path";
 import { PwaNavError } from "../core/errors.js";
@@ -147,6 +147,40 @@ export function parseConfig(raw: unknown): PwaConfig {
   return { sites };
 }
 
+export async function ensureDebuggingPortConfigured(
+  dir?: string,
+  port: number = 9222,
+  platform: string = process.platform,
+  env: Env = process.env,
+): Promise<boolean> {
+  let targetDir = dir;
+  if (targetDir === undefined) {
+    try {
+      targetDir = firefoxPwaDir(platform, env);
+    } catch {
+      return false;
+    }
+  }
+  const file = join(targetDir, "config.json");
+  try {
+    const text = await readFile(file, "utf8");
+    const json: unknown = JSON.parse(text);
+    if (!isRecord(json)) return false;
+    const args = Array.isArray(json["arguments"]) ? (json["arguments"] as unknown[]) : [];
+    const hasFlag = args.some(
+      (a) => typeof a === "string" && (a === "--remote-debugging-port" || a.includes("--remote-debugging-port")),
+    );
+    if (!hasFlag) {
+      json["arguments"] = [...args, "--remote-debugging-port", String(port)];
+      await writeFile(file, JSON.stringify(json, null, 2) + "\n", "utf8");
+      return true;
+    }
+  } catch {
+    return false;
+  }
+  return false;
+}
+
 export async function readConfig(dir: string): Promise<PwaConfig> {
   const file = join(dir, "config.json");
   let text: string;
@@ -167,31 +201,81 @@ export async function readConfig(dir: string): Promise<PwaConfig> {
   return parseConfig(json);
 }
 
+export async function listInstalledSites(
+  platform: string = process.platform,
+  env: Env = process.env,
+): Promise<PwaSite[]> {
+  try {
+    const dir = firefoxPwaDir(platform, env);
+    const cfg = await readConfig(dir);
+    return cfg.sites;
+  } catch {
+    return [];
+  }
+}
+
 // `siteId` (from --site) disambiguates several sites on one origin.
-export function findSite(config: PwaConfig, origin: string, siteId?: string): PwaSite {
-  const byOrigin = config.sites.filter((s) => s.origin === origin);
+export function findSite(config: PwaConfig, target: string, siteId?: string): PwaSite {
   if (siteId !== undefined) {
-    const site = byOrigin.find((s) => s.ulid === siteId);
+    const site = config.sites.find((s) => s.ulid === siteId);
     if (site === undefined) {
-      throw new PwaNavError("invalid_args", `site ${siteId} not found for origin ${origin}`, {
-        hint: `candidates: ${byOrigin.map((s) => s.ulid).join(", ") || "none"}`,
+      throw new PwaNavError("invalid_args", `site ${siteId} not found`, {
+        hint: `candidates: ${config.sites.map((s) => s.ulid).join(", ") || "none"}`,
       });
     }
     return site;
   }
-  const [first, ...rest] = byOrigin;
-  if (first === undefined) {
-    const known = [...new Set(config.sites.map((s) => s.origin))];
-    throw new PwaNavError("no_browser", `no installed PWA matches origin ${origin}`, {
-      hint: `known origins: ${known.join(", ") || "none"}`,
-    });
-  }
-  if (rest.length > 0) {
-    throw new PwaNavError("invalid_args", `several PWAs match origin ${origin}; pass --site <ULID>`, {
+
+  // 1. Exact origin match
+  const byOrigin = config.sites.filter((s) => s.origin === target);
+  if (byOrigin.length === 1 && byOrigin[0] !== undefined) return byOrigin[0];
+  if (byOrigin.length > 1) {
+    throw new PwaNavError("invalid_args", `several PWAs match origin ${target}; pass --site <ULID>`, {
       hint: `candidates: ${byOrigin.map((s) => s.ulid).join(", ")}`,
     });
   }
-  return first;
+
+  // 2. Exact ULID match
+  const byUlid = config.sites.find((s) => s.ulid === target);
+  if (byUlid !== undefined) return byUlid;
+
+  // 3. Name or slug match (case insensitive)
+  const normTarget = target.trim().toLowerCase();
+  const byName = config.sites.filter(
+    (s) => s.name?.toLowerCase() === normTarget || (normTarget.length >= 3 && s.name?.toLowerCase().includes(normTarget)),
+  );
+  if (byName.length === 1 && byName[0] !== undefined) return byName[0];
+
+  // 4. Hostname / Domain heuristic (e.g. notebooklm.google.com matches notebook.google.com)
+  try {
+    const urlObj = new URL(target.startsWith("http") ? target : `https://${target}`);
+    const host = urlObj.hostname.toLowerCase();
+    const byHost = config.sites.filter((s) => {
+      try {
+        const sHost = new URL(s.origin).hostname.toLowerCase();
+        if (sHost === host) return true;
+        const hostParts = host.split(".");
+        const sParts = sHost.split(".");
+        const baseHost = hostParts.slice(-2).join(".");
+        const sBaseHost = sParts.slice(-2).join(".");
+        return baseHost === sBaseHost && (
+          (host.includes("notebook") && sHost.includes("notebook")) ||
+          host.startsWith(sParts[0] ?? "") ||
+          sHost.startsWith(hostParts[0] ?? "")
+        );
+      } catch {
+        return false;
+      }
+    });
+    if (byHost.length === 1 && byHost[0] !== undefined) return byHost[0];
+  } catch {
+    // not a URL
+  }
+
+  const known = [...new Set(config.sites.map((s) => s.name ? `${s.name} (${s.origin})` : s.origin))];
+  throw new PwaNavError("no_browser", `no installed PWA matches "${target}"`, {
+    hint: `known installed apps: ${known.join(", ") || "none"}`,
+  });
 }
 
 export function validatePort(port: number): number {

@@ -5,13 +5,15 @@ import { spawn, spawnSync } from "node:child_process";
 import { existsSync } from "node:fs";
 import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
-import { dirname, join } from "node:path";
+import { dirname, join, resolve } from "node:path";
 import { test } from "node:test";
 import { fileURLToPath } from "node:url";
 import { startFakeBidiServer, type FakeBidiServer } from "../bidi/fake-server.js";
 import type { RawElement } from "../browser/collector.js";
 
-const CLI = join(dirname(fileURLToPath(import.meta.url)), "..", "cli.js");
+const CLI = existsSync(join(dirname(fileURLToPath(import.meta.url)), "..", "cli.js"))
+  ? join(dirname(fileURLToPath(import.meta.url)), "..", "cli.js")
+  : resolve(dirname(fileURLToPath(import.meta.url)), "../../dist/cli.js");
 const URL_A = "https://app.test/login";
 
 // A port that was just released: nothing listens on it, so a command that forgets

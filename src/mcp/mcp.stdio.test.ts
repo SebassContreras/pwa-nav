@@ -2,6 +2,7 @@
 // and assert stdout carries only JSON-RPC frames. Never touches a browser or port 9222.
 import assert from "node:assert/strict";
 import { spawn } from "node:child_process";
+import { existsSync } from "node:fs";
 import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
@@ -10,7 +11,9 @@ import { fileURLToPath } from "node:url";
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { StdioClientTransport } from "@modelcontextprotocol/sdk/client/stdio.js";
 
-const MCP = join(dirname(fileURLToPath(import.meta.url)), "..", "mcp.js");
+const MCP = existsSync(join(dirname(fileURLToPath(import.meta.url)), "..", "mcp.js"))
+  ? join(dirname(fileURLToPath(import.meta.url)), "..", "mcp.js")
+  : join(dirname(fileURLToPath(import.meta.url)), "../../dist/mcp.js");
 
 test("stdio: lists tools, calls an offline tool, exits cleanly on close", async () => {
   const dir = await mkdtemp(join(tmpdir(), "pwa-nav-mcp-stdio-"));

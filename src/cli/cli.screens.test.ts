@@ -14,8 +14,10 @@ import { learnScreen } from "../screens/screen-learn.js";
 import type { ScreenMap } from "../screens/screen-map.js";
 
 const HERE = dirname(fileURLToPath(import.meta.url));
-const CLI = join(HERE, "..", "cli.js");
 const ROOT = join(HERE, "..", "..");
+const CLI = existsSync(join(HERE, "..", "cli.js"))
+  ? join(HERE, "..", "cli.js")
+  : join(ROOT, "dist", "cli.js");
 const ORIGIN = "http://localhost:8080";
 const SECRET = "hunter2-SECRET";
 

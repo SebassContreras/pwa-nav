@@ -18,7 +18,9 @@ import { tcpProbe, waitForPort } from "./browser/pwa-runtime.js";
 import type { Snapshot } from "./core/snapshot.js";
 
 const HERE = dirname(fileURLToPath(import.meta.url));
-const CLI = join(HERE, "cli.js");
+const CLI = existsSync(join(HERE, "cli.js"))
+  ? join(HERE, "cli.js")
+  : join(HERE, "..", "dist", "cli.js");
 const FIXTURES = join(HERE, "..", "checks", "fixtures", "e2e");
 const FIREFOX =
   process.env["PWA_NAV_E2E_FIREFOX"] ??

@@ -34,6 +34,7 @@ import {
   firefoxPwaDir,
   launchCommandHint,
   launchPwa,
+  listInstalledSites,
   profileDirOf,
   readConfig,
   runtimePath,
@@ -143,9 +144,19 @@ export class BidiBackend implements Backend {
     return (await loadSession(agentPath(this.agentDir, "session.json")))?.url;
   }
 
+  private async getInstalledOrigins(): Promise<string[]> {
+    try {
+      const sites = await listInstalledSites(this.platform, this.env);
+      return sites.map((s) => s.origin);
+    } catch {
+      return [];
+    }
+  }
+
   private async assertGate(armed: boolean, ...urls: string[]): Promise<void> {
+    const extraOrigins = await this.getInstalledOrigins();
     for (const origin of urls) {
-      const decision = await assertArmedAllowed({ armed, origin, agentDir: this.agentDir, env: this.env });
+      const decision = await assertArmedAllowed({ armed, origin, agentDir: this.agentDir, env: this.env, extraOrigins });
       if (decision.kind === "blocked") throw decision.error;
     }
   }
@@ -153,21 +164,42 @@ export class BidiBackend implements Backend {
   // --- Backend ---
 
   async open(url: string, opts: OpenOptions = {}): Promise<Session> {
-    if (url.length === 0 || !isHttpUrl(url)) {
+    let target = url;
+    const installedOrigins = await this.getInstalledOrigins();
+    if (!isHttpUrl(target)) {
+      try {
+        const sites = await listInstalledSites(this.platform, this.env);
+        const match = sites.find(
+          (s) =>
+            s.name?.toLowerCase().includes(target.toLowerCase()) ||
+            s.origin.toLowerCase().includes(target.toLowerCase()) ||
+            s.ulid === target,
+        );
+        if (match !== undefined) {
+          target = match.documentUrl;
+        }
+      } catch {
+        // keep target as is
+      }
+    }
+    if (target.length === 0 || !isHttpUrl(target)) {
       throw new PwaNavError("invalid_args", `invalid URL (expected http/https): ${url}`);
     }
-    // Before launch/connect: nothing touches the browser unless the origin is consented.
+    // Before launch/connect: nothing touches the browser unless the origin is consented or installed.
     await assertNavigationAllowed({
-      url,
+      url: target,
       allowOrigin: opts.allowOrigin === true,
       agentDir: this.agentDir,
       env: this.env,
+      extraOrigins: installedOrigins,
     });
-    if (this.options.launch === true) {
-      const probe = this.options.probe ?? tcpProbe;
-      if (!(await probe(this.host, this.port))) {
+    const probe = this.options.probe ?? tcpProbe;
+    const portOpen = await probe(this.host, this.port);
+    if (!portOpen) {
+      // Auto-launch if launch: true was passed OR if this is an installed PWA
+      try {
         await (this.options.launchFn ?? launchPwa)({
-          origin: new URL(url).origin,
+          origin: new URL(target).origin,
           port: this.port,
           host: this.host,
           env: this.env,
@@ -175,11 +207,14 @@ export class BidiBackend implements Backend {
           ...(this.options.siteId === undefined ? {} : { siteId: this.options.siteId }),
           ...(this.options.probe === undefined ? {} : { probe: this.options.probe }),
         });
+      } catch (err) {
+        if (this.options.launch === true) throw err;
+        // Non-fatal if launch was not explicitly requested; run() will throw standard no_browser hint
       }
     }
-    const navigated = await this.run(url, (client, context) => client.navigate(context, url, "complete"));
+    const navigated = await this.run(target, (client, context) => client.navigate(context, target, "complete"));
     if (opts.allowOrigin === true) {
-      await addAllowedOrigin(new URL(url).origin, this.agentDir);
+      await addAllowedOrigin(new URL(target).origin, this.agentDir);
     }
     const session: Session = { url: navigated.url, title: "", openedAt: new Date().toISOString() };
     await writeSession(this.agentDir, session);
