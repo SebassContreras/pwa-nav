@@ -1,7 +1,7 @@
 // RefMap store for spec 002-nav-actions (T001).
 // Persists snapshots + refMaps to .agent/ and resolves snapshotId + ref.
 // Pure logic + file IO, no browser calls. Reuses the Snapshot contract.
-import { mkdir, readFile, writeFile } from "node:fs/promises";
+import { mkdir, readdir, readFile, stat, unlink, writeFile } from "node:fs/promises";
 import { join, resolve as resolvePath } from "node:path";
 import { PwaNavError } from "./errors.js";
 import type { LiveExtras } from "../browser/live-snapshot.js";
@@ -49,6 +49,29 @@ const memSnapshots = new Map<string, Snapshot>();
 const memSidecars = new Map<string, LocatorSidecar>();
 let memLatestSnapshotId: string | null = null;
 let memLastActiveAction: ActiveAction | null = null;
+async function pruneOldRefFiles(agentDir: string, maxSnapshots = 5): Promise<void> {
+  try {
+    const dir = resolvePath(join(agentDir, REFS_DIR));
+    const entries = await readdir(dir);
+    const locatorFiles = entries.filter((e) => e.endsWith(".locators.json"));
+    if (locatorFiles.length <= maxSnapshots) {
+      return;
+    }
+    const withMtime = await Promise.all(
+      locatorFiles.map(async (file) => {
+        const fileStats = await stat(join(dir, file)).catch(() => null);
+        return { file, mtime: fileStats?.mtimeMs ?? 0, id: file.replace(/\.locators\.json$/, "") };
+      }),
+    );
+    withMtime.sort((a, b) => b.mtime - a.mtime);
+    for (const item of withMtime.slice(maxSnapshots)) {
+      await unlink(join(dir, `${item.id}.json`)).catch(() => undefined);
+      await unlink(join(dir, `${item.id}.locators.json`)).catch(() => undefined);
+    }
+  } catch {
+    // ignore
+  }
+}
 
 export function setLastActiveAction(action: { id?: string; name?: string; role?: string } | null): void {
   if (action === null) {
@@ -136,6 +159,9 @@ async function readJsonFile(path: string): Promise<unknown> {
 
 // Latest snapshotId: prefer in-memory, then refs/latest.json, fall back to snapshot.json.
 export async function latestSnapshotId(options: RefStoreOptions = {}): Promise<string | null> {
+  if (memLatestSnapshotId !== null) {
+    return memLatestSnapshotId;
+  }
   const agentDir = agentDirOf(options);
   const latestRaw = await readJsonFile(latestPath(agentDir));
   if (typeof latestRaw === "object" && latestRaw !== null) {
@@ -148,7 +174,7 @@ export async function latestSnapshotId(options: RefStoreOptions = {}): Promise<s
   if (isSnapshot(snapshotRaw)) {
     return snapshotRaw.snapshotId;
   }
-  return memLatestSnapshotId;
+  return null;
 }
 
 // Persist snapshot + refMap. Supersedes any previous snapshotId.
@@ -169,6 +195,8 @@ export async function save(snapshot: Snapshot, options: RefStoreOptions = {}): P
     JSON.stringify({ snapshotId: snapshot.snapshotId }, null, 2) + "\n",
     "utf8",
   );
+  await pruneOldRefFiles(agentDir, 5);
+
   if (snapshot.url && snapshot.url.length > 0) {
     try {
       const u = new URL(snapshot.url);
@@ -264,6 +292,7 @@ export async function saveLive(
     JSON.stringify(sidecar, null, 2) + "\n",
     "utf8",
   );
+  await pruneOldRefFiles(agentDir, 5);
   return snapshot.snapshotId;
 }
 

@@ -11,7 +11,6 @@ import { normalize } from "../core/snapshot.js";
 import type { ActiveDialogInfo, Snapshot, SnapshotElement } from "../core/snapshot.js";
 import {
   agentPath,
-  appSlugFromUrl,
   ensureParentDir,
   isHttpUrl,
   loadSession,
@@ -36,7 +35,7 @@ import {
 } from "../core/refs.js";
 import type { Screen, ScreenMap } from "../screens/screen-map.js";
 import { loadExplicitMap, loadScreenMapsFromDir, resolveScreensDir } from "../screens/screen-match.js";
-import { learnScreen } from "../screens/screen-learn.js";
+import { learnScreen, slugify } from "../screens/screen-learn.js";
 import { learnIntoFile } from "../screens/screen-store.js";
 import { collectAllTargets } from "../screens/screen-resolve.js";
 import { PwaNavError } from "../core/errors.js";
@@ -142,7 +141,8 @@ export async function autoCollaborateScreen(
     }
     const page = new URL(pageUrl);
     const origin = page.origin;
-    const appSlug = appSlugFromUrl(pageUrl);
+    const rawHostname = page.hostname.replace(/^www\./, "");
+    const appId = slugify(rawHostname) || "app";
     const dir = options?.screensDir ?? resolveScreensDir({});
     let screenMapPath = options?.screenMapPath;
     let existingMap: ScreenMap | undefined;
@@ -160,7 +160,7 @@ export async function autoCollaborateScreen(
       }
     }
     if (!screenMapPath) {
-      screenMapPath = join(dir, `${appSlug}.screens.json`);
+      screenMapPath = join(dir, `${appId}.screens.json`);
     }
 
     if (existingMap === undefined) {
@@ -182,8 +182,8 @@ export async function autoCollaborateScreen(
     );
 
     const app = existingMap !== undefined ? { ...existingMap.app } : {
-      id: appSlug,
-      name: snapshot.title && snapshot.title.trim().length > 0 ? snapshot.title : appSlug,
+      id: appId,
+      name: snapshot.title && snapshot.title.trim().length > 0 ? snapshot.title : appId,
       origin,
       locale: options?.locale ?? "es",
     };
@@ -210,7 +210,8 @@ export async function autoCollaborateScreen(
       targets,
       written: res.written,
     };
-  } catch {
+  } catch (error) {
+    console.error("autoCollaborateScreen error:", error);
     return null;
   }
 }
