@@ -3,7 +3,7 @@
 // a session is never reused (Firefox allows a single active session).
 import { dirname } from "node:path";
 import { addAllowedOrigin, assertArmedAllowed, assertFileUploadAllowed, assertNavigationAllowed, DEFAULT_AGENT_DIR } from "../core/gate.js";
-import { withTopLevelContext, type SessionOptions } from "../bidi/session.js";
+import { withTopLevelContext, type TopLevelContextOptions } from "../bidi/session.js";
 import type { BidiClient } from "../bidi/protocol.js";
 import {
   DEFAULT_HOST,
@@ -61,7 +61,7 @@ export interface BidiBackendOptions {
   siteId?: string;
   platform?: string;
   /** Transport/signal options passed to every session. */
-  session?: SessionOptions;
+  session?: TopLevelContextOptions;
   probe?: PortProbe;
   launchFn?: typeof launchPwa;
   /** Test hook: runs after each completed armed op of a batch (index is zero-based). */
@@ -112,17 +112,34 @@ export class BidiBackend implements Backend {
     originUrl: string | undefined,
     fn: (client: BidiClient, context: string) => Promise<T>,
   ): Promise<T> {
-    try {
-      return await withTopLevelContext(this.endpoint, fn, {
-        ...this.options.session,
-        ...(this.options.contextId === undefined ? {} : { contextId: this.options.contextId }),
-      });
-    } catch (error) {
-      if (error instanceof PwaNavError && error.code === "no_browser") {
-        throw await this.withLaunchHint(error, originUrl);
+    const probe = this.options.probe ?? tcpProbe;
+    const maxAttempts = 3;
+    let lastError: unknown;
+    for (let attempt = 1; attempt <= maxAttempts; attempt++) {
+      try {
+        return await withTopLevelContext(this.endpoint, fn, {
+          ...this.options.session,
+          contextTimeoutMs: this.options.session?.contextTimeoutMs ?? 3000,
+          ...(this.options.contextId === undefined ? {} : { contextId: this.options.contextId }),
+        });
+      } catch (error) {
+        lastError = error;
+        if (
+          attempt < maxAttempts &&
+          error instanceof PwaNavError &&
+          (error.code === "no_browser" || error.code === "session_busy") &&
+          (await probe(this.host, this.port).catch(() => false))
+        ) {
+          await new Promise((r) => setTimeout(r, 400));
+          continue;
+        }
+        if (error instanceof PwaNavError && error.code === "no_browser") {
+          throw await this.withLaunchHint(error, originUrl);
+        }
+        throw error;
       }
-      throw error;
     }
+    throw lastError;
   }
 
   // Best effort: exact launch command for the matching site, else a generic hint.

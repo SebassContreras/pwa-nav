@@ -22,6 +22,7 @@ export interface SessionOptions {
 
 export interface TopLevelContextOptions extends SessionOptions {
   contextId?: string;
+  contextTimeoutMs?: number;
 }
 
 export async function withSession<T>(
@@ -108,7 +109,15 @@ export async function withTopLevelContext<T>(
   return withSession(
     endpoint,
     async (client) => {
-      const contexts = await client.getTopLevelContexts();
+      let contexts = await client.getTopLevelContexts();
+      const timeoutMs = options.contextTimeoutMs ?? 0;
+      if (contexts.length === 0 && timeoutMs > 0) {
+        const deadline = Date.now() + timeoutMs;
+        while (contexts.length === 0 && Date.now() < deadline) {
+          await new Promise((r) => setTimeout(r, 200));
+          contexts = await client.getTopLevelContexts();
+        }
+      }
       const { contextId } = options;
       if (contextId !== undefined) {
         if (!contexts.some((c) => c.context === contextId)) {
