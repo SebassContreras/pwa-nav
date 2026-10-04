@@ -24,6 +24,7 @@ import {
   performClick,
   performExtract,
   performFill,
+  performFind,
   performLiveSnapshot,
   performOpen,
   performScreenshot,
@@ -59,15 +60,16 @@ function usage(): string {
     "  pwa-nav snapshot --screen [--screen-map <file>] [--screens-dir <dir>]",
     "  pwa-nav snapshot --learn [--prune] [--locale <bcp47>] [--access public|authenticated|unknown]",
     "                   [--app-id <slug>] [--app-name <text>] [--screen-map <file>] [--screens-dir <dir>]",
-    "  pwa-nav click --snapshot <id> [--armed] <ref>   |   click [--armed] @<id>",
-    "  pwa-nav fill --snapshot <id> [--armed] <ref> <text>   |   fill [--armed] @<id> <text>",
-    "  pwa-nav upload --snapshot <id> [--armed] <ref> <path>...   |   upload [--armed] @<id> <path>...",
+    "  pwa-nav click --snapshot <id> [--dry-run] <ref>   |   click [--dry-run] @<id>",
+    "  pwa-nav fill --snapshot <id> [--dry-run] <ref> <text>   |   fill [--dry-run] @<id> <text>",
+    "  pwa-nav upload --snapshot <id> [--dry-run] <ref> <path>...   |   upload [--dry-run] @<id> <path>...",
     "  pwa-nav screenshot [--out <path>] [--format png|jpeg|webp]",
     "  pwa-nav extract --snapshot <id> --mode text|links [--query <str>] [--role <str>] [--offset <n>] [--limit <n>]",
+    "  pwa-nav find [<query>] [--role <str>] [--dialog] [--offset <n>] [--limit <n>] [--snapshot <id>]",
     "  pwa-nav wait <target> [--state visible|hidden|enabled] [--timeout <ms|s>] [--interval <ms|s>]",
     "  pwa-nav wait --query <str> [--state visible|hidden|enabled] [--timeout <ms|s>] [--interval <ms|s>]",
-    "  pwa-nav act --snapshot <id> [--armed] <op>...   |   act [--armed] <semantic-op>...",
-    "  pwa-nav journey <name> [key=value...] [--armed] [--screen-map <file>] [--screens-dir <dir>]",
+    "  pwa-nav act --snapshot <id> [--dry-run] <op>...   |   act [--dry-run] <semantic-op>...",
+    "  pwa-nav journey <name> [key=value...] [--dry-run] [--screen-map <file>] [--screens-dir <dir>]",
     "  pwa-nav auth [<app-or-url>] [--clean] [--debug] [--port <n>]",
     "  pwa-nav qa run <check-file>",
     "",
@@ -88,6 +90,7 @@ function usage(): string {
     "  upload          Live: dry-run unless --armed. Sets files on <input type=\"file\"> via input.setFiles.",
     "  screenshot      Capture a visual screenshot of the current page; saves PNG to disk.",
     "  extract         Read-only narrow extraction (text|links) from stored snapshot (never supersedes).",
+    "  find            Search elements in snapshot by text, role, placeholder, or dialog context.",
     "  wait            Wait for a DOM element/condition or asynchronous background generation.",
     "  act             Run bulk ops (fill:<ref>=<text> click:<ref> upload:<ref>=<path>); live: one session, one new snapshot.",
     "  journey         Declarative multi-screen user journey; dry-run unless --armed.",
@@ -242,6 +245,7 @@ const JOURNEY_OPTIONS = {
   ...LIVE_OPTIONS,
   ...SCREEN_OPTIONS,
   armed: { type: "boolean" },
+  "dry-run": { type: "boolean" },
 } as const satisfies ParseArgsOptionsConfig;
 
 const SCREENSHOT_OPTIONS = {
@@ -467,14 +471,22 @@ async function cmdSnapshot(rest: string[]): Promise<void> {
   }
 }
 
-// Shared by click/fill/act. `--armed` is deliberately flag-only: an environment variable is
-// never honored for it, so a stray env can never silently arm a live action.
+// Shared by click/fill/act. Actions are ARMED by default (active execution).
+// Pass `--dry-run` (or env PWA_NAV_DRY_RUN=1) to preview mutations without executing.
 const ACTION_OPTIONS = {
   ...LIVE_OPTIONS,
   ...SCREEN_OPTIONS,
   snapshot: { type: "string" },
   armed: { type: "boolean" },
+  "dry-run": { type: "boolean" },
 } as const satisfies ParseArgsOptionsConfig;
+
+function isArmed(values: { armed?: boolean; "dry-run"?: boolean }): boolean {
+  if (values["dry-run"] === true) {
+    return false;
+  }
+  return values.armed === true;
+}
 
 function screenSourceOf(values: { "screen-map"?: string; "screens-dir"?: string }): ScreenSource {
   const screenMap = requireNonEmpty("--screen-map", values["screen-map"]);
@@ -489,6 +501,7 @@ function screenSourceOf(values: { "screen-map"?: string; "screens-dir"?: string 
 function semanticContext(values: {
   snapshot?: string;
   armed?: boolean;
+  "dry-run"?: boolean;
   "screen-map"?: string;
   "screens-dir"?: string;
   backend?: string;
@@ -502,7 +515,7 @@ function semanticContext(values: {
   if (live.mode === "offline") {
     throw invalid("@id targets need the live backend (--backend bidi).");
   }
-  const armed = values.armed === true;
+  const armed = isArmed(values);
   return { ...screenSourceOf(values), backend: makeBackend(live, { armed }), armed };
 }
 
@@ -535,7 +548,7 @@ async function cmdClick(rest: string[]): Promise<void> {
     throw invalid("missing <ref>.");
   }
   const live = resolveLive(values);
-  const armed = values.armed === true;
+  const armed = isArmed(values);
   await performClick(snapshotId, ref, { backend: makeBackend(live, { armed }), armed });
   noInputNote(live, armed);
 }
@@ -557,7 +570,7 @@ async function cmdFill(rest: string[]): Promise<void> {
     throw invalid("missing <ref> <text>.");
   }
   const live = resolveLive(values);
-  const armed = values.armed === true;
+  const armed = isArmed(values);
   await performFill(snapshotId, ref, text, { backend: makeBackend(live, { armed }), armed });
   noInputNote(live, armed);
 }
@@ -579,7 +592,7 @@ async function cmdUpload(rest: string[]): Promise<void> {
     throw invalid("missing <ref> <path>.");
   }
   const live = resolveLive(values);
-  const armed = values.armed === true;
+  const armed = isArmed(values);
   await performUpload(snapshotId, ref, files, { backend: makeBackend(live, { armed }), armed });
   noInputNote(live, armed);
 }
@@ -603,7 +616,7 @@ async function cmdAct(rest: string[]): Promise<void> {
     }
   });
   const live = resolveLive(values);
-  const armed = values.armed === true;
+  const armed = isArmed(values);
   await performAct(snapshotId, ops, { backend: makeBackend(live, { armed }), armed });
   noInputNote(live, armed);
 }
@@ -678,6 +691,51 @@ async function cmdExtract(rest: string[]): Promise<void> {
   }
 }
 
+async function cmdFind(rest: string[]): Promise<void> {
+  const { values, positionals } = strictParse("find", rest, {
+    snapshot: { type: "string" },
+    role: { type: "string" },
+    dialog: { type: "boolean" },
+    offset: { type: "string" },
+    limit: { type: "string" },
+    ...LIVE_OPTIONS,
+  });
+  printHelpAndExit(values.help);
+  const live = resolveLive(values);
+  const backend = makeBackend(live);
+  const snapshotId = requireNonEmpty("--snapshot", values.snapshot);
+  const query = positionals[0];
+  const role = requireNonEmpty("--role", values.role);
+  const inDialog = values.dialog === true;
+  const offsetStr = requireNonEmpty("--offset", values.offset);
+  const limitStr = requireNonEmpty("--limit", values.limit);
+  const offset = offsetStr !== undefined ? parseInt(offsetStr, 10) : undefined;
+  if (offset !== undefined && (isNaN(offset) || offset < 0)) {
+    throw invalid(`invalid --offset: ${offsetStr ?? ""} (expected non-negative integer).`);
+  }
+  const limit = limitStr !== undefined ? parseInt(limitStr, 10) : undefined;
+  if (limit !== undefined && (isNaN(limit) || limit < 1)) {
+    throw invalid(`invalid --limit: ${limitStr ?? ""} (expected positive integer).`);
+  }
+  const result = await performFind(snapshotId, {
+    backend,
+    query,
+    role,
+    inDialog,
+    offset,
+    limit,
+  });
+  if (result.activeDialog) {
+    console.log(`[active modal: "${result.activeDialog.title}" (${result.activeDialog.elementCount.toString()} elements)]`);
+  }
+  for (const line of result.lines) {
+    console.log(line);
+  }
+  if (result.lines.length === 0) {
+    console.log("0 matching elements.");
+  }
+}
+
 async function cmdWait(rest: string[]): Promise<void> {
   const { values, positionals } = strictParse("wait", rest, {
     ...LIVE_OPTIONS,
@@ -742,7 +800,7 @@ async function cmdJourney(rest: string[]): Promise<void> {
     inputs = parseFlowInputs(inputEntries);
   }
   const live = resolveLive(values);
-  const armed = values.armed === true;
+  const armed = isArmed(values);
   const backend = makeBackend(live, { armed });
   await performJourney(journeyName, inputs, {
     backend,
@@ -821,6 +879,8 @@ async function main(): Promise<void> {
       return cmdScreenshot(rest);
     case "extract":
       return cmdExtract(rest);
+    case "find":
+      return cmdFind(rest);
     case "wait":
       return cmdWait(rest);
     case "act":

@@ -106,7 +106,12 @@ export function parseSession(raw: unknown): Session | null {
   return { url: record["url"], title, openedAt };
 }
 
+let inMemorySession: Session | null = null;
+
 export async function loadSession(sessionPath: string): Promise<Session | null> {
+  if (inMemorySession !== null) {
+    return inMemorySession;
+  }
   try {
     const text = await readFile(sessionPath, "utf8");
     return parseSession(JSON.parse(text) as unknown);
@@ -115,7 +120,17 @@ export async function loadSession(sessionPath: string): Promise<Session | null> 
   }
 }
 
+export function appSlugFromUrl(urlOrOrigin: string): string {
+  try {
+    const u = new URL(urlOrOrigin);
+    return u.hostname.replace(/^www\./, "").replace(/[^a-z0-9.-]/gi, "-").toLowerCase();
+  } catch {
+    return "default";
+  }
+}
+
 export async function writeSession(agentDir: string, session: Session): Promise<void> {
+  inMemorySession = session;
   const path = agentPath(agentDir, "session.json");
   await ensureParentDir(path);
   await writeFile(path, JSON.stringify(session, null, 2) + "\n", "utf8");

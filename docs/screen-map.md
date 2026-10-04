@@ -6,7 +6,9 @@ Per-app JSON file saying what each screen offers: fields, actions, links, named 
 
 - App-agnostic. The tool ships no app-specific map. `examples/screens/demo-app.screens.json` (derived from `checks/fixtures/login.html`) is the reference and test fixture.
 - Your maps live in the screens dir: `--screens-dir <dir>` > env `PWA_NAV_SCREENS_DIR` > `./screens`. This repo git-ignores `screens/` because maps are per-user data.
-- Learned from live snapshots (`snapshot --learn`), never invented. The human reviews every learned map before relying on it.
+- Learned from live snapshots (`snapshot --learn` or `pwa_learn`), never invented. Agents autonomously discover and enrich the screen map on unmapped routes, and operators can review and fine-tune it.
+- **Continuous Screen Map Enrichment**: Every snapshot and learn step collaborates in enriching `screens/<app>.screens.json` with discovered controls, flows, journeys, and nested modal branches (`action.opens`).
+- **Zero Loose Files in Workspace**: Raw snapshots and session caches are strictly isolated per application in `.agent/apps/<appSlug>/snapshot.json`. Screen maps remain the persistent, clean source of truth without scattering loose files in the repo.
 - Not a replacement for `eN` refs: refs stay valid for one snapshot only. `@id` is a semantic target resolved on a fresh snapshot.
 - Never stores field values, credentials, cookies or tokens.
 
@@ -19,8 +21,8 @@ Schema: `schemas/screen-map.schema.json` (JSON Schema 2020-12, `additionalProper
 | `schemaVersion` | `1.x.y` |
 | `app` | `{id, name, origin, version?, locale, learnedAt}` |
 | `screens[]` | `{id, route, title, access, fingerprint, observedAt, fields[], actions[], links[], flows[], a11y[]?}`; `route` is a literal or `:param` pathname |
-| `fields[]` | role, name, `nameSource`, `inputType`, `sensitive`, `agentFillable`, `locator` |
-| `actions[]` | `kind` (submit/toggle/button), `effect` (none/ui-state/submit), `requires[]`, `locator` |
+| `fields[]` | role, name, `nameSource`, `inputType`, `sensitive`, `agentFillable`, `locator`, optional `placeholder`, `dialog`, `container` |
+| `actions[]` | `kind` (submit/toggle/button), `effect` (none/ui-state/submit), `requires[]`, `locator`, optional `dialog`, `container`, `opens` (`OpensBranch`: subdialog/modal/view tree) |
 | `links[]` | `href`, `external`, `locator` |
 | `flows[]` | `{id, description, humanOnly, inputSchema, steps[{op: fill\|click, target: @id, from?}]}`, shaped like MCP tool descriptors |
 | `journeys[]` | `{id, description, humanOnly?, inputSchema?, steps[{screenId, action, inputs?, expectScreen?}]}`, multi-screen declarative workflows |
@@ -51,7 +53,49 @@ links: @forgot-password -> /forgot-password | @help-center -> external help.exam
 flows: login HUMAN-ONLY
 ```
 
-Lines: header (`id route access fp:<8 hex>`), then `fields`, `actions`, `links`, `flows`, and `a11y` when findings exist.
+Lines: header (`id route access fp:<8 hex>`), then `fields`, `actions`, `links`, `flows`, and `a11y` when findings exist. When an action has an `opens` branch, it is indicated with `opens(...)` and subsequent lines detail the opened branch.
+
+## Action Trees & Nested Branches (`opens`)
+
+When an action triggers a modal, dialog, or secondary view (for example, clicking `@crear-publicacion` opens the post authoring dialog), the screen map captures this hierarchical transition inside `action.opens`:
+
+```json
+{
+  "id": "crear-publicacion",
+  "role": "button",
+  "name": "Crear publicación",
+  "kind": "button",
+  "effect": "ui-state",
+  "locator": { "role": "button", "name": "Crear publicación" },
+  "opens": {
+    "id": "post-modal",
+    "type": "dialog",
+    "title": "Crear publicación",
+    "fields": [
+      {
+        "id": "editor-post",
+        "role": "textbox",
+        "name": "¿De qué quieres hablar?",
+        "locator": { "role": "textbox", "name": "¿De qué quieres hablar?" }
+      }
+    ],
+    "actions": [
+      {
+        "id": "boton-publicar",
+        "role": "button",
+        "name": "Publicar",
+        "kind": "submit",
+        "effect": "submit",
+        "locator": { "role": "button", "name": "Publicar" }
+      }
+    ]
+  }
+}
+```
+
+- **Target Resolution**: Elements declared within `opens` branches are directly resolvable by name or `@id` (e.g., `@editor-post` or `@boton-publicar`).
+- **Dynamic Branch Expansion**: When `pwa_click` or `pwa_act` triggers an action that opens a modal, the response describes the opened branch and lists its available controls immediately.
+- **Per-Application Storage Isolation**: Sessions and raw snapshots are isolated under `.agent/apps/<appSlug>/` (e.g. `.agent/apps/linkedin.com/snapshot.json` and `.agent/apps/notebooklm.google.com/snapshot.json`) to prevent cross-contamination across different web apps.
 
 ## Commands
 

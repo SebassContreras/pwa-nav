@@ -6,10 +6,12 @@
 // snapshot input from a caller-supplied ARIA tree); BidiBackend drives a live browser.
 // extract is read-only (never supersedes) and never calls the backend.
 import { writeFile } from "node:fs/promises";
+import { join } from "node:path";
 import { normalize } from "../core/snapshot.js";
-import type { Snapshot } from "../core/snapshot.js";
+import type { ActiveDialogInfo, Snapshot, SnapshotElement } from "../core/snapshot.js";
 import {
   agentPath,
+  appSlugFromUrl,
   ensureParentDir,
   isHttpUrl,
   loadSession,
@@ -24,12 +26,19 @@ import {
 import type { RawElement } from "../browser/collector.js";
 import { buildLiveSnapshot } from "../browser/live-snapshot.js";
 import {
+  clearLastActiveAction,
+  getLastActiveAction,
   latestSnapshotId,
   load as loadSnapshot,
   save as saveSnapshot,
   saveLive,
   StaleRefError,
 } from "../core/refs.js";
+import type { Screen, ScreenMap } from "../screens/screen-map.js";
+import { loadExplicitMap, loadScreenMapsFromDir, resolveScreensDir } from "../screens/screen-match.js";
+import { learnScreen } from "../screens/screen-learn.js";
+import { learnIntoFile } from "../screens/screen-store.js";
+import { collectAllTargets } from "../screens/screen-resolve.js";
 import { PwaNavError } from "../core/errors.js";
 import {
   cleanDebuggingPortConfigured,
@@ -64,7 +73,7 @@ export interface ScreenshotPerformOptions extends OpOptions {
   clip?: ScreenshotOptions["clip"];
 }
 
-export type ExtractMode = "text" | "links";
+export type ExtractMode = "text" | "links" | "all";
 
 // Optional trailing argument of every perform*: omitted = OfflineBackend (fixture behavior).
 export interface OpOptions {
@@ -94,9 +103,8 @@ function reportLine(kind: ActOp["kind"], result: ActionResult, agentDir: string)
     return `${kind} dry-run: ${result.plan}`;
   }
   const head = `${kind} ok: ${result.plan}`;
-  return result.interim === true
-    ? head
-    : `${head} -> ${agentPath(agentDir, "snapshot.json")} (id ${result.snapshotId})`;
+  if (result.interim === true) return head;
+  return `${head} -> ${agentPath(agentDir, "snapshot.json")} (id ${result.snapshotId})`;
 }
 
 export async function performOpen(url: string, options: OpOptions = {}): Promise<Session> {
@@ -112,6 +120,99 @@ export interface LiveSnapshotOptions {
   quiet?: boolean;
   query?: string;
   role?: string;
+}
+
+export interface AutoCollaborateResult {
+  screenMapPath: string;
+  screen: Screen;
+  targets: string[];
+  written: boolean;
+}
+
+export async function autoCollaborateScreen(
+  backend: Backend,
+  raw: RawElement[],
+  snapshot: Snapshot,
+  options?: { locale?: string; access?: Screen["access"]; screensDir?: string; screenMapPath?: string },
+): Promise<AutoCollaborateResult | null> {
+  try {
+    const pageUrl = snapshot.url;
+    if (!pageUrl || !isHttpUrl(pageUrl)) {
+      return null;
+    }
+    const page = new URL(pageUrl);
+    const origin = page.origin;
+    const appSlug = appSlugFromUrl(pageUrl);
+    const dir = options?.screensDir ?? resolveScreensDir({});
+    let screenMapPath = options?.screenMapPath;
+    let existingMap: ScreenMap | undefined;
+
+    if (!screenMapPath) {
+      try {
+        const loaded = await loadScreenMapsFromDir(dir);
+        const match = loaded.find((item) => item.map.app.origin === origin);
+        if (match) {
+          screenMapPath = match.path;
+          existingMap = match.map;
+        }
+      } catch {
+        // ignore
+      }
+    }
+    if (!screenMapPath) {
+      screenMapPath = join(dir, `${appSlug}.screens.json`);
+    }
+
+    if (existingMap === undefined) {
+      try {
+        existingMap = await loadExplicitMap(screenMapPath);
+      } catch {
+        existingMap = undefined;
+      }
+    }
+
+    const lastAction = getLastActiveAction();
+    const learned = learnScreen(
+      raw,
+      { url: pageUrl, title: snapshot.title, appOrigin: origin },
+      {
+        ...(lastAction ? { lastAction: { ...(lastAction.id ? { id: lastAction.id } : {}), ...(lastAction.name ? { name: lastAction.name } : {}) } } : {}),
+        ...(options?.access ? { access: options.access } : {}),
+      },
+    );
+
+    const app = existingMap !== undefined ? { ...existingMap.app } : {
+      id: appSlug,
+      name: snapshot.title && snapshot.title.trim().length > 0 ? snapshot.title : appSlug,
+      origin,
+      locale: options?.locale ?? "es",
+    };
+
+    const res = await learnIntoFile({
+      path: screenMapPath,
+      learned,
+      app,
+    });
+
+    clearLastActiveAction();
+
+    const currentScreen = res.map.screens.find((s) => s.id === learned.id) ?? learned;
+    const { fields, actions, links } = collectAllTargets(currentScreen);
+    const targets = [
+      ...fields.map((f) => `@${f.id}`),
+      ...actions.map((a) => `@${a.id}`),
+      ...links.map((l) => `@${l.id}`),
+    ];
+
+    return {
+      screenMapPath,
+      screen: currentScreen,
+      targets,
+      written: res.written,
+    };
+  } catch {
+    return null;
+  }
 }
 
 // Live snapshot: collect from the backend's DOM, store snapshot + locator sidecar (+ extras).
@@ -138,6 +239,7 @@ export async function captureLiveSnapshot(
   }
   return { snapshot: built.snapshot, raw: live.raw };
 }
+
 
 export async function performLiveSnapshot(
   backend: Backend,
@@ -318,21 +420,29 @@ export async function performAct(
   return act.snapshotId;
 }
 
-function formatExtractLine(element: {
+export function formatExtractLine(element: {
   ref: string;
   role: string;
   name: string;
   value?: string;
   disabled?: boolean;
+  placeholder?: string;
+  dialog?: string;
+  container?: string;
 }): string {
   const disabledTag = element.disabled === true ? " [disabled]" : "";
+  const dialogTag = element.dialog ? ` [dialog: "${element.dialog}"]` : "";
+  const placeholderTag =
+    element.placeholder && element.placeholder !== element.name
+      ? ` (placeholder: "${element.placeholder}")`
+      : "";
   if (element.name.length > 0 && element.value !== undefined && element.value.length > 0) {
-    return `${element.ref} ${element.role}${disabledTag} "${element.name}": ${element.value}`;
+    return `${element.ref} ${element.role}${disabledTag}${dialogTag} "${element.name}"${placeholderTag}: ${element.value}`;
   }
   if (element.name.length > 0) {
-    return `${element.ref} ${element.role}${disabledTag} "${element.name}"`;
+    return `${element.ref} ${element.role}${disabledTag}${dialogTag} "${element.name}"${placeholderTag}`;
   }
-  return `${element.ref} ${element.role}${disabledTag}: ${element.value ?? ""}`;
+  return `${element.ref} ${element.role}${disabledTag}${dialogTag}${placeholderTag}: ${element.value ?? ""}`;
 }
 
 export interface ExtractOptions extends OpOptions {
@@ -364,8 +474,10 @@ export async function performExtractDetailed(
   }
   let baseElements = snapshot.elements;
   if (mode === "text") {
-    baseElements = baseElements.filter((el) => el.name.length > 0 || (el.value ?? "").length > 0);
-  } else {
+    baseElements = baseElements.filter(
+      (el) => el.name.length > 0 || (el.value ?? "").length > 0 || el.placeholder !== undefined || el.role === "textbox",
+    );
+  } else if (mode === "links") {
     baseElements = baseElements.filter(
       (el) => (el.role === "link" || el.role === "button") && el.name.length > 0,
     );
@@ -382,6 +494,9 @@ export async function performExtractDetailed(
       (el) =>
         el.name.toLowerCase().includes(q) ||
         (el.value ?? "").toLowerCase().includes(q) ||
+        (el.placeholder ?? "").toLowerCase().includes(q) ||
+        (el.dialog ?? "").toLowerCase().includes(q) ||
+        (el.container ?? "").toLowerCase().includes(q) ||
         el.ref.toLowerCase() === q,
     );
   }
@@ -406,6 +521,78 @@ export async function performExtract(
 ): Promise<string[]> {
   const result = await performExtractDetailed(snapshotId, mode, options);
   return result.lines;
+}
+
+export interface FindOptions extends OpOptions {
+  query?: string;
+  role?: string;
+  inDialog?: boolean;
+  offset?: number;
+  limit?: number;
+}
+
+export interface FindResult {
+  snapshotId: string;
+  total: number;
+  returned: number;
+  offset: number;
+  lines: string[];
+  elements: SnapshotElement[];
+  activeDialog?: ActiveDialogInfo;
+}
+
+export async function performFind(
+  snapshotId: string | undefined,
+  options: FindOptions = {},
+): Promise<FindResult> {
+  const backend = backendOf(options);
+  const resolvedSnapshotId = await resolveSnapshotId(backend, snapshotId);
+  const snapshot = await loadSnapshot(resolvedSnapshotId, {
+    agentDir: backend.agentDir,
+  });
+  if (snapshot === null) {
+    throw new StaleRefError(resolvedSnapshotId, `unknown snapshotId "${resolvedSnapshotId}"`);
+  }
+
+  let matches = snapshot.elements;
+  if (options.inDialog === true) {
+    matches = matches.filter((el) => el.dialog !== undefined);
+  }
+
+  if (options.role !== undefined && options.role.trim().length > 0) {
+    const r = options.role.trim().toLowerCase();
+    matches = matches.filter((el) => el.role.toLowerCase() === r);
+  }
+
+  if (options.query !== undefined && options.query.trim().length > 0) {
+    const q = options.query.trim().toLowerCase();
+    matches = matches.filter(
+      (el) =>
+        el.name.toLowerCase().includes(q) ||
+        (el.value ?? "").toLowerCase().includes(q) ||
+        (el.placeholder ?? "").toLowerCase().includes(q) ||
+        (el.dialog ?? "").toLowerCase().includes(q) ||
+        (el.container ?? "").toLowerCase().includes(q) ||
+        el.role.toLowerCase().includes(q) ||
+        el.ref.toLowerCase() === q,
+    );
+  }
+
+  const total = matches.length;
+  const offset = Math.max(0, options.offset ?? 0);
+  const limit = options.limit !== undefined ? Math.max(1, options.limit) : 50;
+  const sliced = matches.slice(offset, offset + limit);
+  const lines = sliced.map(formatExtractLine);
+
+  return {
+    snapshotId: resolvedSnapshotId,
+    total,
+    returned: sliced.length,
+    offset,
+    lines,
+    elements: sliced,
+    ...(snapshot.activeDialog !== undefined ? { activeDialog: snapshot.activeDialog } : {}),
+  };
 }
 
 export interface WaitOptions extends OpOptions {

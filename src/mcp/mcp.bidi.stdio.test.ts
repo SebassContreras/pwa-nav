@@ -186,7 +186,7 @@ test("stdio+bidi: tools/resources, open blocked then allowed, snapshot, dry-run 
   await withEnv(async (env) => {
     const inputFrames = (): number => count(env.server, "input.performActions");
 
-    await withClient(env, [], async (client) => {
+    await withClient(env, ["--dry-run"], async (client) => {
       const { tools } = await client.listTools();
       assert.deepEqual(tools.map((t) => t.name).sort(), [
         "flow_search_search",
@@ -195,6 +195,7 @@ test("stdio+bidi: tools/resources, open blocked then allowed, snapshot, dry-run 
         "pwa_click",
         "pwa_extract",
         "pwa_fill",
+        "pwa_find",
         "pwa_learn",
         "pwa_open",
         "pwa_screenshot",
@@ -301,7 +302,7 @@ test("stdio+bidi: stdout carries only JSON-RPC frames while ops print; stderr ge
       }
       assert.deepEqual([...ids].sort(), [1, 2, 3, 4, 5, 6]);
       assert.ok(!stdout.includes("snapshot ok:") || stdout.includes('"content"'));
-      assert.match(stderr, /pwa-nav-mcp ready \(backend bidi, dry-run\)/);
+      assert.match(stderr, /pwa-nav-mcp ready \(backend bidi, ARMED\)/);
     } finally {
       child.kill();
     }
@@ -326,7 +327,7 @@ test("stdio+bidi: ambiguous screens dir logs one stderr line and starts without 
     try {
       await client.connect(transport);
       const { tools } = await client.listTools();
-      assert.equal(tools.length, 11);
+      assert.equal(tools.length, 12);
       assert.deepEqual((await client.listResources()).resources.map((r) => r.uri), ["pwa-nav://snapshot/latest"]);
       assert.match(stderr, /2 screen maps/);
     } finally {

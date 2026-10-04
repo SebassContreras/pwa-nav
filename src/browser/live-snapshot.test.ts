@@ -32,3 +32,23 @@ test("snapshotId defaults to a uuid", () => {
   const { snapshot } = buildLiveSnapshot([], { url: "u", title: "t" });
   assert.match(snapshot.snapshotId, /^[0-9a-f-]{36}$/);
 });
+
+test("activeDialog and element context are populated when dialogs are present", () => {
+  const dialogRaw: RawElement[] = [
+    { role: "textbox", name: "Text", nameSource: "placeholder", occurrence: 0, placeholder: "¿De qué quieres hablar?", dialog: "Crear publicación", container: "dialog: Crear publicación" },
+    { role: "button", name: "Publicar", nameSource: "content", occurrence: 0, dialog: "Crear publicación", container: "dialog: Crear publicación" },
+    { role: "button", name: "Fuera", nameSource: "content", occurrence: 0 },
+  ];
+  const { snapshot } = buildLiveSnapshot(dialogRaw, { url: "u", title: "t" });
+  assert.deepEqual(snapshot.activeDialog, {
+    title: "Crear publicación",
+    elementCount: 2,
+    refs: ["e1", "e2"],
+  });
+  const first = snapshot.elements[0];
+  assert.ok(first);
+  assert.equal(first.placeholder, "¿De qué quieres hablar?");
+  assert.equal(first.dialog, "Crear publicación");
+  assert.equal(first.container, "dialog: Crear publicación");
+});
+

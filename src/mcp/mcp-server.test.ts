@@ -176,6 +176,7 @@ test("tools/list: names, schemas compile under Ajv 2020, annotations, no armed f
       "pwa_click",
       "pwa_extract",
       "pwa_fill",
+      "pwa_find",
       "pwa_learn",
       "pwa_open",
       "pwa_screenshot",
@@ -190,7 +191,7 @@ test("tools/list: names, schemas compile under Ajv 2020, annotations, no armed f
       assert.ok(tool.description !== undefined && tool.description.length > 0);
     }
     const by = new Map(tools.map((t) => [t.name, t.annotations]));
-    for (const name of ["pwa_snapshot", "pwa_extract", "pwa_screenshot", "pwa_wait"]) assert.equal(by.get(name)?.readOnlyHint, true, name);
+    for (const name of ["pwa_snapshot", "pwa_extract", "pwa_find", "pwa_screenshot", "pwa_wait"]) assert.equal(by.get(name)?.readOnlyHint, true, name);
     for (const name of ["pwa_click", "pwa_fill", "pwa_upload", "pwa_act"]) {
       assert.equal(by.get(name)?.destructiveHint, true, name);
       assert.equal(by.get(name)?.openWorldHint, true, name);
@@ -395,7 +396,7 @@ test("error mapping covers every PwaNavError code", () => {
 });
 
 test("extract is bounded and reports omitted lines; limit lowers the cap", async () => {
-  await withMcp({}, async ({ client, page, agentDir }) => {
+  await withMcp({}, async ({ client, page }) => {
     const total = EXTRACT_INLINE_CAP + 30;
     page.raw = Array.from({ length: total }, (_, i) => ({
       role: "link",
@@ -410,7 +411,10 @@ test("extract is bounded and reports omitted lines; limit lowers the cap", async
     assert.equal(r.isError, false, r.text);
     const lines = r.text.split("\n");
     assert.equal(lines.length, EXTRACT_INLINE_CAP + 1);
-    assert.equal(lines[EXTRACT_INLINE_CAP], `… 30 more omitted, see ${agentDir}/snapshot.json`);
+    assert.equal(
+      lines[EXTRACT_INLINE_CAP],
+      '… 30 more omitted. Use pwa_find({ query: "..." }) to search or pass offset to paginate.',
+    );
     assert.equal(r.structured["omitted"], 30);
     assert.equal(r.structured["total"], total);
 
@@ -494,7 +498,7 @@ test("flow tools: listed with the flow's own inputSchema; humanOnly flows are no
     assert.match(flow.description ?? "", /^Run flow "search" on screen "search" of app "synthetic"/);
     assert.match(flow.description ?? "", /Search for a term\./);
     assert.ok(!(flow.description ?? "").includes("Query"), "element names never reach descriptions");
-    assert.equal(tools.length, 12);
+    assert.equal(tools.length, 13);
     const ajv = new Ajv2020({ allErrors: true, strict: true });
     for (const tool of tools) assert.doesNotThrow(() => ajv.compile(tool.inputSchema), tool.name);
     assert.match(client.getInstructions() ?? "", /dry-run/i);
@@ -503,7 +507,7 @@ test("flow tools: listed with the flow's own inputSchema; humanOnly flows are no
   // The demo map only has a humanOnly flow: no flow tool, but instructions + resource mention it.
   await withMcp({}, async ({ client }) => {
     const { tools } = await client.listTools();
-    assert.equal(tools.length, 11);
+    assert.equal(tools.length, 12);
     assert.ok(!tools.some((t) => t.name.startsWith("flow_")));
     assert.match(client.getInstructions() ?? "", /Human-only flows exist.*login \(screen login\)/);
     const { resources } = await client.listResources();
@@ -626,7 +630,7 @@ test("startup tolerates missing, invalid, ambiguous and Ajv-invalid maps (no flo
   for (const [label, maps, expected] of cases) {
     await withMcp({ maps }, async ({ client, logs }) => {
       const { tools } = await client.listTools();
-      assert.equal(tools.length, 11, label);
+      assert.equal(tools.length, 12, label);
       assert.ok(logs.some((l) => expected.test(l)), `${label}: ${logs.join(" | ")}`);
       const { resources } = await client.listResources();
       assert.deepEqual(resources.map((r) => r.uri), ["pwa-nav://snapshot/latest"], label);
@@ -828,6 +832,14 @@ test("pwa_screenshot: captures screenshot to disk and returns path + dimensions 
 
     const customDisk = await readFile(customPath);
     assert.deepEqual(customDisk, Buffer.from(pngBase64, "base64"));
+
+    // Custom path alias call
+    const aliasPath = join(agentDir, "alias-evidence.png");
+    const aliasRes = await call(client, "pwa_screenshot", { path: aliasPath });
+    assert.equal(aliasRes.isError, false, aliasRes.text);
+    assert.equal(aliasRes.structured["path"], aliasPath);
+    const aliasDisk = await readFile(aliasPath);
+    assert.deepEqual(aliasDisk, Buffer.from(pngBase64, "base64"));
   });
 });
 

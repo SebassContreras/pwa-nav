@@ -26,6 +26,58 @@ export interface ScreenField {
   sensitive: boolean;
   agentFillable: boolean;
   locator: Locator;
+  dialog?: string;
+  container?: string;
+}
+
+export interface OpensBranch {
+  id: string;
+  type: "dialog" | "subdialog" | "menu" | "view";
+  title: string;
+  fields?: ScreenField[];
+  actions?: ScreenAction[];
+  links?: ScreenLink[];
+}
+
+export function mergeOpensBranch(oldBranch: OpensBranch, liveBranch: OpensBranch): OpensBranch {
+  const fieldMap = new Map<string, ScreenField>();
+  for (const f of oldBranch.fields ?? []) fieldMap.set(f.id, f);
+  for (const f of liveBranch.fields ?? []) fieldMap.set(f.id, f);
+
+  const actionMap = new Map<string, ScreenAction>();
+  for (const a of oldBranch.actions ?? []) actionMap.set(a.id, a);
+  for (const a of liveBranch.actions ?? []) {
+    const existing = actionMap.get(a.id);
+    if (existing !== undefined) {
+      actionMap.set(a.id, {
+        ...existing,
+        ...a,
+        opens:
+          existing.opens && a.opens
+            ? mergeOpensBranch(existing.opens, a.opens)
+            : (a.opens ?? existing.opens),
+      });
+    } else {
+      actionMap.set(a.id, a);
+    }
+  }
+
+  const linkMap = new Map<string, ScreenLink>();
+  for (const l of oldBranch.links ?? []) linkMap.set(l.id, l);
+  for (const l of liveBranch.links ?? []) linkMap.set(l.id, l);
+
+  const fields = Array.from(fieldMap.values());
+  const actions = Array.from(actionMap.values());
+  const links = Array.from(linkMap.values());
+
+  return {
+    id: liveBranch.id || oldBranch.id,
+    type: liveBranch.type,
+    title: liveBranch.title || oldBranch.title,
+    ...(fields.length > 0 ? { fields } : {}),
+    ...(actions.length > 0 ? { actions } : {}),
+    ...(links.length > 0 ? { links } : {}),
+  };
 }
 
 export interface ScreenAction {
@@ -37,6 +89,9 @@ export interface ScreenAction {
   effect: "none" | "ui-state" | "submit";
   requires?: string[];
   locator: Locator;
+  dialog?: string;
+  container?: string;
+  opens?: OpensBranch;
 }
 
 export interface ScreenLink {
@@ -159,11 +214,25 @@ export function fingerprintOf(elements: readonly { role: string; name: string }[
 
 // Every interactive element a screen declares, in the form the fingerprint hashes.
 export function screenElements(screen: Screen): { role: string; name: string }[] {
-  return [
+  const result: { role: string; name: string }[] = [
     ...screen.fields.map(({ role, name }) => ({ role, name })),
     ...screen.actions.map(({ role, name }) => ({ role, name })),
     ...screen.links.map(({ name }) => ({ role: "link", name })),
   ];
+  const collectOpens = (branch: OpensBranch): void => {
+    if (branch.fields) result.push(...branch.fields.map(({ role, name }) => ({ role, name })));
+    if (branch.actions) {
+      result.push(...branch.actions.map(({ role, name }) => ({ role, name })));
+      for (const a of branch.actions) {
+        if (a.opens) collectOpens(a.opens);
+      }
+    }
+    if (branch.links) result.push(...branch.links.map(({ name }) => ({ role: "link", name })));
+  };
+  for (const action of screen.actions) {
+    if (action.opens) collectOpens(action.opens);
+  }
+  return result;
 }
 
 let cachedValidate: ((data: unknown) => boolean) | undefined;
@@ -224,6 +293,25 @@ export function crossCheck(map: ScreenMap): ScreenMapIssue[] {
     register(screen.fields.map((entry) => entry.id), "field");
     register(screen.actions.map((entry) => entry.id), "action");
     register(screen.links.map((entry) => entry.id), "link");
+
+    const registerOpens = (branch: OpensBranch): void => {
+      if (branch.fields) {
+        for (const f of branch.fields) fields.set(f.id, f);
+        register(branch.fields.map((f) => f.id), "field");
+      }
+      if (branch.actions) {
+        register(branch.actions.map((a) => a.id), "action");
+        for (const a of branch.actions) {
+          if (a.opens) registerOpens(a.opens);
+        }
+      }
+      if (branch.links) {
+        register(branch.links.map((l) => l.id), "link");
+      }
+    };
+    for (const action of screen.actions) {
+      if (action.opens) registerOpens(action.opens);
+    }
 
     for (const link of screen.links) {
       if (link.external && !/^https?:\/\/[^/\s?#]+$/.test(link.href)) {

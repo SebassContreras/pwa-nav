@@ -1,7 +1,7 @@
 // Compact screen view for spec 005-screen-map (T005).
 // Pure, deterministic text rendering of a Screen: one line per non-empty group,
 // ids first, array order preserved. No IO, no mutation of the input.
-import type { Screen, ScreenMap } from "./screen-map.js";
+import type { OpensBranch, Screen, ScreenMap } from "./screen-map.js";
 
 export interface RenderOptions {
   maxNameLength?: number;
@@ -71,6 +71,9 @@ export function renderScreenView(screen: Screen, options: RenderOptions = {}): s
     if (a.requires !== undefined && a.requires.length > 0) {
       parts.push(`needs(${a.requires.map((id) => `@${id}`).join(",")})`);
     }
+    if (a.opens !== undefined) {
+      parts.push(`opens(${a.opens.type}: "${a.opens.title}")`);
+    }
     if (a.effect === "submit") {
       parts.push("submit");
     }
@@ -92,6 +95,33 @@ export function renderScreenView(screen: Screen, options: RenderOptions = {}): s
   for (const [label, entries] of groups) {
     if (entries.length > 0) {
       lines.push(`${label}: ${entries.join(" | ")}`);
+    }
+  }
+  function renderBranch(actionId: string, branch: OpensBranch): void {
+    const branchFields = (branch.fields ?? []).map((f) => {
+      const parts = [`@${f.id}`, f.role, quoted(f.name, max)];
+      if (f.sensitive || !f.agentFillable) parts.push("SENSITIVE(human)");
+      return parts.join(" ");
+    });
+    const branchActions = (branch.actions ?? []).map((ba) => {
+      const parts = [`@${ba.id}`, ba.role, quoted(ba.name, max)];
+      if (ba.opens !== undefined) parts.push(`opens(${ba.opens.type}: "${ba.opens.title}")`);
+      return parts.join(" ");
+    });
+    const branchItems = [...branchFields, ...branchActions];
+    if (branchItems.length > 0) {
+      lines.push(`branch @${actionId} -> ${branch.type} "${branch.title}": ${branchItems.join(" | ")}`);
+    }
+    for (const ba of branch.actions ?? []) {
+      if (ba.opens !== undefined) {
+        renderBranch(ba.id, ba.opens);
+      }
+    }
+  }
+
+  for (const a of screen.actions) {
+    if (a.opens !== undefined) {
+      renderBranch(a.id, a.opens);
     }
   }
   return lines.join("\n");

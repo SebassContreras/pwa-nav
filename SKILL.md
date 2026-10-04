@@ -22,7 +22,7 @@ To register `pwa-nav` in an AI agent or MCP client (Claude Desktop, Cursor, Clau
 ```
 
 - **Default Port (9222) & Auto-Config**: `--port 9222` is **optional**. The server defaults to port `9222` and automatically inspects FirefoxPWA's `config.json` (`%APPDATA%\FirefoxPWA\config.json` on Windows) on launch, injecting `--remote-debugging-port 9222` into global arguments if absent.
-- **`--armed`** (or env `PWA_NAV_ARMED=1`): Run in armed mode. By default, the server runs in safe **dry-run** mode (previews mutations). Add `--armed` only when granted user permission for real browser clicks and form inputs.
+- **`--dry-run`** (or env `PWA_NAV_DRY_RUN=1`): Run in dry-run mode (previews mutations). By default, the server runs in direct active **armed** mode. `--armed` is accepted for backward compatibility.
 - **`--screens-dir <dir>`** (or env `PWA_NAV_SCREENS_DIR`): Directory for screen maps (defaults to `./screens`).
 - **`--port <n>`**: Override port only when using a non-standard debugging port (1024-65535).
 
@@ -38,14 +38,15 @@ Choose the interface based on your environment:
 | **Inspect screen map** | `pwa-nav snapshot --screen [--query <str>]` | `pwa_snapshot` (`screen: true`, `query`, `role`) | Compact view of semantic `@id` targets, flows, journeys, inline query filter. |
 | **Raw accessibility tree** | `pwa-nav snapshot -i [--all] [--query <str>]` | `pwa_snapshot` (`interactiveOnly: true`, `query`, `role`) | Writes `.agent/snapshot.json`. Returns element count, path, and filtered matches. |
 | **Wait condition** | `pwa-nav wait <target> [--state visible\|hidden\|enabled]` | `pwa_wait` (`target`, `query`, `state`, `timeoutMs`) | Wait for element/state or async AI background ops without shell sleep. |
-| **Click element** | `pwa-nav click <target> [--armed]` | `pwa_click` (`target`) | Target can be semantic `'@id'` or ephemeral `eN`. |
-| **Fill input** | `pwa-nav fill <target> <text> [--armed]` | `pwa_fill` (`target`, `text`) | Rejects sensitive fields (exit 11). |
-| **Upload files** | `pwa-nav upload <target> <path...> [--armed]` | `pwa_upload` (`target`, `files`) | Sets files on file inputs. Safe paths only. |
+| **Click element** | `pwa-nav click <target> [--dry-run]` | `pwa_click` (`target`) | Target can be semantic `'@id'` or ephemeral `eN`. Direct browser execution. |
+| **Fill input** | `pwa-nav fill <target> <text> [--dry-run]` | `pwa_fill` (`target`, `text`) | Rejects sensitive fields (exit 11). Direct browser execution. |
+| **Upload files** | `pwa-nav upload <target> <path...> [--dry-run]` | `pwa_upload` (`target`, `files`) | Sets files on file inputs. Safe paths only. |
 | **Capture screenshot** | `pwa-nav screenshot [--out <path>]` | `pwa_screenshot` (`path`, `format`) | Saves binary PNG to disk. **NEVER use for navigation or state inspection** (breaks text-only agents). |
-| **Batch actions** | `pwa-nav act <ops...> [--armed]` | `pwa_act` (`ops`) | Combines clicks, fills, uploads, and flows. |
-| **Read page content** | `pwa-nav extract --mode text\|links [--query <str>] [--role <str>]` | `pwa_extract` (`mode`, `query`, `role`, `offset`, `limit`) | Read-only; supports query and role filtering, offset pagination. |
-| **Multi-screen journey** | `pwa-nav journey <name> [k=v] [--armed]` | `journey_<name>` (`params`) | Executes multi-route journeys with screen validation. |
-| **Single-screen flow** | `pwa-nav act flow:<id> [k=v] [--armed]` | `flow_<screen>_<id>` (`params`) | Reusable parameterized screen flow. |
+| **Batch actions** | `pwa-nav act <ops...> [--dry-run]` | `pwa_act` (`ops`) | Combines clicks, fills, uploads, and flows in a single turn. |
+| **Read page content** | `pwa-nav extract [--mode all\|text\|links] [--query <str>] [--role <str>]` | `pwa_extract` (`mode`, `query`, `role`, `offset`, `limit`) | Read-only; supports query and role filtering, offset pagination. |
+| **Search elements / modals** | `pwa-nav find [<query>] [--role <str>] [--dialog]` | `pwa_find` (`query`, `role`, `inDialog`, `offset`, `limit`) | Fast targeted element search across name, role, placeholder, dialog, container, and value. |
+| **Multi-screen journey** | `pwa-nav journey <name> [k=v] [--dry-run]` | `journey_<name>` (`params`) | Executes multi-route journeys with screen validation. |
+| **Single-screen flow** | `pwa-nav act flow:<id> [k=v] [--dry-run]` | `flow_<screen>_<id>` (`params`) | Reusable parameterized screen flow. |
 | **Learn / update map** | `pwa-nav snapshot --learn [--locale <code>]` | `pwa_learn` / `pwa_snapshot(learn: true)` | Generates/updates `screens/<app>.screens.json` with `@id` targets returned inline. |
 | **QA offline suite** | `pwa-nav qa run <check-file>` | *CLI only* | Executes offline check suites against fixtures. |
 
@@ -72,36 +73,47 @@ Always follow this decision path to minimize token consumption and avoid breakin
                       |                             |
                       v                             v
        +----------------------------+  +----------------------------+
-       | Fast Semantic Loop         |  | Raw Accessibility Loop     |
-       | - Use semantic '@id'       |  | - Run: snapshot -i         |
-       | - Use journeys & flows     |  | - Grep .agent/snapshot.json|
-       | - Output returns next view |  | - Target ephemeral eN refs |
+       | Fast Semantic Loop         |  | Autonomous Screen Learning |
+       | - Use semantic '@id'       |  | - Run: snapshot --learn    |
+       | - Use journeys & flows     |  | - Persist screens/<app>    |
+       | - Output returns next view |  | - Yields stable '@id's     |
        +----------------------------+  +----------------------------+
                       |                             |
-                      |                             | (If screen is stable & approved)
-                      |                             v
-                      |                +----------------------------+
-                      |                | Optional: snapshot --learn |
-                      +--------------->| to establish screen map    |
-                                       +----------------------------+
+                      +--------------+--------------+
+                                     |
+                                     v
+                     +-------------------------------+
+                     | Continuous Screen Enrichment  |
+                     | - Each snapshot/learn updates |
+                     |   screens/<app>.screens.json  |
+                     | - Captures modal trees (opens)|
+                     | - ZERO loose snapshot/ref     |
+                     |   files in workspace          |
+                     +-------------------------------+
 ```
 
-### Loop A: Semantic Screen Map Loop (Preferred & Autonomous)
-1. Run `pwa_snapshot({ screen: true })` (or CLI `pwa-nav snapshot --screen`).
-2. If the screen is new or the route changed (`unmapped_screen`), the agent autonomously calls `pwa_learn({ locale: "es" })` (or CLI `snapshot --learn`) to register `screens/<app>.screens.json` without asking the user.
-3. Plan actions using `'@id'` targets or invoke journeys/flows:
+### Loop A: Semantic Screen Map Loop (Mandatory First-Pass & Autonomous)
+1. **Initial Screen Check**: Upon opening or navigating to an app, run `pwa_snapshot({ screen: true })` (or CLI `pwa-nav snapshot --screen`) to inspect the screen map.
+2. **Autonomous Learning on Unmapped Route**: If the screen is new or the route changed (`unmapped_screen`), the agent autonomously calls `pwa_learn({ locale: "es" })` (or CLI `snapshot --learn`) to register `screens/<app>.screens.json` without asking the user.
+3. **Continuous Screen Map Enrichment & Zero Loose Files**: Every snapshot or learn step collaborates in enriching `screens/<app>.screens.json` with newly observed fields, actions, flows, and nested modal trees (`opens`). No loose snapshot or ref files are created in the workspace (raw session data is strictly confined to `.agent/apps/<appSlug>/snapshot.json`).
+4. **Plan & Execute Semantic Actions**: Plan actions using stable `'@id'` targets or invoke journeys/flows:
    - In MCP: `pwa_click({ target: "@submit-btn" })` or `pwa_fill({ target: "@query", text: "term" })`
    - In CLI: `pwa-nav click --snapshot <id> '@submit-btn'`
    - Batch: `pwa-nav act --snapshot <id> "fill:'@query'=laptop" "click:'@search-btn'"`
    - Journey: `pwa-nav journey checkout address="Main St 12"`
-4. **State Change Inspection (Zero Screenshots)**: When an action causes a modal, dialog, or view change, **call `pwa_snapshot` again** to inspect the new DOM in pure text. **NEVER take a screenshot**.
+5. **Action Trees & Modal Branches (`opens`)**: When an action triggers a modal or subdialog (e.g. clicking `@crear-publicacion`), `pwa-nav` models this inside `action.opens`. The response describes the opened modal and its available controls immediately. Elements within the modal (e.g. `@editor-post`, `@boton-publicar`) can be targeted directly with `@id` without re-scanning background elements.
+6. **State Change Inspection (Zero Screenshots)**: When an action causes a modal, dialog, or view change, **call `pwa_snapshot` again** to inspect the new DOM in pure text. If a modal opens, `pwa_snapshot` highlights `Active Dialog: "..."` with its elements at the top. **NEVER take a screenshot**.
 
-### Loop B: Raw Accessibility Loop (Fallback for Ephemeral Elements)
-1. When targeting transient non-mapped items or inspecting raw element hierarchies:
+### Loop B: Raw Accessibility Loop (Fallback for Ephemeral Elements & Modals)
+1. When targeting transient non-mapped items, active modals/dialogs, or unmapped rich text fields:
 2. Run `pwa-nav snapshot -i [--query <str>]` (or `pwa_snapshot({ query: "..." })`).
-3. Search and extract elements directly using `pwa_extract({ query: "...", role: "..." })` or CLI `pwa-nav extract --query <str>`. **NEVER** write Python scripts or PowerShell one-liners to parse `.agent/snapshot.json`.
+   - If an open modal/dialog exists, the snapshot summary announces `Active Dialog: "<title>"` and lists its refs immediately.
+   - **`pwa_find` / `pwa-nav find` (PRIMARY LOCATOR)**: Always use `pwa_find` to search for buttons, inputs, placeholders (e.g. `¿De qué quieres hablar?` on rich text editors/divs), and modal controls to click or fill. Use `pwa_find({ inDialog: true })` to focus exclusively on active modal controls.
+   - **`pwa_extract` / `pwa-nav extract` (BULK READING ONLY)**: Use only for reading/dumping large lists of text or links. Do NOT use `pwa_extract` to locate interaction targets.
+   - **CRITICAL INVARIANT**: **NEVER** write Python scripts or run shell commands (`Select-String`, `grep`, `Get-Content`, `cat`, `Read`) on `.agent/snapshot.json`. Use `pwa_find`.
 4. Target ephemeral refs (`e1`, `e2`, etc.) or visible text directly:
-   - `pwa-nav click --snapshot <id> e5` or MCP `pwa_click({ ref: "Cerrar" })`
+   - `pwa-nav click --snapshot <id> e5` or MCP `pwa_click({ ref: "Publicar" })`
+   - `pwa-nav fill --snapshot <id> e6 "texto"` or MCP `pwa_fill({ ref: "e6", text: "texto" })` (works on `<input>`, `<textarea>`, and rich `contenteditable` editors).
 5. **Invalidation Rule (Hard)**: Ephemeral `eN` refs are valid for **ONE snapshot only**. Any mutation (`click`, `fill`, `act`) invalidates the snapshot immediately. You **must** re-snapshot before the next mutation.
 
 ---
@@ -110,12 +122,12 @@ Always follow this decision path to minimize token consumption and avoid breakin
 
 Write operations (`click`, `fill`, `upload`, `act`, `journey`) alter state in a real, user-authenticated browser.
 
-### The 3-Step Arming Protocol
-1. **Dry-Run First**: Execute without `--armed`. The CLI will validate the target, check accessibility constraints, and print the planned action without touching the browser DOM.
-2. **Present Plan to User**: Present the proposed changes clearly to the user in chat (e.g. "I will click Submit Order with parameter total=$45.00").
-3. **Armed Execution**: Only after the user gives explicit confirmation in the conversation, re-run the exact command with `--armed`.
+### Execution Protocol (Armed by Default)
+1. **Direct Active Execution**: Write operations execute directly on the browser by default. No flags or confirmation pauses are required for normal UI interactions.
+2. **Optional Dry-Run**: Pass `--dry-run` (or env `PWA_NAV_DRY_RUN=1`) if you explicitly need to simulate or preview a mutation before touching the browser DOM.
+3. **Sensitive Safety Gate**: Passwords, payment inputs, and sensitive tokens are strictly blocked (exit code 11 `sensitive_target`) and must be entered manually by the user. Emergency kill-switch (`.agent/kill`) halts any running operations immediately.
 
-> **MCP Note**: If using the MCP server, arming is configured at the server level via `--armed`. Always review tool descriptions and operate with care.
+> **MCP Note**: The MCP server runs armed by default. Tools execute live on the user's Firefox PWA window.
 
 ---
 
@@ -152,9 +164,10 @@ WebDriver BiDi automates in-page DOM operations (clicking buttons, typing, navig
 7. **File Upload Security Boundary**: File uploads (`pwa_upload`, `upload`) are strictly restricted to files within allowed safe directories (workspace root or `.agent/`). Files attempting path traversal (`..`) or targeting sensitive files (`.env*`, private keys) are rejected with exit code 15 (`file_upload_blocked`).
 8. **Text-First, Vision-Free Autonomous Operation**: NEVER take screenshots (`pwa_screenshot`) to discover UI elements, inspect modals/dialogs, or check if an action succeeded. Screenshots waste massive amounts of tokens and completely fail on text-only LLM models. Always use `pwa_snapshot` to inspect state. When encountering an unmapped screen, autonomously call `pwa_learn` to generate the screen map without prompting the user.
 9. **Direct In-App Operation**: Work directly within the open application. Do NOT diverge into external search engines (Exa, Google) when the task is to research and write inside the open PWA (like Google NotebookLM).
-10. **Zero Arbitrary Sleep Delays & Zero Python Inspection Scripts (Hard Invariant)**: Never run shell pauses (`Start-Sleep 40s`, `sleep`). Use `pwa_wait` (or CLI `pwa-nav wait`) to wait for asynchronous updates (Fast Research, AI synthesis, video/audio render, button enabling). NEVER write ad-hoc Python scripts or PowerShell one-liners to inspect `.agent/snapshot.json`. Use `pwa_extract` with `query`/`role` filters or `pwa_snapshot({ query })`.
+10. **Zero Arbitrary Sleep Delays & Zero Snapshot Shell Parsing (Hard Invariant)**: Never run shell pauses (`Start-Sleep 40s`, `sleep`). Use `pwa_wait` (or CLI `pwa-nav wait`) to wait for asynchronous updates (Fast Research, AI synthesis, video/audio render, button enabling). **NEVER write ad-hoc Python scripts or run shell commands (`Select-String`, `grep`, `Get-Content`, `cat`, `Read`) to inspect `.agent/snapshot.json`**. Use `pwa_find` (or `pwa-nav find`) for targeted element search or `pwa_extract` for filtered lists.
 11. **Zero OS Window Manipulation Loops**: WebDriver BiDi automates within the web DOM, not OS windows. Never execute PowerShell/Win32 scripts attempting to manipulate OS window Z-order, focus, or visibility.
 12. **Windows Sandbox Awareness**: Never assume a browser spawned from within an agent sandbox on Windows is visible to the user. Prefer connecting to user-launched instances on port 9222.
+13. **Per-Application Storage Isolation & Zero Loose Files**: Snapshots and sessions are stored strictly segregated under `.agent/apps/<appSlug>/` (e.g. `.agent/apps/linkedin.com/snapshot.json`). Snapshots and learn passes enrich the persistent screen map (`screens/<app>.screens.json`) without scattering loose ref or snapshot files across the workspace. Ephemeral `eN` refs expire on mutation; agents operate on permanent `@id` targets. Agents must never read root `.agent/snapshot.json` files from prior sessions or user home directories. Always use `pwa_find` and `pwa_snapshot`.
 
 ---
 
@@ -175,7 +188,7 @@ WebDriver BiDi automates in-page DOM operations (clicking buttons, typing, navig
 | **10** | `protocol` | Unexpected WebDriver BiDi protocol error. | Check Firefox console logs. Restart PWA if WebDriver BiDi desynchronized. |
 | **11** | `sensitive_target`| Target is marked sensitive / humanOnly. | **Do not attempt to bypass.** Ask the user to perform this action manually in the browser. |
 | **12** | `unknown_target` | Semantic `@id`, flow, or journey not in map. | Run `pwa-nav snapshot --screen` to inspect the available targets in the current screen map. |
-| **13** | `unmapped_screen` | Route is not covered by current screen map. | Fall back to Raw Accessibility Loop (`snapshot`). Suggest `snapshot --learn` if stable. |
+| **13** | `unmapped_screen` | Route is not covered by current screen map. | Autonomously call `pwa_learn` (or CLI `snapshot --learn`) to learn and persist `screens/<app>.screens.json`, enriching the map with permanent `@id` targets without creating loose snapshot/ref files. |
 | **14** | `journey_step_failed` | Multi-screen journey step assertion failed. | Check route transition, parameters, or if the application UI deviated from journey spec. |
 | **15** | `file_upload_blocked` | File upload outside safe directory or sensitive file. | Ensure uploaded file is within workspace root or `.agent/`, with no path traversal. |
 

@@ -5,9 +5,11 @@
 import type { RawElement } from "../browser/collector.js";
 import {
   fingerprintOf,
+  mergeOpensBranch,
   screenElements,
   type A11yFinding,
   type Locator,
+  type OpensBranch,
   type Screen,
   type ScreenAction,
   type ScreenField,
@@ -29,6 +31,8 @@ export interface LearnOptions {
   existingIds?: ReadonlySet<string>;
   /** Names of submit buttons. Overrides/complements `RawElement.buttonType`. */
   submitNames?: ReadonlySet<string>;
+  /** Last clicked action to nest newly appeared dialogs/modals into */
+  lastAction?: { id?: string; name?: string };
 }
 
 // Roles outside these three groups (heading, tab panels, menuitemcheckbox, ...) are ignored.
@@ -175,6 +179,8 @@ export function learnScreen(raw: readonly RawElement[], page: LearnPage, options
         sensitive,
         agentFillable: !sensitive,
         locator: locatorOf(element),
+        ...(element.dialog !== undefined ? { dialog: element.dialog } : {}),
+        ...(element.container !== undefined ? { container: element.container } : {}),
       });
     } else if (entry.kind === "action") {
       const submit = element.buttonType === "submit" || submitNames.has(element.name);
@@ -188,6 +194,8 @@ export function learnScreen(raw: readonly RawElement[], page: LearnPage, options
         kind: submit ? "submit" : toggle ? "toggle" : "button",
         effect: submit ? "submit" : toggle ? "ui-state" : "none",
         locator: locatorOf(element),
+        ...(element.dialog !== undefined ? { dialog: element.dialog } : {}),
+        ...(element.container !== undefined ? { container: element.container } : {}),
       });
     } else if (entry.link !== undefined) {
       links.push({ id, name: element.name, href: entry.link.href, external: entry.link.external, locator: locatorOf(element) });
@@ -222,6 +230,61 @@ export function learnScreen(raw: readonly RawElement[], page: LearnPage, options
     }
   }
 
+  // Cluster dialog elements into opens branches under matching triggering action
+  const dialogTitles = new Set<string>();
+  for (const f of fields) {
+    if (f.dialog !== undefined) dialogTitles.add(f.dialog);
+  }
+  for (const a of actions) {
+    if (a.dialog !== undefined) dialogTitles.add(a.dialog);
+  }
+
+  const clusteredFieldIds = new Set<string>();
+  const clusteredActionIds = new Set<string>();
+
+  for (const dialogTitle of dialogTitles) {
+    const dLower = dialogTitle.toLowerCase();
+    const branch: OpensBranch = {
+      id: slugify(`dialog-${dialogTitle}`),
+      type: "dialog",
+      title: dialogTitle,
+    };
+    const dialogFields = fields.filter((f) => f.dialog === dialogTitle);
+    const dialogActions = actions.filter((a) => a.dialog === dialogTitle);
+    if (dialogFields.length > 0) branch.fields = dialogFields;
+    if (dialogActions.length > 0) branch.actions = dialogActions;
+
+    let attached = false;
+    if (options.lastAction?.id !== undefined) {
+      attached = nestBranchIntoActionList(actions, options.lastAction.id, branch);
+    }
+    if (!attached && options.lastAction?.name !== undefined) {
+      attached = nestBranchIntoActionList(actions, options.lastAction.name, branch);
+    }
+    if (!attached) {
+      const trigger = actions.find(
+        (a) =>
+          a.dialog === undefined &&
+          (a.name.toLowerCase().includes(dLower) || dLower.includes(a.name.toLowerCase())),
+      );
+      if (trigger !== undefined) {
+        if (trigger.opens === undefined) {
+          trigger.opens = branch;
+        } else {
+          trigger.opens = mergeOpensBranch(trigger.opens, branch);
+        }
+        attached = true;
+      }
+    }
+    if (attached) {
+      dialogFields.forEach((f) => clusteredFieldIds.add(f.id));
+      dialogActions.forEach((a) => clusteredActionIds.add(a.id));
+    }
+  }
+
+  const rootFields = fields.filter((f) => !clusteredFieldIds.has(f.id));
+  const rootActions = actions.filter((a) => !clusteredActionIds.has(a.id));
+
   const screen: Screen = {
     id: options.screenId ?? screenIdFromRoute(route),
     route,
@@ -229,12 +292,42 @@ export function learnScreen(raw: readonly RawElement[], page: LearnPage, options
     access: options.access ?? "unknown",
     fingerprint: "",
     observedAt: (options.now ?? new Date()).toISOString().replace(/\.\d{3}Z$/, "Z"),
-    fields,
-    actions,
+    fields: rootFields,
+    actions: rootActions,
     links,
     flows: [],
     ...(findings.length > 0 ? { a11y: findings } : {}),
   };
   screen.fingerprint = fingerprintOf(screenElements(screen));
   return screen;
+}
+
+export function nestBranchIntoActionList(
+  actions: ScreenAction[],
+  targetActionIdOrName: string,
+  branch: OpensBranch,
+): boolean {
+  const targetLower = targetActionIdOrName.toLowerCase();
+  for (const a of actions) {
+    if (a.id.toLowerCase() === targetLower || a.name.toLowerCase() === targetLower) {
+      if (a.opens === undefined) {
+        a.opens = branch;
+      } else {
+        a.opens = mergeOpensBranch(a.opens, branch);
+      }
+      return true;
+    }
+    if (a.opens?.actions && nestBranchIntoActionList(a.opens.actions, targetActionIdOrName, branch)) {
+      return true;
+    }
+  }
+  return false;
+}
+
+export function attachOpensBranch(screen: Screen, actionIdOrName: string, branch: OpensBranch): Screen {
+  const actions = structuredClone(screen.actions);
+  nestBranchIntoActionList(actions, actionIdOrName, branch);
+  const updated: Screen = { ...screen, actions };
+  updated.fingerprint = fingerprintOf(screenElements(updated));
+  return updated;
 }

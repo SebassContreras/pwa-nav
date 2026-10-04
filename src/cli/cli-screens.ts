@@ -8,7 +8,7 @@ import type { Backend } from "../backend/backend.js";
 import { PwaNavError } from "../core/errors.js";
 import { captureLiveSnapshot, performAct, performClick, performFill, performLiveSnapshot, performUpload } from "../ops/ops.js";
 import type { ActOp } from "../ops/ops.js";
-import { load as loadSnapshot, loadLocators } from "../core/refs.js";
+import { load as loadSnapshot, loadLocators, setLastActiveAction } from "../core/refs.js";
 import type { Screen, ScreenMap } from "../screens/screen-map.js";
 import { findScreen, loadExplicitMap, loadScreenMapsFromDir, resolveScreensDir, selectMap } from "../screens/screen-match.js";
 import { learnScreen, slugify } from "../screens/screen-learn.js";
@@ -237,7 +237,9 @@ async function screenAt(ctx: SemanticContext): Promise<Screen> {
 export async function runSemanticClick(ctx: SemanticContext, id: string): Promise<void> {
   parseTarget(`@${id}`); // invalid slug => invalid_args before any browser call
   const screen = await screenAt(ctx);
-  await execute(ctx, [{ intent: "click", target: resolveTarget(screen, id, "click") }], "single");
+  const target = resolveTarget(screen, id, "click");
+  setLastActiveAction({ id: target.id, name: target.name, role: target.role });
+  await execute(ctx, [{ intent: "click", target }], "single");
 }
 
 export async function runSemanticFill(ctx: SemanticContext, id: string, text: string): Promise<void> {

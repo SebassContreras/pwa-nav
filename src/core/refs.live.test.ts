@@ -70,3 +70,20 @@ test("sidecar records includeAll additively (absent unless provided)", async () 
     assert.equal((await loadLocators("d3", { agentDir }))?.includeAll, false);
   });
 });
+
+test("per-application snapshot isolation under apps/<appSlug>/", async () => {
+  await withDir(async (agentDir) => {
+    const linkedinSnap = { ...snap("li1"), url: "https://www.linkedin.com/feed" };
+    const notebookSnap = { ...snap("nb1"), url: "https://notebooklm.google.com/" };
+
+    await save(linkedinSnap, { agentDir });
+    await save(notebookSnap, { agentDir });
+
+    const { readFile } = await import("node:fs/promises");
+    const liFile = await readFile(join(agentDir, "apps", "linkedin.com", "snapshot.json"), "utf8");
+    const nbFile = await readFile(join(agentDir, "apps", "notebooklm.google.com", "snapshot.json"), "utf8");
+
+    assert.equal((JSON.parse(liFile) as { snapshotId: string }).snapshotId, "li1");
+    assert.equal((JSON.parse(nbFile) as { snapshotId: string }).snapshotId, "nb1");
+  });
+});

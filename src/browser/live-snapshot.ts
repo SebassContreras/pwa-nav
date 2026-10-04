@@ -27,11 +27,16 @@ export function buildLiveSnapshot(
   const elements: SnapshotElement[] = [];
   const locators: Record<string, Locator> = {};
   const extras: Record<string, LiveExtras> = {};
+  const dialogRefs = new Map<string, string[]>();
+
   raw.forEach((item, i) => {
     const ref = `e${String(i + 1)}`;
     const element: SnapshotElement = { ref, role: item.role, name: item.name };
     if (item.value !== undefined) element.value = item.value;
     if (item.disabled === true) element.disabled = true;
+    if (item.placeholder !== undefined) element.placeholder = item.placeholder;
+    if (item.dialog !== undefined) element.dialog = item.dialog;
+    if (item.container !== undefined) element.container = item.container;
     elements.push(element);
     locators[ref] = { role: item.role, name: item.name, occurrence: item.occurrence };
     const extra: LiveExtras = { nameSource: item.nameSource };
@@ -39,9 +44,30 @@ export function buildLiveSnapshot(
     if (item.href !== undefined) extra.href = item.href;
     if (item.autocomplete !== undefined) extra.autocomplete = item.autocomplete;
     extras[ref] = extra;
+
+    if (item.dialog !== undefined) {
+      const list = dialogRefs.get(item.dialog) ?? [];
+      list.push(ref);
+      dialogRefs.set(item.dialog, list);
+    }
   });
+
+  let activeDialog: { title: string; elementCount: number; refs: string[] } | undefined;
+  const dialogEntries = Array.from(dialogRefs.entries());
+  const lastDialog = dialogEntries[dialogEntries.length - 1];
+  if (lastDialog !== undefined) {
+    const [title, refs] = lastDialog;
+    activeDialog = { title, elementCount: refs.length, refs };
+  }
+
   return {
-    snapshot: { snapshotId: options.snapshotId ?? randomUUID(), url: meta.url, title: meta.title, elements },
+    snapshot: {
+      snapshotId: options.snapshotId ?? randomUUID(),
+      url: meta.url,
+      title: meta.title,
+      elements,
+      ...(activeDialog !== undefined ? { activeDialog } : {}),
+    },
     locators,
     extras,
   };

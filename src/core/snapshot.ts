@@ -8,6 +8,15 @@ export interface SnapshotElement {
   name: string;
   value?: string;
   disabled?: boolean;
+  placeholder?: string;
+  dialog?: string;
+  container?: string;
+}
+
+export interface ActiveDialogInfo {
+  title: string;
+  elementCount: number;
+  refs: string[];
 }
 
 export interface Snapshot {
@@ -15,6 +24,7 @@ export interface Snapshot {
   url: string;
   title: string;
   elements: SnapshotElement[];
+  activeDialog?: ActiveDialogInfo;
 }
 
 export interface SnapshotMeta {

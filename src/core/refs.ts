@@ -38,6 +38,40 @@ export function isStaleRefError(error: unknown): error is StaleRefError {
   return error instanceof StaleRefError;
 }
 
+export interface ActiveAction {
+  id?: string;
+  name?: string;
+  role?: string;
+  timestamp: number;
+}
+
+const memSnapshots = new Map<string, Snapshot>();
+const memSidecars = new Map<string, LocatorSidecar>();
+let memLatestSnapshotId: string | null = null;
+let memLastActiveAction: ActiveAction | null = null;
+
+export function setLastActiveAction(action: { id?: string; name?: string; role?: string } | null): void {
+  if (action === null) {
+    memLastActiveAction = null;
+  } else {
+    memLastActiveAction = {
+      ...(action.id !== undefined ? { id: action.id } : {}),
+      ...(action.name !== undefined ? { name: action.name } : {}),
+      ...(action.role !== undefined ? { role: action.role } : {}),
+      timestamp: Date.now(),
+    };
+  }
+}
+
+export function getLastActiveAction(): ActiveAction | null {
+  return memLastActiveAction;
+}
+
+export function clearLastActiveAction(): void {
+  memLastActiveAction = null;
+}
+
+
 function agentDirOf(options: RefStoreOptions = {}): string {
   return options.agentDir ?? ".agent";
 }
@@ -100,7 +134,7 @@ async function readJsonFile(path: string): Promise<unknown> {
   }
 }
 
-// Latest snapshotId: prefer refs/latest.json, fall back to snapshot.json.
+// Latest snapshotId: prefer in-memory, then refs/latest.json, fall back to snapshot.json.
 export async function latestSnapshotId(options: RefStoreOptions = {}): Promise<string | null> {
   const agentDir = agentDirOf(options);
   const latestRaw = await readJsonFile(latestPath(agentDir));
@@ -114,7 +148,7 @@ export async function latestSnapshotId(options: RefStoreOptions = {}): Promise<s
   if (isSnapshot(snapshotRaw)) {
     return snapshotRaw.snapshotId;
   }
-  return null;
+  return memLatestSnapshotId;
 }
 
 // Persist snapshot + refMap. Supersedes any previous snapshotId.
@@ -122,6 +156,9 @@ export async function save(snapshot: Snapshot, options: RefStoreOptions = {}): P
   if (!isValidSnapshotId(snapshot.snapshotId)) {
     throw new Error(`invalid snapshotId: ${snapshot.snapshotId}`);
   }
+  memSnapshots.set(snapshot.snapshotId, snapshot);
+  memLatestSnapshotId = snapshot.snapshotId;
+
   const agentDir = agentDirOf(options);
   const body = JSON.stringify(snapshot, null, 2) + "\n";
   await mkdir(resolvePath(join(agentDir, REFS_DIR)), { recursive: true });
@@ -132,6 +169,19 @@ export async function save(snapshot: Snapshot, options: RefStoreOptions = {}): P
     JSON.stringify({ snapshotId: snapshot.snapshotId }, null, 2) + "\n",
     "utf8",
   );
+  if (snapshot.url && snapshot.url.length > 0) {
+    try {
+      const u = new URL(snapshot.url);
+      const appSlug = u.hostname.replace(/^www\./, "").replace(/[^a-z0-9.-]/gi, "-").toLowerCase();
+      if (appSlug.length > 0) {
+        const appDir = resolvePath(join(agentDir, "apps", appSlug));
+        await mkdir(appDir, { recursive: true });
+        await writeFile(join(appDir, SNAPSHOT_FILE), body, "utf8");
+      }
+    } catch {
+      // ignore non-URL strings
+    }
+  }
   return snapshot.snapshotId;
 }
 
@@ -139,6 +189,10 @@ export async function save(snapshot: Snapshot, options: RefStoreOptions = {}): P
 export async function load(snapshotId: string, options: RefStoreOptions = {}): Promise<Snapshot | null> {
   if (!isValidSnapshotId(snapshotId)) {
     return null;
+  }
+  const mem = memSnapshots.get(snapshotId);
+  if (mem !== undefined) {
+    return mem;
   }
   const agentDir = agentDirOf(options);
   const perId = await readJsonFile(refPath(agentDir, snapshotId));
@@ -202,8 +256,11 @@ export async function saveLive(
   const sidecar: LocatorSidecar = { snapshotId: snapshot.snapshotId, url: snapshot.url, locators };
   if (extras !== undefined) sidecar.extras = extras;
   if (options.includeAll !== undefined) sidecar.includeAll = options.includeAll;
+  memSidecars.set(snapshot.snapshotId, sidecar);
+
+  const agentDir = agentDirOf(options);
   await writeFile(
-    locatorsPath(agentDirOf(options), snapshot.snapshotId),
+    locatorsPath(agentDir, snapshot.snapshotId),
     JSON.stringify(sidecar, null, 2) + "\n",
     "utf8",
   );
@@ -227,6 +284,8 @@ export async function loadLocators(
   options: RefStoreOptions = {},
 ): Promise<LocatorSidecar | null> {
   if (!isValidSnapshotId(snapshotId)) return null;
+  const mem = memSidecars.get(snapshotId);
+  if (mem !== undefined) return mem;
   const raw = await readJsonFile(locatorsPath(agentDirOf(options), snapshotId));
   return isLocatorSidecar(raw, snapshotId) ? raw : null;
 }

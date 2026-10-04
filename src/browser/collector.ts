@@ -34,6 +34,12 @@ export interface RawElement {
   autocomplete?: string;
   /** Native `<button>`/`<input>` buttons only: effective type (submit default inside a form, else button). */
   buttonType?: "submit" | "button" | "reset";
+  /** Placeholder, data-placeholder or aria-placeholder if present. */
+  placeholder?: string;
+  /** Enclosing dialog/modal accessible name or title if inside one. */
+  dialog?: string;
+  /** Enclosing container/landmark context (e.g. "dialog: Crear una publicación"). */
+  container?: string;
 }
 
 export interface CollectOptions {
@@ -106,6 +112,11 @@ function collectImpl(root: Document, options?: CollectOptions): { items: RawElem
   const attrOf = (el: Element, name: string): string => el.getAttribute(name) ?? "";
   const typeOf = (el: Element): string => attrOf(el, "type").trim().toLowerCase();
 
+  const isEditable = (el: Element): boolean =>
+    (el as HTMLElement).isContentEditable ||
+    el.getAttribute("contenteditable") === "true" ||
+    el.getAttribute("contenteditable") === "";
+
   const roleOf = (el: Element): string | null => {
     const explicit = attrOf(el, "role").trim().split(/\s+/)[0]?.toLowerCase() ?? "";
     if (explicit !== "" && KNOWN.has(explicit)) return explicit;
@@ -125,6 +136,9 @@ function collectImpl(root: Document, options?: CollectOptions): { items: RawElem
       if (t === "radio") return "radio";
       if (t === "range") return "slider";
       if (TEXT_TYPES.has(t)) return "textbox";
+    }
+    if (isEditable(el)) {
+      return "textbox";
     }
     return null;
   };
@@ -169,9 +183,12 @@ function collectImpl(root: Document, options?: CollectOptions): { items: RawElem
     }
     const title = collapse(el.getAttribute("title"));
     if (title !== "") return [title, "title"];
-    if (tag === "input" || tag === "textarea") {
-      const ph = collapse(el.getAttribute("placeholder"));
-      if (ph !== "") return [ph, "placeholder"];
+    const ph =
+      collapse(el.getAttribute("placeholder")) ||
+      collapse(el.getAttribute("data-placeholder")) ||
+      collapse(el.getAttribute("aria-placeholder"));
+    if (ph !== "" && (role === "textbox" || role === "searchbox" || tag === "input" || tag === "textarea")) {
+      return [ph, "placeholder"];
     }
     return ["", "content"];
   };
@@ -185,10 +202,43 @@ function collectImpl(root: Document, options?: CollectOptions): { items: RawElem
       v = Array.from((el as HTMLSelectElement).selectedOptions, (o) => collapse(o.label || o.textContent)).join(", ");
     } else if (el.localName === "input" || el.localName === "textarea") {
       v = (el as HTMLInputElement | HTMLTextAreaElement).value;
+    } else if (isEditable(el)) {
+      v = collapse(el.textContent);
     } else if (role === "slider") {
       v = el.getAttribute("aria-valuenow") ?? undefined;
     }
     return v === undefined || v === "" ? undefined : v;
+  };
+
+  const dialogOf = (node: Element): string | undefined => {
+    try {
+      const dialogEl = node.closest('dialog, [role="dialog"], [role="alertdialog"], [aria-modal="true"]');
+      if (dialogEl !== null && dialogEl !== node) {
+        let rawTitle = collapse(dialogEl.getAttribute("aria-label"));
+        if (rawTitle === "") {
+          const labelledby = collapse(dialogEl.getAttribute("aria-labelledby"));
+          if (labelledby !== "") {
+            const scope = dialogEl.getRootNode() as Document | ShadowRoot;
+            const parts: string[] = [];
+            for (const id of labelledby.split(" ")) {
+              const ref = scope.getElementById(id);
+              const text = ref ? refText(ref) : "";
+              if (text !== "") parts.push(text);
+            }
+            if (parts.length > 0) rawTitle = parts.join(" ");
+          }
+        }
+        if (rawTitle === "") {
+          rawTitle =
+            collapse(dialogEl.getAttribute("title")) ||
+            collapse(dialogEl.querySelector("h1, h2, h3, h4, h5, h6, [role='heading']")?.textContent);
+        }
+        return rawTitle !== "" ? rawTitle : "dialog";
+      }
+    } catch {
+      // closest not supported or detached
+    }
+    return undefined;
   };
 
   const isDisabled = (el: Element): boolean => {
@@ -244,6 +294,17 @@ function collectImpl(root: Document, options?: CollectOptions): { items: RawElem
         if (t === "button" || t === "reset") item.buttonType = t;
         else if (t === "submit" || t === "image") item.buttonType = "submit";
         else item.buttonType = (el as HTMLButtonElement).form !== null ? "submit" : "button";
+      }
+      const phAttr =
+        collapse(el.getAttribute("placeholder")) ||
+        collapse(el.getAttribute("data-placeholder")) ||
+        collapse(el.getAttribute("aria-placeholder"));
+      if (phAttr !== "") item.placeholder = phAttr;
+
+      const dName = dialogOf(el);
+      if (dName !== undefined) {
+        item.dialog = dName;
+        item.container = `dialog: ${dName}`;
       }
       results.push(item);
       nodes.push(el);

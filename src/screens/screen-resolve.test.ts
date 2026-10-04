@@ -142,6 +142,52 @@ test("resolveTarget: field, action, link", () => {
   assert.equal(link.role, "link");
 });
 
+test("resolveTarget: targets inside action opensBranch", () => {
+  const baseAction = search.actions[0];
+  assert.ok(baseAction);
+  const withBranch: Screen = {
+    ...search,
+    actions: [
+      {
+        ...baseAction,
+        opens: {
+          id: "modal",
+          type: "dialog",
+          title: "Search Options",
+          fields: [
+            {
+              id: "filter-tag",
+              role: "textbox",
+              name: "Tag",
+              nameSource: "label",
+              sensitive: false,
+              agentFillable: true,
+              locator: loc("textbox", "Tag"),
+            },
+          ],
+          actions: [
+            {
+              id: "apply-filters",
+              role: "button",
+              name: "Apply",
+              kind: "submit",
+              effect: "submit",
+              locator: loc("button", "Apply"),
+            },
+          ],
+        },
+      },
+    ],
+  };
+  const nestedField = resolveTarget(withBranch, "filter-tag", "fill");
+  assert.equal(nestedField.kind, "field");
+  assert.equal(nestedField.id, "filter-tag");
+
+  const nestedAction = resolveTarget(withBranch, "apply-filters", "click");
+  assert.equal(nestedAction.kind, "action");
+  assert.equal(nestedAction.id, "apply-filters");
+});
+
 test("resolveTarget: error codes", () => {
   assert.equal(thrown(() => resolveTarget(search, "nope", "click")).code, "unknown_target");
   const fillAction = thrown(() => resolveTarget(search, "go", "fill"));

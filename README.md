@@ -92,12 +92,12 @@ pwa-nav snapshot
 
 For repeated testing and high-speed agent navigation without round trips, use the **Screen Map subsystem** (`docs/screen-map.md`):
 
-### 1. Learn a Screen
+### 1. Learn & Continuously Enrich a Screen
 Once on a screen you want to map, run:
 ```powershell
 pwa-nav snapshot --learn --locale es-ES --access public
 ```
-This generates or updates `screens/<app-id>.screens.json` with semantic IDs (`@search-input`, `@submit-button`, `@cart-link`).
+This generates or updates `screens/<app-id>.screens.json` with semantic IDs (`@search-input`, `@submit-button`, `@cart-link`). Every snapshot and learn step collaborates in enriching this single map (fields, actions, journeys, and nested modal branches), while raw session data stays strictly isolated in `.agent/apps/<appSlug>/snapshot.json` without scattering loose files across your workspace.
 
 ### 2. View Compact Screen Info
 Instead of collecting full DOM trees, inspect the screen's compact summary (saves 86% tokens):
@@ -113,7 +113,10 @@ pwa-nav fill '@search-box' "olive oil" --armed
 pwa-nav click '@search-btn' --armed
 ```
 
-### 4. Execute Multi-Screen User Journeys
+### 4. Action Trees & Modal Branches (`opens`)
+When an action opens a modal dialog or sub-view (like clicking `@crear-publicacion` to author a post), the screen map captures this in `action.opens`. The controls inside the modal (`@editor-post`, `@boton-publicar`) are directly addressable by `@id` without re-scanning or re-learning background elements. Rich contenteditable editors are mapped as `textbox` with placeholders extracted automatically.
+
+### 5. Execute Multi-Screen User Journeys
 Declare complex cross-screen workflows in `screens/<app>.screens.json` and run them in one command:
 ```powershell
 # Dry-run preview
@@ -156,8 +159,9 @@ The MCP server accepts the following command-line flags in `"args"`:
 
 | Flag | Env Variable | Default | Purpose |
 |---|---|---|---|
-| *(none)* | - | - | Minimal invocation: `node <path>/dist/mcp.js`. Runs in safe dry-run mode on port 9222. |
-| `--armed` | `PWA_NAV_ARMED=1` | *off* (dry-run) | **Enable real browser mutations.** Without this flag, clicks, fills, uploads, and flows only preview actions. |
+| *(none)* | - | - | Minimal invocation: `node <path>/dist/mcp.js`. Runs in direct active **armed** mode on port 9222. |
+| `--dry-run` | `PWA_NAV_DRY_RUN=1` | *off* | Run in dry-run mode (previews mutations). Direct active execution (armed) is default. |
+| `--armed` | `PWA_NAV_ARMED=1` | *on* (active) | Retained for backward compatibility (active mode is default). |
 | `--port <n>` | - | `9222` | Optional. Override BiDi port only if your PWA uses a non-standard port (1024-65535). |
 | `--screens-dir <dir>` | `PWA_NAV_SCREENS_DIR` | `./screens` | Directory where screen maps (`*.screens.json`) are stored. |
 | `--screen-map <file>` | - | *auto-discovery* | Explicit path to a single screen map file. |
@@ -165,7 +169,7 @@ The MCP server accepts the following command-line flags in `"args"`:
 | `--backend offline\|bidi` | - | `bidi` | Use `offline` for testing against static fixtures without a browser. |
 
 The MCP server exposes:
-- **Core tools**: `pwa_open`, `pwa_snapshot`, `pwa_click`, `pwa_fill`, `pwa_upload`, `pwa_screenshot`, `pwa_extract`, `pwa_act`, `pwa_learn`, `pwa_wait`.
+- **Core tools**: `pwa_open`, `pwa_snapshot`, `pwa_find`, `pwa_click`, `pwa_fill`, `pwa_upload`, `pwa_screenshot`, `pwa_extract`, `pwa_act`, `pwa_learn`, `pwa_wait`.
 - **Dynamic flow tools**: `flow_<screen>_<flow>` for single-screen mapped tasks.
 - **Dynamic journey tools**: `journey_<id>` for multi-screen workflows with `destructiveHint: true`.
 - **Resources**: `pwa-nav://screens/<app-id>` and `pwa-nav://snapshot/latest`.
@@ -177,12 +181,13 @@ The MCP server exposes:
 | Command | Description |
 |---|---|
 | `pwa-nav open <url> [--launch] [--site <ULID>] [--allow-origin]` | Navigate to URL. Requires origin in `.agent/allow.json` or explicit `--allow-origin`. |
-| `pwa-nav snapshot [-i \| --all] [--query <str>] [--role <str>] [--json] [--out <path>]` | Capture live accessibility DOM snapshot. `-i` interactive elements only (default). Optional `--query` and `--role` filters. |
+| `pwa-nav snapshot [-i \| --all] [--query <str>] [--role <str>] [--json] [--out <path>]` | Capture live accessibility DOM snapshot. `-i` interactive elements only (default). Optional `--query` and `--role` filters. Highlights active modal/dialog. |
 | `pwa-nav snapshot --screen [--screen-map <f>]` | Print compact view of mapped screen matching current URL (no DOM dump). |
 | `pwa-nav snapshot --learn [--prune] [--locale <lang>]` | Learn live screen into `screens/<app>.screens.json` and show diff. |
+| `pwa-nav find [<query>] [--role <str>] [--dialog] [--offset <n>] [--limit <n>] [--snapshot <id>]` | Fast targeted search across names, roles, placeholders, values, and dialog titles with modal filtering. |
 | `pwa-nav click --snapshot <id> [--armed] <ref>` | Click element by snapshot ref (e.g. `e3`). Dry-run unless `--armed`. |
 | `pwa-nav click [--armed] '@<id>'` | Click element by semantic ID (e.g. `'@submit-btn'`). |
-| `pwa-nav fill --snapshot <id> [--armed] <ref> <text>` | Fill field by ref. Typed text of sensitive fields is never printed or stored. |
+| `pwa-nav fill --snapshot <id> [--armed] <ref> <text>` | Fill field by ref (supports inputs, textareas, and rich `contenteditable` editors). |
 | `pwa-nav fill [--armed] '@<id>' <text>` | Fill field by semantic ID. Sensitive fields are blocked (exit 11). |
 | `pwa-nav upload --snapshot <id> [--armed] <ref> <path...>` | Upload local file(s) to `<input type="file">`. Dry-run unless `--armed`. |
 | `pwa-nav upload [--armed] '@<id>' <path...>` | Upload local file(s) by semantic ID. |
@@ -190,7 +195,7 @@ The MCP server exposes:
 | `pwa-nav act [--armed] <semantic-ops...>` | Batch semantic ops (`click:'@id'`, `fill:'@id'=val`, `upload:'@id'=path`, `flow:<id>`). |
 | `pwa-nav journey <name> [key=value...] [--armed]` | Execute declarative multi-screen user journey across route transitions. |
 | `pwa-nav screenshot [--out <path>] [--format png\|jpeg\|webp]` | Capture visual screenshot to disk (`.agent/screenshot.png` by default). |
-| `pwa-nav extract [--snapshot <id>] --mode text\|links [--query <str>] [--role <str>] [--offset <n>] [--limit <n>]` | Fast read-only text or links extraction with query/role filtering and pagination. |
+| `pwa-nav extract [--snapshot <id>] [--mode all\|text\|links] [--query <str>] [--role <str>] [--offset <n>] [--limit <n>]` | Fast read-only text or links extraction with query/role filtering and pagination. |
 | `pwa-nav wait <target> [--state visible\|hidden\|enabled] [--timeout <ms>] [--interval <ms>]` | Wait deterministically for an element or query to become visible, hidden, or enabled. |
 | `pwa-nav qa run <check-file>` | Run offline JSON check file and save per-step evidence to `.agent/evidence/`. |
 
@@ -205,7 +210,7 @@ The MCP server exposes:
 
 ## 🛡️ Security & Safety Gates
 
-1. **Dry-Run by Default**: Actions only execute in dry-run mode unless `--armed` is explicitly supplied.
+1. **Execution-First & Armed by Default (MCP)**: Actions execute directly and actively on the browser by default. Use `--dry-run` when simulation/preview is explicitly requested.
 2. **Sensitive Fields Barrier**: Password fields, tokens, and payment inputs (`sensitive: true` / `humanOnly: true`) are never typed by the agent (fails fast with code 11 `sensitive_target`). The user types them by hand.
 3. **Origin Allow-List**: Navigation is strictly blocked unless the origin is approved in `.agent/allow.json` or explicitly passed via `--allow-origin` (code 6 `origin_blocked`).
 4. **Kill-Switch**: Creating `.agent/kill` or setting `PWA_NAV_KILL_SWITCH` immediately terminates any armed operation (code 7 `kill_switch`).
@@ -235,7 +240,7 @@ The MCP server exposes:
 | `10` | `protocol` | Low-level WebDriver BiDi protocol failure. |
 | `11` | `sensitive_target` | Refusal to type into sensitive field or execute human-only flow. |
 | `12` | `unknown_target` | Semantic `@id` not found in screen map. |
-| `13` | `unmapped_screen` | Route not recognized in screen map. Use `snapshot -i` or learn it. |
+| `13` | `unmapped_screen` | Route not recognized in screen map. Autonomously learn and enrich `screens/<app>.screens.json`. |
 | `14` | `journey_step_failed` | Journey transition failed or expected screen not reached. |
 | `15` | `file_upload_blocked` | File path is outside allowed safe directories or targets sensitive files. |
 
@@ -247,7 +252,7 @@ Run the full CI verification chain:
 ```bash
 pnpm lint && pnpm build && pnpm test && pnpm smoke
 ```
-- **330+ Automated Tests** covering protocol serialization, BiDi fake server, DOM collection, semantic resolution, screen maps, multi-screen journeys, visual screenshots, and MCP conformance.
+- **340+ Automated Tests** covering protocol serialization, BiDi fake server, DOM collection, semantic resolution, screen maps, multi-screen journeys, visual screenshots, and MCP conformance.
 
 ---
 

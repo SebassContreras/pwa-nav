@@ -6,6 +6,7 @@ import { deriveIds } from "./screen-learn.js";
 import { matchRoute } from "./screen-match.js";
 import {
   fingerprintOf,
+  mergeOpensBranch,
   screenElements,
   validateScreenMap,
   type A11yFinding,
@@ -161,6 +162,11 @@ function mergeAction(old: ScreenAction, live: ScreenAction): { value: ScreenActi
   };
   if (live.nameSource !== undefined) {
     value.nameSource = live.nameSource;
+  }
+  if (live.opens !== undefined) {
+    value.opens = old.opens !== undefined ? mergeOpensBranch(old.opens, live.opens) : live.opens;
+  } else if (old.opens !== undefined) {
+    value.opens = old.opens;
   }
   return {
     value,

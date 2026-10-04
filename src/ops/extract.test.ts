@@ -4,7 +4,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { test } from "node:test";
 import { OfflineBackend } from "../backend/backend.js";
-import { performExtract, performExtractDetailed, performSnapshot } from "./ops.js";
+import { performExtract, performExtractDetailed, performFind, performSnapshot } from "./ops.js";
 
 const DEMO_TREE = `
 - heading "Dashboard" [ref=e1]
@@ -103,3 +103,31 @@ test("performExtractDetailed handles offset and limit pagination", async () => {
 
   await rm(dir, { recursive: true, force: true });
 });
+
+test("performFind searches across role, name, and attributes", async () => {
+  const dir = await mkdtemp(join(tmpdir(), "pwa-nav-find-"));
+  const backend = new OfflineBackend({ agentDir: dir });
+  const snapshot = await performSnapshot(DEMO_TREE, {
+    url: "https://example.com",
+    title: "Example",
+    outPath: join(dir, "snapshot.json"),
+    agentDir: dir,
+  });
+
+  const found = await performFind(snapshot.snapshotId, {
+    backend,
+    query: "delete",
+  });
+  assert.equal(found.total, 1);
+  assert.equal(found.elements[0]?.ref, "e4");
+  assert.ok(found.lines[0]?.includes("Delete file"));
+
+  const foundRole = await performFind(snapshot.snapshotId, {
+    backend,
+    role: "button",
+  });
+  assert.equal(foundRole.total, 3);
+
+  await rm(dir, { recursive: true, force: true });
+});
+

@@ -169,6 +169,69 @@ describe("screen map", () => {
     assert.match(issues, /screenId "nonexistent-screen" does not exist in screens/);
     assert.match(issues, /expectScreen "also-missing" does not exist in screens/);
   });
+
+  it("accepts an action with an opensBranch and includes nested elements", async () => {
+    const map = clone(await example());
+    const action = map.screens[0]?.actions[0];
+    assert.ok(action);
+    action.opens = {
+      id: "post-modal",
+      type: "dialog",
+      title: "Crear publicación",
+      fields: [
+        {
+          id: "editor-post",
+          role: "textbox",
+          name: "¿De qué quieres hablar?",
+          nameSource: "placeholder",
+          sensitive: false,
+          agentFillable: true,
+          locator: { role: "textbox", name: "¿De qué quieres hablar?" },
+        },
+      ],
+      actions: [
+        {
+          id: "btn-publicar",
+          role: "button",
+          name: "Publicar",
+          kind: "submit",
+          effect: "submit",
+          locator: { role: "button", name: "Publicar" },
+        },
+      ],
+    };
+    const firstScreen = map.screens[0];
+    assert.ok(firstScreen);
+    // Recompute fingerprint to verify that screenElements includes the nested branch
+    firstScreen.fingerprint = fingerprintOf(
+      (await import("./screen-map.js")).screenElements(firstScreen),
+    );
+    assert.equal(await issuesOf(map), "");
+  });
+
+  it("rejects duplicate ids inside opensBranch", async () => {
+    const map = clone(await example());
+    const action = map.screens[0]?.actions[0];
+    assert.ok(action);
+    action.opens = {
+      id: "dup-modal",
+      type: "dialog",
+      title: "Modal",
+      fields: [
+        {
+          id: action.id, // Reusing existing action id
+          role: "textbox",
+          name: "Conflict",
+          nameSource: "label",
+          sensitive: false,
+          agentFillable: true,
+          locator: { role: "textbox", name: "Conflict" },
+        },
+      ],
+    };
+    const issues = await issuesOf(map);
+    assert.match(issues, new RegExp(`id "${action.id}" is used by more than one target`));
+  });
 });
 
 describe("fingerprintOf", () => {

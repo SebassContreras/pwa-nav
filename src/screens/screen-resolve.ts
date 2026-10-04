@@ -4,7 +4,7 @@
 import { Ajv2020 } from "ajv/dist/2020.js";
 import { PwaNavError } from "../core/errors.js";
 import { StaleRefError, type LocatorSidecar } from "../core/refs.js";
-import type { Locator, Screen } from "./screen-map.js";
+import type { Locator, OpensBranch, Screen, ScreenAction, ScreenField, ScreenLink } from "./screen-map.js";
 
 export type TargetKind = "field" | "action" | "link";
 export type Intent = "click" | "fill" | "upload";
@@ -129,8 +129,33 @@ export function parseFlowInputs(argv: readonly string[]): Record<string, string>
   return inputs;
 }
 
+export function collectAllTargets(screen: Screen): {
+  fields: ScreenField[];
+  actions: ScreenAction[];
+  links: ScreenLink[];
+} {
+  const fields = [...screen.fields];
+  const actions = [...screen.actions];
+  const links = [...screen.links];
+  const collectBranch = (branch: OpensBranch): void => {
+    if (branch.fields) fields.push(...branch.fields);
+    if (branch.actions) {
+      actions.push(...branch.actions);
+      for (const a of branch.actions) {
+        if (a.opens) collectBranch(a.opens);
+      }
+    }
+    if (branch.links) links.push(...branch.links);
+  };
+  for (const a of screen.actions) {
+    if (a.opens) collectBranch(a.opens);
+  }
+  return { fields, actions, links };
+}
+
 function availableIds(screen: Screen): string[] {
-  return [...screen.fields, ...screen.actions, ...screen.links].map((entry) => `@${entry.id}`);
+  const { fields, actions, links } = collectAllTargets(screen);
+  return [...fields, ...actions, ...links].map((entry) => `@${entry.id}`);
 }
 
 function listHint(label: string, ids: readonly string[]): string {
@@ -143,9 +168,10 @@ function listHint(label: string, ids: readonly string[]): string {
 }
 
 export function resolveTarget(screen: Screen, id: string, intent: Intent): ResolvedTarget {
-  const field = screen.fields.find((entry) => entry.id === id);
-  const action = screen.actions.find((entry) => entry.id === id);
-  const link = screen.links.find((entry) => entry.id === id);
+  const { fields, actions, links } = collectAllTargets(screen);
+  const field = fields.find((entry) => entry.id === id);
+  const action = actions.find((entry) => entry.id === id);
+  const link = links.find((entry) => entry.id === id);
 
   let resolved: ResolvedTarget;
   if (field !== undefined) {
@@ -169,7 +195,7 @@ export function resolveTarget(screen: Screen, id: string, intent: Intent): Resol
       sensitive: false,
       agentFillable: false,
       requiresSensitive: (action.requires ?? []).some(
-        (required) => screen.fields.find((entry) => entry.id === required)?.sensitive === true,
+        (required) => fields.find((entry) => entry.id === required)?.sensitive === true,
       ),
     };
   } else if (link !== undefined) {

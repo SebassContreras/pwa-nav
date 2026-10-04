@@ -19,7 +19,7 @@ console.info = stderrLog;
 console.debug = stderrLog;
 
 const USAGE =
-  "usage: pwa-nav-mcp [--port <n>] [--armed] [--screens-dir <dir>] [--screen-map <file>] [--agent-dir <dir>] [--backend offline|bidi]";
+  "usage: pwa-nav-mcp [--port <n>] [--dry-run] [--armed] [--screens-dir <dir>] [--screen-map <file>] [--agent-dir <dir>] [--backend offline|bidi]";
 
 function invalid(message: string): PwaNavError {
   return new PwaNavError("invalid_args", `${message}\n${USAGE}`);
@@ -33,6 +33,7 @@ function parseOptions(argv: string[]) {
       options: {
         port: { type: "string" },
         armed: { type: "boolean" },
+        "dry-run": { type: "boolean" },
         "screens-dir": { type: "string" },
         "screen-map": { type: "string" },
         "agent-dir": { type: "string" },
@@ -56,7 +57,8 @@ function parseOptions(argv: string[]) {
       throw invalid(`invalid port: ${values.port} (expected an integer 1024-65535).`);
     }
   }
-  const armed = values.armed === true || process.env["PWA_NAV_ARMED"] === "1";
+  const isDryRun = values["dry-run"] === true || process.env["PWA_NAV_DRY_RUN"] === "1";
+  const armed = !isDryRun;
   return {
     backend,
     port,

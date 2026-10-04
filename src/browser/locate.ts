@@ -4,6 +4,13 @@ import type { Locator } from "../screens/screen-map.js";
 import type { Snapshot } from "../core/snapshot.js";
 import type { RawElement } from "./collector.js";
 
+const COMPATIBLE_ROLES: Record<string, string[]> = {
+  button: ["link", "menuitem", "tab"],
+  link: ["button", "menuitem", "tab"],
+  menuitem: ["button", "link"],
+  tab: ["button", "link"],
+};
+
 export function findByLocator(
   raw: readonly RawElement[],
   locator: Locator,
@@ -15,6 +22,17 @@ export function findByLocator(
     if (element?.role === locator.role && element.name === locator.name) {
       if (seen === want) return { index, element };
       seen++;
+    }
+  }
+  const compat = COMPATIBLE_ROLES[locator.role];
+  if (compat !== undefined) {
+    seen = 0;
+    for (let index = 0; index < raw.length; index++) {
+      const element = raw[index];
+      if (element !== undefined && compat.includes(element.role) && element.name === locator.name) {
+        if (seen === want) return { index, element };
+        seen++;
+      }
     }
   }
   return null;
@@ -48,7 +66,13 @@ export function assertFresh(args: {
     throw new StaleRefError(id, `page URL changed: snapshot was "${snapshot.url}", live page is "${live.url}"`);
   }
   const target = `role "${locator.role}" and name "${locator.name}"`;
-  const count = live.raw.filter((e) => e.role === locator.role && e.name === locator.name).length;
+  let count = live.raw.filter((e) => e.role === locator.role && e.name === locator.name).length;
+  if (count === 0) {
+    const compat = COMPATIBLE_ROLES[locator.role];
+    if (compat !== undefined) {
+      count = live.raw.filter((e) => compat.includes(e.role) && e.name === locator.name).length;
+    }
+  }
   if (count === 0) {
     throw new StaleRefError(id, `no element with ${target}`);
   }

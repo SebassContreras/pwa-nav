@@ -202,3 +202,38 @@ test("collector tags input type file with role textbox and inputType file even i
   );
 });
 
+test("collector detects contenteditable as textbox with data-placeholder and text value", () => {
+  const els = body(
+    `<div contenteditable="true" data-placeholder="¿De qué quieres hablar?">Hello LinkedIn</div>`,
+  );
+  assert.equal(els.length, 1);
+  const first = els[0];
+  assert.ok(first);
+  assert.equal(first.role, "textbox");
+  assert.equal(first.name, "¿De qué quieres hablar?");
+  assert.equal(first.value, "Hello LinkedIn");
+  assert.equal(first.placeholder, "¿De qué quieres hablar?");
+});
+
+test("collector tracks enclosing dialog context", () => {
+  const els = body(
+    `<dialog open aria-label="Crear una publicación">
+       <div contenteditable="true" data-placeholder="¿De qué quieres hablar?"></div>
+       <button>Publicar</button>
+     </dialog>
+     <button>Outside</button>`,
+  );
+  assert.equal(els.length, 3);
+  const [e1, e2, e3] = els;
+  assert.ok(e1);
+  assert.ok(e2);
+  assert.ok(e3);
+  assert.equal(e1.dialog, "Crear una publicación");
+  assert.equal(e1.container, "dialog: Crear una publicación");
+  assert.equal(e2.dialog, "Crear una publicación");
+  assert.equal(e2.container, "dialog: Crear una publicación");
+  assert.equal(e3.dialog, undefined);
+  assert.equal(e3.container, undefined);
+});
+
+
