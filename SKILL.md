@@ -127,6 +127,15 @@ In PowerShell, the `@` symbol is reserved for array sub-expressions and variable
 - **CORRECT**: `pwa-nav click '@submit-button'` or `"@submit-button"`
 - **CORRECT IN ACT**: `pwa-nav act "click:'@submit-button'"` or `'click:@submit-button'`
 
+### Windows Virtual Desktops & Sandbox Environments (Antigravity Invariant)
+In agent environments on Windows (such as Antigravity or background agent runners), commands run in an isolated virtual desktop (`exebox-...`).
+- **Invisible Window Trap**: If an agent spawns `firefox.exe` directly from within the sandbox, the browser renders its GUI inside the hidden virtual desktop. The BiDi port 9222 and `pwa_snapshot` function normally, but the user sees NO window on their screen (giving the illusion of headless mode).
+- **Correct Pattern**: Ask the user to open the PWA from Windows (Start Menu or taskbar) with `--remote-debugging-port 9222`. The agent attaches seamlessly. If launching via script on Windows, target `WinSta0\Default`.
+
+### WebDriver BiDi Scope vs. OS Window Management
+WebDriver BiDi automates in-page DOM operations (clicking buttons, typing, navigation, accessibility snapshots). It CANNOT manipulate Windows OS windows (bring to front, minimize, maximize).
+- **Never Run Focus Loops**: Agents must never run PowerShell loops (`Get-Process`, Win32 API, `SetForegroundWindow`, inspecting session files) trying to force browser windows to the foreground. Inform the user to focus the window via the Windows taskbar.
+
 ### Network Quiescence & Settling
 `pwa-nav` automatically waits for network idle and DOM stability after mutation actions. You do not need arbitrary sleep delays.
 
@@ -144,6 +153,8 @@ In PowerShell, the `@` symbol is reserved for array sub-expressions and variable
 8. **Text-First, Vision-Free Autonomous Operation**: NEVER take screenshots (`pwa_screenshot`) to discover UI elements, inspect modals/dialogs, or check if an action succeeded. Screenshots waste massive amounts of tokens and completely fail on text-only LLM models. Always use `pwa_snapshot` to inspect state. When encountering an unmapped screen, autonomously call `pwa_learn` to generate the screen map without prompting the user.
 9. **Direct In-App Operation**: Work directly within the open application. Do NOT diverge into external search engines (Exa, Google) when the task is to research and write inside the open PWA (like Google NotebookLM).
 10. **Zero Arbitrary Sleep Delays & Zero Python Inspection Scripts (Hard Invariant)**: Never run shell pauses (`Start-Sleep 40s`, `sleep`). Use `pwa_wait` (or CLI `pwa-nav wait`) to wait for asynchronous updates (Fast Research, AI synthesis, video/audio render, button enabling). NEVER write ad-hoc Python scripts or PowerShell one-liners to inspect `.agent/snapshot.json`. Use `pwa_extract` with `query`/`role` filters or `pwa_snapshot({ query })`.
+11. **Zero OS Window Manipulation Loops**: WebDriver BiDi automates within the web DOM, not OS windows. Never execute PowerShell/Win32 scripts attempting to manipulate OS window Z-order, focus, or visibility.
+12. **Windows Sandbox Awareness**: Never assume a browser spawned from within an agent sandbox on Windows is visible to the user. Prefer connecting to user-launched instances on port 9222.
 
 ---
 

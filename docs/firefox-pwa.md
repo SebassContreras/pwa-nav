@@ -99,5 +99,7 @@ Several top-level contexts in one runtime: pass `--context <id>`. Several sites 
 | Armed action refused | 6 / 7 | `--allow-origin` / remove `.agent/kill` (user only) |
 | Several top-level contexts | 2 (invalid_args) | Pass `--context <id>` |
 | Stale ref | 3 | `snapshot -i` again |
+| Window invisible on Windows (Agent Sandbox / Antigravity) | - | Background agent processes on Windows run inside virtual desktops (`exebox-...`). Launch the PWA from Windows Start Menu / Taskbar or launch targeting `WinSta0\Default`. |
 
 Full exit-code table: `README.md`.
+
