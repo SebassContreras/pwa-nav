@@ -5,7 +5,7 @@ Per-app JSON file saying what each screen offers: fields, actions, links, named 
 ## What it is and is not
 
 - App-agnostic. The tool ships no app-specific map. `examples/screens/demo-app.screens.json` (derived from `checks/fixtures/login.html`) is the reference and test fixture.
-- Your maps live in the screens dir: `--screens-dir <dir>` > env `PWA_NAV_SCREENS_DIR` > `./screens`. This repo git-ignores `screens/` because maps are per-user data.
+- Your maps live in the screens dir: `--screens-dir <dir>` > env `PWA_NAV_SCREENS_DIR` > `<cache-dir>/screens` (defaulting to `.agent/screens` inside a project or `~/.pwa-nav/screens` outside).
 - Learned from live snapshots (`snapshot --learn` or `pwa_learn`), never invented. Agents autonomously discover and enrich the screen map on unmapped routes, and operators can review and fine-tune it.
 - **Continuous Screen Map Enrichment**: Every snapshot and learn step collaborates in enriching `screens/<app>.screens.json` with discovered controls, flows, journeys, and nested modal branches (`action.opens`).
 - **Zero Loose Files in Workspace**: Raw snapshots and session caches are strictly isolated per application in `.agent/apps/<appSlug>/snapshot.json`. Screen maps remain the persistent, clean source of truth without scattering loose files in the repo.

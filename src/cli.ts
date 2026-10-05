@@ -10,13 +10,14 @@
 import { fstatSync } from "node:fs";
 import { readFile } from "node:fs/promises";
 import * as readline from "node:readline";
+import { join } from "node:path";
 import { parseArgs, type ParseArgsOptionsConfig } from "node:util";
 import { createBackend, DEFAULT_PORT } from "./backend/backend-factory.js";
 import type { Backend } from "./backend/backend.js";
 import { exitCodeOf, PwaNavError } from "./core/errors.js";
+import { resolveAgentDir, resolveScreensDir } from "./core/storage.js";
 import {
-  DEFAULT_SESSION_PATH,
-  DEFAULT_SNAPSHOT_PATH,
+
   loadSession,
   parseActOp,
   performAct,
@@ -77,6 +78,8 @@ function usage(): string {
     "  --backend offline|bidi  Default bidi (live Firefox PWA); env PWA_NAV_BACKEND.",
     "  --port <n>              BiDi port 1024-65535 (default 9222); env PWA_NAV_PORT.",
     "  --context <id>          Browsing context id (required when the PWA has several top-level contexts).",
+    "  --cache-dir <dir>       Cache / agent state directory (env PWA_NAV_CACHE_DIR).",
+
     "  -h, --help              Show this help.",
     "",
     "Commands:",
@@ -130,7 +133,7 @@ function usage(): string {
     "  --app-name <text>   With --learn, new map: app name (default: page title).",
     "  --screen-map <file> Explicit map file (--screen, --learn, @id targets). Default: the map whose app.origin",
     "                      equals the current origin, searched in the screens dir.",
-    "  --screens-dir <dir> Screens directory (default ./screens); env PWA_NAV_SCREENS_DIR.",
+    "  --screens-dir <dir> Screens directory (default <cache-dir>/screens); env PWA_NAV_SCREENS_DIR.",
     "",
     "Action options (click, fill, upload, act):",
     "  --armed             Actually send input. Without it live actions are dry-run. Only this flag arms:",
@@ -182,6 +185,8 @@ const VALUE_HINT: Readonly<Record<string, string>> = {
   "--site": "<ULID>",
   "--screen-map": "<file>",
   "--screens-dir": "<dir>",
+  "--cache-dir": "<dir>",
+
   "--locale": "<bcp47>",
   "--access": "public|authenticated|unknown",
   "--app-id": "<slug>",
@@ -233,8 +238,10 @@ const LIVE_OPTIONS = {
   backend: { type: "string" },
   port: { type: "string" },
   context: { type: "string" },
+  "cache-dir": { type: "string" },
   help: { type: "boolean", short: "h" },
 } as const satisfies ParseArgsOptionsConfig;
+
 
 const SCREEN_OPTIONS = {
   "screen-map": { type: "string" },
@@ -258,9 +265,15 @@ interface LiveConfig {
   mode: "offline" | "bidi";
   port: number;
   contextId?: string;
+  agentDir: string;
 }
 
-function resolveLive(values: { backend?: string; port?: string; context?: string }): LiveConfig {
+function resolveLive(values: {
+  backend?: string;
+  port?: string;
+  context?: string;
+  "cache-dir"?: string;
+}): LiveConfig {
   const rawBackend = requireNonEmpty("--backend", values.backend) ?? process.env["PWA_NAV_BACKEND"] ?? "bidi";
   if (rawBackend !== "offline" && rawBackend !== "bidi") {
     throw invalid(`invalid --backend: ${rawBackend} (expected offline|bidi).`);
@@ -274,7 +287,9 @@ function resolveLive(values: { backend?: string; port?: string; context?: string
     }
   }
   const contextId = requireNonEmpty("--context", values.context);
-  return { mode: rawBackend, port, ...(contextId === undefined ? {} : { contextId }) };
+  const rawCache = requireNonEmpty("--cache-dir", values["cache-dir"]) ?? process.env["PWA_NAV_CACHE_DIR"];
+  const agentDir = resolveAgentDir({ cacheDir: rawCache });
+  return { mode: rawBackend, port, agentDir, ...(contextId === undefined ? {} : { contextId }) };
 }
 
 function makeBackend(
@@ -284,6 +299,7 @@ function makeBackend(
   return createBackend({
     mode: live.mode,
     port: live.port,
+    cacheDir: live.agentDir,
     ...(live.contextId === undefined ? {} : { contextId: live.contextId }),
     ...(extra.armed === undefined ? {} : { armed: extra.armed }),
     ...(extra.launch === undefined ? {} : { launch: extra.launch }),
@@ -365,13 +381,13 @@ async function cmdSnapshot(rest: string[]): Promise<void> {
   if (positionals.length > 0) {
     throw invalid(`unknown snapshot option: ${positionals[0] ?? ""}`);
   }
+  const live = resolveLive(values);
   const inputPath = requireNonEmpty("--input", values.input);
   const urlOverride = requireNonEmpty("--url", values.url);
-  const outPath = requireNonEmpty("--out", values.out) ?? DEFAULT_SNAPSHOT_PATH;
+  const outPath = requireNonEmpty("--out", values.out) ?? join(live.agentDir, "snapshot.json");
   if (values.interactive === true && values.all === true) {
     throw invalid("--interactive and --all are mutually exclusive.");
   }
-  const live = resolveLive(values);
   const asJson = values.json === true;
 
   if (values.learn !== true) {
@@ -386,7 +402,7 @@ async function cmdSnapshot(rest: string[]): Promise<void> {
     if (stray !== undefined) throw invalid(`${stray[0]} requires --learn.`);
   }
   if (values.screen === true || values.learn === true) {
-    const screenSource = screenSourceOf(values);
+    const screenSource = screenSourceOf(values, live.agentDir);
     if (values.screen === true && values.learn === true) {
       throw invalid("--screen and --learn are mutually exclusive.");
     }
@@ -460,12 +476,12 @@ async function cmdSnapshot(rest: string[]): Promise<void> {
     return;
   }
 
-  const session = await loadSession(DEFAULT_SESSION_PATH);
+  const session = await loadSession(join(live.agentDir, "session.json"));
   const url = urlOverride ?? session?.url ?? "";
   const title = values.title ?? session?.title ?? "";
   // -i is accepted for contract compatibility: the MCP backend supplies an
   // interactive-only tree; file/stdin input is assumed pre-filtered.
-  const snapshot = await performSnapshot(rawTree, { url, title, outPath, quiet: asJson });
+  const snapshot = await performSnapshot(rawTree, { url, title, outPath, quiet: asJson, agentDir: live.agentDir });
   if (asJson) {
     console.log(JSON.stringify(snapshot));
   }
@@ -488,12 +504,13 @@ function isArmed(values: { armed?: boolean; "dry-run"?: boolean }): boolean {
   return values.armed === true;
 }
 
-function screenSourceOf(values: { "screen-map"?: string; "screens-dir"?: string }): ScreenSource {
+function screenSourceOf(values: { "screen-map"?: string; "screens-dir"?: string }, agentDir?: string): ScreenSource {
   const screenMap = requireNonEmpty("--screen-map", values["screen-map"]);
   const screensDir = requireNonEmpty("--screens-dir", values["screens-dir"]);
   return {
     ...(screenMap === undefined ? {} : { screenMap }),
-    ...(screensDir === undefined ? {} : { screensDir }),
+    screensDir: screensDir ?? (agentDir ? resolveScreensDir({ cacheDir: agentDir }) : undefined),
+    ...(agentDir === undefined ? {} : { cacheDir: agentDir }),
   };
 }
 
@@ -504,6 +521,7 @@ function semanticContext(values: {
   "dry-run"?: boolean;
   "screen-map"?: string;
   "screens-dir"?: string;
+  "cache-dir"?: string;
   backend?: string;
   port?: string;
   context?: string;
@@ -516,7 +534,7 @@ function semanticContext(values: {
     throw invalid("@id targets need the live backend (--backend bidi).");
   }
   const armed = isArmed(values);
-  return { ...screenSourceOf(values), backend: makeBackend(live, { armed }), armed };
+  return { ...screenSourceOf(values, live.agentDir), backend: makeBackend(live, { armed }), armed };
 }
 
 function noInputNote(live: LiveConfig, armed: boolean): void {
@@ -806,7 +824,7 @@ async function cmdJourney(rest: string[]): Promise<void> {
     backend,
     armed,
     screenMap: values["screen-map"],
-    screensDir: values["screens-dir"],
+    screensDir: values["screens-dir"] ?? resolveScreensDir({ cacheDir: backend.agentDir }),
   });
 }
 

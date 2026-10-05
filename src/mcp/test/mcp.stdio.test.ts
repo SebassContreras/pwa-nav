@@ -21,7 +21,7 @@ test("stdio: lists tools, calls an offline tool, exits cleanly on close", async 
   const dir = await mkdtemp(join(tmpdir(), "pwa-nav-mcp-stdio-"));
   const transport = new StdioClientTransport({
     command: process.execPath,
-    args: [MCP, "--backend", "offline", "--agent-dir", join(dir, ".agent")],
+    args: [MCP, "--backend", "offline", "--cache-dir", join(dir, ".agent")],
     cwd: dir,
     stderr: "pipe",
   });
@@ -46,7 +46,7 @@ test("stdio: lists tools, calls an offline tool, exits cleanly on close", async 
 
 test("stdio: stdout carries only protocol frames; clean exit when stdin closes", async () => {
   const dir = await mkdtemp(join(tmpdir(), "pwa-nav-mcp-stdio-"));
-  const child = spawn(process.execPath, [MCP, "--backend", "offline", "--agent-dir", join(dir, ".agent")], {
+  const child = spawn(process.execPath, [MCP, "--backend", "offline", "--cache-dir", join(dir, ".agent")], {
     cwd: dir,
     stdio: ["pipe", "pipe", "pipe"],
   });
@@ -96,6 +96,30 @@ test("stdio: stdout carries only protocol frames; clean exit when stdin closes",
     assert.match(stderr, /pwa-nav-mcp ready/);
   } finally {
     child.kill();
+    await rm(dir, { recursive: true, force: true });
+  }
+});
+
+test("stdio: accepts --cache-dir flag and writes session into it", async () => {
+  const dir = await mkdtemp(join(tmpdir(), "pwa-nav-mcp-cachedir-"));
+  const cacheDir = join(dir, "my-custom-cache");
+  const transport = new StdioClientTransport({
+    command: process.execPath,
+    args: [MCP, "--backend", "offline", "--cache-dir", cacheDir],
+    cwd: dir,
+    stderr: "pipe",
+  });
+  const client = new Client({ name: "test", version: "0.0.0" });
+  try {
+    await client.connect(transport);
+    const opened = (await client.callTool({
+      name: "pwa_open",
+      arguments: { url: "http://localhost:8080/test-cache" },
+    })) as { isError?: boolean; content: { text?: string }[] };
+    assert.notEqual(opened.isError, true);
+    assert.ok(existsSync(join(cacheDir, "session.json")));
+  } finally {
+    await client.close();
     await rm(dir, { recursive: true, force: true });
   }
 });

@@ -1,8 +1,8 @@
 #!/usr/bin/env node
 // pwa-nav-mcp: stdio MCP server entrypoint (spec 006). stdout carries ONLY protocol frames:
 // console.log/info/debug are redirected to stderr before anything else runs.
-// Operator options: --port, --armed (or PWA_NAV_ARMED=1), --screens-dir, --screen-map,
-// --agent-dir, --backend offline|bidi. Armed is never a tool argument.
+// Operator options: --port, --dry-run, --screens-dir, --screen-map,
+// --cache-dir, --backend offline|bidi. Armed is never a tool argument.
 import { parseArgs } from "node:util";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
 import { createBackend, DEFAULT_PORT } from "./backend/backend-factory.js";
@@ -10,6 +10,8 @@ import { exitCodeOf, PwaNavError } from "./core/errors.js";
 import { loadFlowSource } from "./mcp/mcp-flows.js";
 import { createMcpServer } from "./mcp/mcp-server.js";
 import { cleanDebuggingPortConfigured } from "./browser/pwa-runtime.js";
+
+import { resolveAgentDir, resolveScreensDir } from "./core/storage.js";
 
 const stderrLog = (...parts: unknown[]): void => {
   console.error(...parts);
@@ -19,7 +21,7 @@ console.info = stderrLog;
 console.debug = stderrLog;
 
 const USAGE =
-  "usage: pwa-nav-mcp [--port <n>] [--dry-run] [--armed] [--screens-dir <dir>] [--screen-map <file>] [--agent-dir <dir>] [--backend offline|bidi]";
+  "usage: pwa-nav-mcp [--port <n>] [--dry-run] [--armed] [--screens-dir <dir>] [--screen-map <file>] [--cache-dir <dir>] [--backend offline|bidi]";
 
 function invalid(message: string): PwaNavError {
   return new PwaNavError("invalid_args", `${message}\n${USAGE}`);
@@ -36,7 +38,7 @@ function parseOptions(argv: string[]) {
         "dry-run": { type: "boolean" },
         "screens-dir": { type: "string" },
         "screen-map": { type: "string" },
-        "agent-dir": { type: "string" },
+        "cache-dir": { type: "string" },
         backend: { type: "string" },
       },
       allowPositionals: false,
@@ -59,13 +61,17 @@ function parseOptions(argv: string[]) {
   }
   const isDryRun = values["dry-run"] === true || process.env["PWA_NAV_DRY_RUN"] === "1";
   const armed = !isDryRun;
+  const cacheDir = resolveAgentDir({ cacheDir: values["cache-dir"] });
+  const rawScreensDir = values["screens-dir"] ?? process.env["PWA_NAV_SCREENS_DIR"];
+  const effectiveScreensDir = resolveScreensDir({ screensDir: rawScreensDir, cacheDir });
+
   return {
     backend,
     port,
     armed,
-    screensDir: values["screens-dir"] ?? process.env["PWA_NAV_SCREENS_DIR"],
+    screensDir: effectiveScreensDir,
     screenMap: values["screen-map"],
-    agentDir: values["agent-dir"],
+    cacheDir,
   } as const;
 }
 
@@ -76,7 +82,8 @@ async function main(): Promise<void> {
   }
   const flowSource = await loadFlowSource(
     {
-      ...(opts.screensDir === undefined ? {} : { screensDir: opts.screensDir }),
+      screensDir: opts.screensDir,
+      cacheDir: opts.cacheDir,
       ...(opts.screenMap === undefined ? {} : { screenMap: opts.screenMap }),
     },
     stderrLog,
@@ -85,15 +92,16 @@ async function main(): Promise<void> {
     ...(flowSource === undefined ? {} : { flowSource }),
     mode: opts.backend,
     armed: opts.armed,
-    ...(opts.screensDir === undefined ? {} : { screensDir: opts.screensDir }),
+    cacheDir: opts.cacheDir,
+    screensDir: opts.screensDir,
     ...(opts.screenMap === undefined ? {} : { screenMap: opts.screenMap }),
     backendFactory: ({ armed, launch }) =>
       createBackend({
         mode: opts.backend,
         port: opts.port,
         armed,
+        cacheDir: opts.cacheDir,
         ...(launch === true ? { launch: true } : {}),
-        ...(opts.agentDir === undefined ? {} : { agentDir: opts.agentDir }),
       }),
   });
   server.onclose = () => {

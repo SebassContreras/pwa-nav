@@ -17,7 +17,7 @@ pnpm i && pnpm build
 node dist/mcp.js --port 9222
 ```
 
-stdout carries protocol frames only. Logs go to stderr (`pwa-nav-mcp ready (backend bidi, ARMED, 0 screen maps in ./screens)`). Note that starting with 0 screen maps is normal and expected; maps are generated autonomously via `pwa_learn` as you browse.
+stdout carries protocol frames only. Logs go to stderr (`pwa-nav-mcp ready (backend bidi, ARMED)`). Note that starting with 0 screen maps is normal and expected; maps are generated autonomously via `pwa_learn` as you browse.
 
 ## Server options (operator only)
 
@@ -26,9 +26,9 @@ stdout carries protocol frames only. Logs go to stderr (`pwa-nav-mcp ready (back
 | `--port <n>` | - | 9222 | BiDi port, integer 1024-65535. |
 | `--dry-run` | `PWA_NAV_DRY_RUN=1` | off | Run in dry-run mode (previews mutations). Direct active execution (armed) is default. |
 | `--armed` | `PWA_NAV_ARMED=1` | on | Retained for backward compatibility (active mode is default). |
-| `--screens-dir <dir>` | `PWA_NAV_SCREENS_DIR` | `./screens` | Screen-map directory. |
+| `--screens-dir <dir>` | `PWA_NAV_SCREENS_DIR` | `<cache-dir>/screens` | Screen-map directory. |
 | `--screen-map <file>` | - | - | Explicit screen-map file. |
-| `--agent-dir <dir>` | - | `.agent` | Snapshot, session and allow-list directory. |
+| `--cache-dir <dir>` | `PWA_NAV_CACHE_DIR` | `<projectRoot>/.agent` or `~/.pwa-nav` | Cache, snapshot, session and allow-list directory. |
 | `--backend offline\|bidi` | - | `bidi` | `offline` = fixtures, no browser (handshake checks only; `pwa_open` `launch`/`allowOrigin` and `@id` targets are refused). |
 
 Invalid options exit 2 with a usage line.
@@ -132,7 +132,7 @@ Screen learning is available both via CLI (`pwa-nav snapshot --learn`) and via M
 - Flow tools: `flow_<screenId>_<flowId>` (`-` becomes `_`) for every flow with `humanOnly: false`; the input schema is the flow's own JSON Schema. A name collision or a name over 64 characters gets a stable `_<8 hex>` suffix (logged on stderr). The page must already be on that flow's screen, otherwise the call fails with `unmapped_screen`; the server never navigates.
 - Journey tools: `journey_<journeyId>` (`-` becomes `_`) for every user journey declared in the map (`journeys[]`) with `humanOnly: false`. Journeys orchestrate multi-screen route transitions with network settling and `expectScreen` assertions.
 - Human-only flows and journeys are never registered as tools. Their names appear in the server `instructions` and in the screens resource description, so the model knows to ask the user.
-- Resources (read-only, `application/json`): `pwa-nav://screens/<app-id>` (the validated map, when one is loaded) and `pwa-nav://snapshot/latest` (read from `<agent-dir>/snapshot.json` at read time; `-32002` when no snapshot exists yet). No subscriptions.
+- Resources (read-only, `application/json`): `pwa-nav://screens/<app-id>` (the validated map, when one is loaded) and `pwa-nav://snapshot/latest` (read from `<cache-dir>/snapshot.json` at read time; `-32002` when no snapshot exists yet). No subscriptions.
 - Dry-run and armed plans echo non-sensitive fill text on purpose; sensitive fields are redacted.
 
 ## Armed mode (Active Execution by Default)

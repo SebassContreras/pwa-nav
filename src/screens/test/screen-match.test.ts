@@ -2,7 +2,7 @@
 import assert from "node:assert/strict";
 import { mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { join, resolve } from "node:path";
 import { describe, it } from "node:test";
 import { fileURLToPath } from "node:url";
 import { PwaNavError } from "../../core/errors.js";
@@ -203,7 +203,8 @@ describe("screens dir", () => {
   it("resolves option, env, default", () => {
     assert.equal(resolveScreensDir({ screensDir: "o" }, { PWA_NAV_SCREENS_DIR: "e" }), "o");
     assert.equal(resolveScreensDir({}, { PWA_NAV_SCREENS_DIR: "e" }), "e");
-    assert.equal(resolveScreensDir(undefined, {}), "./screens");
+    assert.equal(resolveScreensDir(undefined, {}), join(process.cwd(), ".agent", "screens"));
+    assert.equal(resolveScreensDir({ cacheDir: "/custom/agent" }, {}), join(resolve("/custom/agent"), "screens"));
   });
 
   it("missing dir is empty", async () => {

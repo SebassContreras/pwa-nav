@@ -23,7 +23,8 @@ To register `pwa-nav` in an AI agent or MCP client (Claude Desktop, Cursor, Clau
 
 - **Default Port (9222) & Auto-Config**: `--port 9222` is **optional**. The server defaults to port `9222` and automatically inspects FirefoxPWA's `config.json` (`%APPDATA%\FirefoxPWA\config.json` on Windows) on launch, injecting `--remote-debugging-port 9222` into global arguments if absent.
 - **`--dry-run`** (or env `PWA_NAV_DRY_RUN=1`): Run in dry-run mode (previews mutations). By default, the server runs in direct active **armed** mode. `--armed` is accepted for backward compatibility.
-- **`--screens-dir <dir>`** (or env `PWA_NAV_SCREENS_DIR`): Directory for screen maps (defaults to `./screens`).
+- **`--cache-dir <dir>`** (or env `PWA_NAV_CACHE_DIR`): Directory for cache and agent state (defaults to `<projectRoot>/.agent` or `~/.pwa-nav` when outside a project). This is the sole directory flag for cache and state; there is no alias.
+- **`--screens-dir <dir>`** (or env `PWA_NAV_SCREENS_DIR`): Directory for screen maps (defaults to `<cache-dir>/screens`).
 - **`--port <n>`**: Override port only when using a non-standard debugging port (1024-65535).
 
 ---

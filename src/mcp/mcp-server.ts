@@ -20,6 +20,7 @@ import type { ValidateFunction } from "ajv/dist/2020.js";
 import type { ScreenSource } from "../tools/index.js";
 import { readFile } from "node:fs/promises";
 import { isPwaNavError, PwaNavError } from "../core/errors.js";
+import { resolveAgentDir, resolveScreensDir } from "../core/storage.js";
 import { agentPath } from "../backend/backend.js";
 import { buildFlowTools, humanOnlyNote } from "./mcp-flows.js";
 import { TOOLS } from "./mcp-tools.js";
@@ -37,6 +38,8 @@ export interface McpServerOptions {
   mode?: "offline" | "bidi";
   screensDir?: string;
   screenMap?: string;
+  /** `--cache-dir` (env PWA_NAV_CACHE_DIR). */
+  cacheDir?: string;
   /** Already-loaded screen map (see loadFlowSource in mcp-flows.ts): drives flow tools + screens resource. */
   flowSource?: ScreenMap;
   /** Startup diagnostics sink (stderr by default; never stdout). */
@@ -147,15 +150,18 @@ export function createMcpServer(options: McpServerOptions): Server {
     }
   }
   const humanNote = humanOnlyNote(flows.humanOnly, flows.humanOnlyJourneys ?? []);
+  const effectiveAgentDir = resolveAgentDir({ cacheDir: options.cacheDir });
   const screens: ScreenSource = {
     ...(options.screenMap === undefined ? {} : { screenMap: options.screenMap }),
-    ...(options.screensDir === undefined ? {} : { screensDir: options.screensDir }),
+    screensDir: options.screensDir ?? resolveScreensDir({ cacheDir: effectiveAgentDir }),
+    cacheDir: effectiveAgentDir,
   };
   const ctx = {
     backendFactory: options.backendFactory,
     armed: options.armed === true,
     mode: options.mode ?? "bidi",
     screens,
+    agentDir: effectiveAgentDir,
   };
   const mutex = new Mutex();
 

@@ -141,7 +141,7 @@ async function withMcp(opts: McpOpts, fn: (env: Env) => Promise<void>): Promise<
         mode: "bidi",
         port: server.port,
         armed,
-        agentDir,
+        cacheDir: agentDir,
         env,
         ...(launch === true ? { launch: true } : {}),
       }),

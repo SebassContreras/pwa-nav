@@ -60,7 +60,7 @@ export async function executeLearn(backend: Backend, o: LearnArgs): Promise<Lear
     o.access === undefined ? {} : { access: o.access as Screen["access"] },
   );
 
-  const dir = dirOf(o);
+  const dir = dirOf(o, backend.agentDir);
   let path: string;
   let existing: ScreenMap | undefined;
   if (o.screenMap !== undefined) {
@@ -70,7 +70,7 @@ export async function executeLearn(backend: Backend, o: LearnArgs): Promise<Lear
       throw error;
     });
   } else {
-    const hits = (await loadScreenMapsFromDir(dir)).filter((entry) => new URL(entry.map.app.origin).origin === origin);
+    const hits = (await loadScreenMapsFromDir(dir, { agentDir: backend.agentDir })).filter((entry) => new URL(entry.map.app.origin).origin === origin);
     if (hits.length > 1) {
       throw new PwaNavError("invalid_args", `several screen maps cover origin ${origin}: ${hits.map((h) => h.path).join(", ")}`, {
         hint: "keep one map per origin or pass --screen-map <file>",

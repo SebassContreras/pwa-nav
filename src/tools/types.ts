@@ -12,8 +12,10 @@ export type BackendFactory = (request: BackendRequest) => Backend;
 export interface ScreenSource {
   /** `--screen-map <file>`; wins over directory selection. */
   screenMap?: string;
-  /** `--screens-dir <dir>` (env PWA_NAV_SCREENS_DIR, default ./screens). */
-  screensDir?: string;
+  /** `--screens-dir <dir>` (env PWA_NAV_SCREENS_DIR, default <cache-dir>/screens). */
+  screensDir?: string | undefined;
+  /** Resolved `--cache-dir` (env PWA_NAV_CACHE_DIR). */
+  cacheDir?: string;
 }
 
 export interface ToolContext {

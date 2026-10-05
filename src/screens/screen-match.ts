@@ -4,6 +4,7 @@ import { existsSync } from "node:fs";
 import { readdir } from "node:fs/promises";
 import { join } from "node:path";
 import { PwaNavError } from "../core/errors.js";
+import { resolveAgentDir } from "../core/storage.js";
 import { loadScreenMap, ScreenMapError } from "./screen-map.js";
 import type { Screen, ScreenMap } from "./screen-map.js";
 
@@ -202,13 +203,7 @@ export function findScreen(map: ScreenMap, url: string): { screen: Screen; param
   return { screen: best.screen, params: best.params };
 }
 
-export function resolveScreensDir(
-  options: { screensDir?: string } = {},
-  env: Record<string, string | undefined> = process.env,
-): string {
-  const fromEnv = env.PWA_NAV_SCREENS_DIR;
-  return options.screensDir ?? (fromEnv === undefined || fromEnv === "" ? "./screens" : fromEnv);
-}
+export { resolveScreensDir } from "../core/storage.js";
 
 function prefixed(path: string, error: unknown): unknown {
   if (error instanceof ScreenMapError) {
@@ -235,16 +230,10 @@ export async function loadScreenMapsFromDir(
   options: { agentDir?: string } = {},
 ): Promise<LoadedMap[]> {
   const dirsToScan: string[] = [dir];
-  if (options.agentDir !== undefined) {
-    const appsDir = join(options.agentDir, "apps");
-    if (dir !== appsDir && existsSync(appsDir)) {
-      dirsToScan.push(appsDir);
-    }
-  } else if (dir === "./screens" || dir === "screens") {
-    const defaultAppsDir = join(".agent", "apps");
-    if (existsSync(defaultAppsDir)) {
-      dirsToScan.push(defaultAppsDir);
-    }
+  const effectiveAgentDir = options.agentDir ?? resolveAgentDir();
+  const appsDir = join(effectiveAgentDir, "apps");
+  if (dir !== appsDir && existsSync(appsDir)) {
+    dirsToScan.push(appsDir);
   }
 
   const loaded: LoadedMap[] = [];

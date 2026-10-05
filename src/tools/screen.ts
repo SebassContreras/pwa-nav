@@ -6,8 +6,11 @@ import { renderScreenView, renderUnmappedHint } from "../screens/screen-view.js"
 import { getBackend } from "./common.js";
 import { type ScreenSource, type ToolContext, type ToolOutcome } from "./types.js";
 
-export function dirOf(source: ScreenSource): string {
-  return resolveScreensDir(source.screensDir === undefined ? {} : { screensDir: source.screensDir });
+export function dirOf(source: ScreenSource, cacheDir?: string): string {
+  return resolveScreensDir({
+    screensDir: source.screensDir,
+    cacheDir: source.cacheDir ?? cacheDir,
+  });
 }
 
 export async function currentUrlOf(backend: Backend): Promise<string> {
@@ -26,15 +29,16 @@ export function asUnmapped(error: unknown, url: string): unknown {
   return new PwaNavError("unmapped_screen", head, { hint: tail.join(" ") + extra, cause: error });
 }
 
-export async function loadMap(url: string, source: ScreenSource): Promise<ScreenMap> {
+export async function loadMap(url: string, source: ScreenSource, agentDir?: string): Promise<ScreenMap> {
   if (source.screenMap !== undefined) return loadExplicitMap(source.screenMap);
-  const dir = dirOf(source);
-  return selectMap(await loadScreenMapsFromDir(dir), url, dir);
+  const effectiveAgentDir = source.cacheDir ?? agentDir;
+  const dir = dirOf(source, effectiveAgentDir);
+  return selectMap(await loadScreenMapsFromDir(dir, { agentDir: effectiveAgentDir }), url, dir);
 }
 
-export async function locateScreen(url: string, source: ScreenSource): Promise<{ map: ScreenMap; screen: Screen }> {
+export async function locateScreen(url: string, source: ScreenSource, agentDir?: string): Promise<{ map: ScreenMap; screen: Screen }> {
   try {
-    const map = await loadMap(url, source);
+    const map = await loadMap(url, source, agentDir);
     return { map, screen: findScreen(map, url).screen };
   } catch (error) {
     throw asUnmapped(error, url);
@@ -43,7 +47,7 @@ export async function locateScreen(url: string, source: ScreenSource): Promise<{
 
 export async function renderScreenViewForBackend(backend: Backend, source: ScreenSource): Promise<string> {
   const url = await currentUrlOf(backend);
-  const { screen } = await locateScreen(url, source);
+  const { screen } = await locateScreen(url, source, backend.agentDir);
   return renderScreenView(screen);
 }
 
@@ -53,13 +57,14 @@ export interface ScreenArgs {
 }
 
 export async function screenTool(args: ScreenArgs, ctx: ToolContext): Promise<ToolOutcome> {
+  const backend = getBackend(ctx);
   const screens = {
     screenMap: args.screenMap ?? ctx.screens.screenMap,
     screensDir: args.screensDir ?? ctx.screens.screensDir,
+    cacheDir: ctx.screens.cacheDir ?? backend.agentDir,
   };
-  const backend = getBackend(ctx);
   const url = await currentUrlOf(backend);
-  const { screen, map } = await locateScreen(url, screens);
+  const { screen, map } = await locateScreen(url, screens, screens.cacheDir);
   const text = renderScreenView(screen);
   return {
     text,

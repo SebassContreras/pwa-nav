@@ -130,7 +130,7 @@ const serverArgs = (env: Env, extra: string[] = []): string[] => [
   "bidi",
   "--port",
   String(env.server.port),
-  "--agent-dir",
+  "--cache-dir",
   env.agentDir,
   "--screens-dir",
   env.screensDir,

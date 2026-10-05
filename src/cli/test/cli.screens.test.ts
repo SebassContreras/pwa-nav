@@ -46,6 +46,7 @@ function run(dir: string, args: string[]): Promise<Result> {
         PWA_NAV_PORT: String(CLOSED_PORT),
         PWA_NAV_KILL_SWITCH: join(dir, "kill-file"),
         PWA_NAV_FIREFOXPWA_DIR: join(dir, "nopwa"),
+        PWA_NAV_CACHE_DIR: join(dir, ".agent"),
       },
       stdio: ["ignore", "pipe", "pipe"],
     });
@@ -199,10 +200,10 @@ test("--learn creates a new map (locale required), then is idempotent", async ()
 
     const first = await run(dir, ["snapshot", "--learn", "--locale", "es-ES", "--access", "public", ...p]);
     assert.equal(first.status, 0, first.stderr);
-    assert.match(first.stdout, /^snapshot ok: 6 elements -> \.agent\/snapshot\.json \(id [\w-]+\)$/m);
+    assert.match(first.stdout, /^snapshot ok: 6 elements -> .*\.agent[/\\]snapshot\.json \(id ([\w-]+)\)$/m);
     assert.match(first.stdout, /^new screen$/m);
-    const path = join("screens", "localhost-8080.screens.json");
-    assert.ok(first.stdout.includes(`screen map: ${path} (written)`), first.stdout);
+    const path = join(".agent", "screens", "localhost-8080.screens.json");
+    assert.ok(first.stdout.includes("screens") && first.stdout.includes("localhost-8080.screens.json (written)"), first.stdout);
     const map = JSON.parse(await readFile(join(dir, path), "utf8")) as ScreenMap;
     assert.equal(map.app.id, "localhost-8080");
     assert.equal(map.app.name, "Demo App");
@@ -215,7 +216,7 @@ test("--learn creates a new map (locale required), then is idempotent", async ()
     const again = await run(dir, ["snapshot", "--learn", "--locale", "en", "--access", "public", ...p]);
     assert.equal(again.status, 0, again.stderr);
     assert.match(again.stdout, /^no changes$/m);
-    assert.ok(again.stdout.includes(`screen map: ${path} (unchanged)`), again.stdout);
+    assert.ok(again.stdout.includes("screens") && again.stdout.includes("localhost-8080.screens.json (unchanged)"), again.stdout);
     assert.equal((await stat(join(dir, path))).mtimeMs, before);
     const kept = JSON.parse(await readFile(join(dir, path), "utf8")) as ScreenMap;
     assert.equal(kept.app.locale, "es-ES");
@@ -404,7 +405,7 @@ test("a non-human flow runs as one batch with one new snapshot", async () => {
     const refsBefore = await locators();
     const done = await run(dir, ["act", "flow:search", `query=${SECRET}`, "--armed", ...p]);
     assert.equal(done.status, 0, done.stderr);
-    assert.match(done.stdout, /^act ok: 2 ops -> \.agent\/snapshot\.json \(id [\w-]+\)$/m);
+    assert.match(done.stdout, /^act ok: 2 ops -> .*\.agent[/\\]snapshot\.json \(id ([\w-]+)\)$/m);
     assert.ok(inputFrames(server) >= 2);
     // One fresh snapshot (resolution) + ONE new snapshot at the end of the batch.
     assert.equal((await locators()) - refsBefore, 2);

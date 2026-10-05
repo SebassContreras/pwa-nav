@@ -6,6 +6,7 @@ import { dirname, resolve } from "node:path";
 import { PwaNavError } from "../core/errors.js";
 import type { RawElement } from "../browser/collector.js";
 import { load as loadSnapshot, resolve as resolveRef, save as saveSnapshot } from "../core/refs.js";
+import { resolveAgentDir } from "../core/storage.js";
 
 export const DEFAULT_PORT = 9222;
 export const DEFAULT_HOST = "127.0.0.1";
@@ -146,7 +147,7 @@ export class OfflineBackend implements Backend {
   readonly agentDir: string;
 
   constructor(options: OfflineBackendOptions = {}) {
-    this.agentDir = options.agentDir ?? DEFAULT_AGENT_DIR;
+    this.agentDir = options.agentDir ?? resolveAgentDir();
   }
 
   async open(url: string): Promise<Session> {

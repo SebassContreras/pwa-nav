@@ -42,8 +42,8 @@ export interface JourneyTools {
 export async function loadFlowSource(source: ScreenSource, log: Log): Promise<ScreenMap | undefined> {
   try {
     if (source.screenMap !== undefined) return await loadExplicitMap(source.screenMap);
-    const dir = resolveScreensDir(source.screensDir === undefined ? {} : { screensDir: source.screensDir });
-    const maps = await loadScreenMapsFromDir(dir);
+    const dir = resolveScreensDir({ screensDir: source.screensDir, cacheDir: source.cacheDir });
+    const maps = await loadScreenMapsFromDir(dir, source.cacheDir === undefined ? {} : { agentDir: source.cacheDir });
     if (maps.length === 1 && maps[0] !== undefined) return maps[0].map;
     log(
       `pwa-nav-mcp: no flow tools or map resources: ${maps.length.toString()} screen maps in ${dir} (need exactly one; ` +

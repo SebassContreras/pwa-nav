@@ -37,11 +37,14 @@ function baseEnv(dir: string, extra: NodeJS.ProcessEnv = {}): NodeJS.ProcessEnv 
   // Never inherit backend overrides, and point the default port at a closed one: a test
   // that forgets --port must hit connection-refused instead of a real browser on 9222.
   delete env["PWA_NAV_BACKEND"];
+  delete env["PWA_NAV_SCREENS_DIR"];
   return {
     ...env,
     PWA_NAV_PORT: String(CLOSED_PORT),
     PWA_NAV_KILL_SWITCH: join(dir, "kill-file"),
     PWA_NAV_FIREFOXPWA_DIR: join(dir, "nopwa"),
+    // The temp cwd has no project markers: pin the cache dir so nothing leaks into ~/.pwa-nav.
+    PWA_NAV_CACHE_DIR: join(dir, ".agent"),
     ...extra,
   };
 }
@@ -146,7 +149,7 @@ const inputFrames = (s: FakeBidiServer): number => s.commands.filter((c) => c.me
 async function liveSnapshot(dir: string, port: number): Promise<string> {
   const r = await run(dir, ["snapshot", "--port", String(port)]);
   assert.equal(r.status, 0, r.stderr);
-  const match = /^snapshot ok: 3 elements -> \.agent\/snapshot\.json \(id ([\w-]+)\)$/m.exec(r.stdout);
+  const match = /^snapshot ok: 3 elements -> .*\.agent[/\\]snapshot\.json \(id ([\w-]+)\)$/m.exec(r.stdout);
   assert.ok(match, r.stdout);
   return match[1] ?? "";
 }
@@ -231,12 +234,12 @@ test("offline backend keeps open/click/fill behavior", async () => {
     await writeFile(join(dir, "tree.txt"), '- button "Go" [ref=e1]\n', "utf8");
     const open = runSync(dir, ["open", "https://x.test/", "--backend", "offline"]);
     assert.equal(open.status, 0, open.stderr);
-    assert.match(open.stdout, /^open ok: https:\/\/x\.test\/ -> \.agent\/session\.json$/m);
+    assert.match(open.stdout, /^open ok: https:\/\/x\.test\/ -> .*\.agent[/\\]session\.json$/m);
     const snap = runSync(dir, ["snapshot", "--input", "tree.txt", "--json"]);
     const id = (JSON.parse(snap.stdout) as { snapshotId: string }).snapshotId;
     const click = runSync(dir, ["click", "--snapshot", id, "e1", "--backend", "offline"]);
     assert.equal(click.status, 0, click.stderr);
-    assert.match(click.stdout, /^click ok: e1 \(button "Go"\) -> \.agent\/snapshot\.json \(id [\w-]+\)$/m);
+    assert.match(click.stdout, /^click ok: e1 \(button "Go"\) -> .*\.agent[/\\]snapshot\.json \(id [\w-]+\)$/m);
     assert.ok(!click.stdout.includes("no input sent"));
     const stale = runSync(dir, ["click", "--snapshot", id, "e1", "--backend", "offline"]);
     assert.equal(stale.status, 3);
@@ -338,7 +341,7 @@ test("armed gating: origin_blocked (6) -> allow-origin -> executed -> kill_switc
 
     const done = await run(dir, ["click", "--snapshot", id, "e3", "--armed", "--port", port]);
     assert.equal(done.status, 0, done.stderr);
-    assert.match(done.stdout, /^click ok: click button "Go" \(occurrence 0\) \[enabled, visible\] -> \.agent\/snapshot\.json \(id [\w-]+\)$/m);
+    assert.match(done.stdout, /^click ok: click button "Go" \(occurrence 0\) \[enabled, visible\] -> .*\.agent[/\\]snapshot\.json \(id ([\w-]+)\)$/m);
     assert.ok(!done.stdout.includes("no input sent"));
     assert.equal(inputFrames(server), 1);
 
@@ -397,7 +400,7 @@ test("cli: upload dry-run and armed", async () => {
     try {
       const snapRes = await run(dir, ["snapshot", "--port", port]);
       assert.equal(snapRes.status, 0, snapRes.stderr);
-      const match = /^snapshot ok: \d+ elements -> \.agent\/snapshot\.json \(id ([\w-]+)\)$/m.exec(snapRes.stdout);
+      const match = /^snapshot ok: \d+ elements -> .*\.agent[/\\]snapshot\.json \(id ([\w-]+)\)$/m.exec(snapRes.stdout);
       assert.ok(match, snapRes.stdout);
       const id = match[1] ?? "";
 
@@ -439,7 +442,7 @@ test("cli: act upload:<ref>=<path>", async () => {
       await run(dir, ["open", URL_A, "--allow-origin", "--port", port]);
       const snapRes = await run(dir, ["snapshot", "--port", port]);
       assert.equal(snapRes.status, 0, snapRes.stderr);
-      const match = /^snapshot ok: \d+ elements -> \.agent\/snapshot\.json \(id ([\w-]+)\)$/m.exec(snapRes.stdout);
+      const match = /^snapshot ok: \d+ elements -> .*\.agent[/\\]snapshot\.json \(id ([\w-]+)\)$/m.exec(snapRes.stdout);
       assert.ok(match, snapRes.stdout);
       const id = match[1] ?? "";
 
@@ -464,7 +467,7 @@ test("cli: screenshot command offline and live with --out", async () => {
   try {
     const offlineRes = runSync(dir, ["screenshot", "--backend", "offline"]);
     assert.equal(offlineRes.status, 0, offlineRes.stderr);
-    assert.match(offlineRes.stdout, /screenshot saved to \.agent[/\\]screenshot\.png/);
+    assert.match(offlineRes.stdout, /screenshot saved to .*\.agent[/\\]screenshot\.png/);
     assert.equal(existsSync(join(dir, ".agent", "screenshot.png")), true);
 
     // Custom out path
@@ -502,7 +505,7 @@ test("cli: snapshot with --screenshot flag", async () => {
     const res = await run(dir, ["snapshot", "--screenshot", "--port", port]);
     assert.equal(res.status, 0, res.stderr);
     assert.match(res.stdout, /snapshot ok:/);
-    assert.match(res.stdout, /screenshot saved to \.agent[/\\]screenshot\.png/);
+    assert.match(res.stdout, /screenshot saved to .*\.agent[/\\]screenshot\.png/);
     assert.equal(existsSync(join(dir, ".agent", "screenshot.png")), true);
 
     const shotCommands = server.commands.filter((c) => c.method === "browsingContext.captureScreenshot");

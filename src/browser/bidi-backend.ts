@@ -2,7 +2,8 @@
 // Every operation is ONE withTopLevelContext session (connect -> work -> session.end);
 // a session is never reused (Firefox allows a single active session).
 import { dirname } from "node:path";
-import { addAllowedOrigin, assertArmedAllowed, assertFileUploadAllowed, assertNavigationAllowed, DEFAULT_AGENT_DIR } from "../core/gate.js";
+import { addAllowedOrigin, assertArmedAllowed, assertFileUploadAllowed, assertNavigationAllowed } from "../core/gate.js";
+import { resolveAgentDir } from "../core/storage.js";
 import { withTopLevelContext, type TopLevelContextOptions } from "../bidi/session.js";
 import type { BidiClient } from "../bidi/protocol.js";
 import {
@@ -101,7 +102,7 @@ export class BidiBackend implements Backend {
     this.host = options.host ?? DEFAULT_HOST;
     this.endpoint = endpointFor(this.port, this.host);
     this.armed = options.armed === true;
-    this.agentDir = options.agentDir ?? DEFAULT_AGENT_DIR;
+    this.agentDir = options.agentDir ?? resolveAgentDir();
     this.env = options.env ?? process.env;
     this.platform = options.platform ?? process.platform;
   }

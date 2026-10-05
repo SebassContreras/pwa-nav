@@ -1,6 +1,6 @@
-// Backend selection for the CLI (task T011 wires flags to this).
 import { DEFAULT_HOST, DEFAULT_PORT, OfflineBackend, type Backend } from "./backend.js";
 import { BidiBackend } from "../browser/bidi-backend.js";
+import { resolveAgentDir } from "../core/storage.js";
 
 export { DEFAULT_HOST, DEFAULT_PORT };
 
@@ -12,22 +12,24 @@ export interface CreateBackendOptions {
   armed?: boolean;
   launch?: boolean;
   siteId?: string;
-  agentDir?: string;
+  /** `--cache-dir` (env PWA_NAV_CACHE_DIR). */
+  cacheDir?: string;
   env?: NodeJS.ProcessEnv;
 }
 
 export function createBackend(options: CreateBackendOptions): Backend {
+  const agentDir = resolveAgentDir({ cacheDir: options.cacheDir });
   if (options.mode === "offline") {
-    return new OfflineBackend(options.agentDir === undefined ? {} : { agentDir: options.agentDir });
+    return new OfflineBackend({ agentDir });
   }
   return new BidiBackend({
     port: options.port ?? DEFAULT_PORT,
     host: options.host ?? DEFAULT_HOST,
+    agentDir,
     ...(options.contextId === undefined ? {} : { contextId: options.contextId }),
     ...(options.armed === undefined ? {} : { armed: options.armed }),
     ...(options.launch === undefined ? {} : { launch: options.launch }),
     ...(options.siteId === undefined ? {} : { siteId: options.siteId }),
-    ...(options.agentDir === undefined ? {} : { agentDir: options.agentDir }),
     ...(options.env === undefined ? {} : { env: options.env }),
   });
 }

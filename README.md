@@ -209,10 +209,10 @@ If you linked globally, you can also specify the binary command directly:
 > **Zero-Config Port & Automatic Launch**: Passing `--port 9222` is optional (9222 is the default). When the agent calls `pwa_open({ url: "notebook" })`, `pwa-nav` automatically finds your installed PWA profile, launches the Firefox PWA runtime with `--remote-debugging-port 9222` if it is closed, and connects seamlessly.
 
 > [!NOTE]
-> **Initial Startup Notice (`0 screen maps in ./screens`)**:
+> **Initial Startup Notice**:
 > When the MCP server starts, it prints a message to stderr like:
 > ```text
-> pwa-nav-mcp ready (backend bidi, ARMED, 0 screen maps in ./screens)
+> pwa-nav-mcp ready (backend bidi, ARMED)
 > ```
 > **This is completely normal and expected.** The repository does not ship with pre-baked screen maps for your personal apps. `pwa-nav` is fully functional from the very first second: as the AI agent navigates to an unmapped screen, it calls `pwa_learn` to autonomously generate and enrich `screens/<app>.screens.json`.
 
@@ -389,7 +389,8 @@ If any intermediate step fails or the destination URL does not match `expectScre
 - `--backend offline|bidi`: Default is `bidi` (live Firefox PWA). Use `offline` for fixture checks.
 - `--port <n>`: BiDi debugging port (default: `9222`, env: `PWA_NAV_PORT`).
 - `--context <id>`: Target browsing context ID when multiple tabs are open.
-- `--screens-dir <dir>`: Directory containing screen maps (default: `./screens`, env: `PWA_NAV_SCREENS_DIR`).
+- `--cache-dir <dir>`: Directory for cache and agent state (default: `<projectRoot>/.agent` or `~/.pwa-nav`, env: `PWA_NAV_CACHE_DIR`).
+- `--screens-dir <dir>`: Directory containing screen maps (default: `<cache-dir>/screens`, env: `PWA_NAV_SCREENS_DIR`).
 - `--screen-map <file>`: Explicit path to a single screen map file.
 
 ---
@@ -400,7 +401,8 @@ If any intermediate step fails or the destination URL does not match `expectScre
 |---|---|---|
 | `PWA_NAV_PORT` | `9222` | Override WebDriver BiDi debugging port. |
 | `PWA_NAV_BACKEND` | `bidi` | Default backend mode (`bidi` or `offline`). |
-| `PWA_NAV_SCREENS_DIR` | `./screens` | Directory where screen map JSON files are stored. |
+| `PWA_NAV_CACHE_DIR` | `<projectRoot>/.agent` | Directory for cache, snapshots, sessions, allow-list, and screen maps. |
+| `PWA_NAV_SCREENS_DIR` | `<cache-dir>/screens` | Directory where screen map JSON files are stored. |
 | `PWA_NAV_DRY_RUN` | `0` | Set to `1` to force dry-run mode in MCP server. |
 | `PWA_NAV_KILL_SWITCH` | — | Path to emergency kill-switch file (or set to `1`). |
 | `PWA_NAV_FIREFOXPWA_DIR` | Auto | Override PWAsForFirefox data directory. |

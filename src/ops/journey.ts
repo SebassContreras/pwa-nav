@@ -54,8 +54,8 @@ export async function resolveJourneyMap(
     return { map, journey };
   }
 
-  const dir = resolveScreensDir(options.screensDir === undefined ? {} : { screensDir: options.screensDir });
-  const maps = await loadScreenMapsFromDir(dir);
+  const dir = resolveScreensDir({ screensDir: options.screensDir, cacheDir: backend.agentDir });
+  const maps = await loadScreenMapsFromDir(dir, { agentDir: backend.agentDir });
 
   let currentUrl = "";
   try {

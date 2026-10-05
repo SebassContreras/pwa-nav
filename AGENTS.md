@@ -67,9 +67,9 @@ When configuring `pwa-nav` as an MCP server for any agent environment:
   - `--dry-run` (or env `PWA_NAV_DRY_RUN=1`): Run in dry-run mode (previews mutations without executing). By default, the server runs in direct active **armed** mode.
   - `--armed`: Retained for backward compatibility (active mode is already the default).
   - `--port <n>`: Override BiDi debugging port (default: `9222`).
-  - `--screens-dir <dir>`: Screen maps directory (default: `./screens`, env `PWA_NAV_SCREENS_DIR`).
+  - `--screens-dir <dir>`: Screen maps directory (default: `<cache-dir>/screens`, env `PWA_NAV_SCREENS_DIR`).
   - `--screen-map <file>`: Explicit path to a single screen map file.
-  - `--agent-dir <dir>`: Directory for `.agent/` state files (default: `.agent`).
+  - `--cache-dir <dir>`: Directory for cache and agent state (env `PWA_NAV_CACHE_DIR`; default: `<projectRoot>/.agent` or `~/.pwa-nav` when outside a project). This is the only directory flag; there is no alias.
   - `--backend offline|bidi`: Default `bidi` (live browser). Set to `offline` for fixture checks.
 
 ---
