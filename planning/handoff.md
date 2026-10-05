@@ -59,6 +59,8 @@ Gate at handoff: `pnpm lint && pnpm build && pnpm test` (350 tests) `&& pnpm smo
 | **BiDi Protocol** | `src/bidi/` | Transport, protocol framing, session management, fake server double |
 | **Browser Layer** | `src/browser/` | PWA runtime spawner, collector, live snapshot, locate, network idle settle, BiDi backend |
 | **Backend Ports** | `src/backend/` | `Backend` interface and `BackendFactory` (bidi vs offline) |
+| **Tools Service Layer** | `src/tools/` | Reusable core service tools (`open`, `snapshot`, `click`, `fill`, `upload`, `act`, `journey`, `find`, `extract`, `wait`, `screenshot`, `auth`, `qa`) shared identically across CLI and MCP |
 | **Operations** | `src/ops/` | `ops.ts` (act, dry-run, execution), `qa.ts` (offline suite runner), `journey.ts` |
-| **CLI Adapter** | `src/cli/`, `src/cli.ts` | Command-line interface, argument parsing, output formatting |
-| **MCP Adapter** | `src/mcp/`, `src/mcp.ts` | Stdio MCP server, tool registry, dynamic flows and journeys |
+| **CLI Adapter** | `src/cli/`, `src/cli.ts` | Command-line interface, argument parsing, thin wrapper around `src/tools/` |
+| **MCP Adapter** | `src/mcp/`, `src/mcp.ts` | Stdio MCP server, tool registry, dynamic flows and journeys, thin wrapper around `src/tools/` |
+| **Dedicated Tests** | `src/*/test/` | Isolated unit and integration tests per module |

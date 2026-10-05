@@ -48,9 +48,12 @@ This file is the single agent-instructions entrypoint; there is no `CLAUDE.md`. 
   - `src/bidi/`: Low-level W3C WebDriver BiDi WebSocket client, protocol serialization, and session lifecycle.
   - `src/browser/`: Cross-platform Firefox PWA automation (runtime discovery across Windows, Linux, macOS; DOM collector; actions with network-idle settle; backend implementation).
   - `src/backend/`: Abstract backend interfaces (`Backend`, `BackendFactory`, `OfflineBackend`, `BidiBackend`).
+  - `src/tools/`: Core tools service layer (`open`, `snapshot`, `click`, `fill`, `upload`, `act`, `journey`, `find`, `extract`, `wait`, `screenshot`, `auth`, `qa`) providing unified execution semantics for both CLI and MCP.
   - `src/ops/`: High-level operational use cases (`ops.ts`, `qa.ts`, `journey.ts`).
-  - `src/cli/`: CLI adapters, screens subcommand handlers, and CLI integration tests.
-  - Root entrypoints under `src/`: `cli.ts` (CLI bin), `mcp.ts` (MCP bin), `index.ts` (library exports), `e2e.test.ts`. Auxiliary scripts: `scripts/smoke.ts` (smoke verification script).
+  - `src/cli/`: CLI adapters, screens subcommand handlers (delegating to `src/tools/`).
+  - `src/mcp/`: MCP protocol adapter and handlers (delegating to `src/tools/`).
+  - Dedicated `test/` subdirectories in each module (`src/<module>/test/`) containing isolated unit and integration suites.
+  - Root entrypoints under `src/`: `cli.ts` (CLI bin), `mcp.ts` (MCP bin), `index.ts` (library exports), `src/test/e2e.test.ts`. Auxiliary scripts: `scripts/smoke.ts` (smoke verification script).
 
 ---
 
@@ -76,8 +79,8 @@ When configuring `pwa-nav` as an MCP server for any agent environment:
 Agents operate through two complementary navigation layers:
 
 #### 1. Screen Map & User Journey Loop (Recommended & Autonomous)
-1. **Inspect / Auto-Learn Screen (First-Pass Discovery)**: Upon opening or navigating to an application, run `pwa_snapshot({ screen: true })` (in CLI: `pwa-nav snapshot --screen`). If the screen or route is unmapped (exit code 13 `unmapped_screen`), run `pwa_learn` (or CLI `pwa-nav snapshot --learn`) to autonomously learn and persist `screens/<app>.screens.json`, returning semantic `@id` targets immediately without prompting.
-2. **Continuous Screen Map Enrichment & Zero Loose Files**: Every snapshot or learn step collaborates in enriching `screens/<app>.screens.json` with newly observed fields, actions, flows, journeys, and nested modal trees (`action.opens`). This process does NOT generate loose snapshot or ref files across the workspace—all raw snapshots are strictly confined and isolated under `.agent/apps/<appSlug>/snapshot.json`, while ephemeral `eN` refs exist only in the active session and are superseded by permanent `@id` targets.
+1. **Inspect / Auto-Learn Screen (First-Pass Discovery)**: Upon opening or navigating to an application, run `pwa_snapshot({ screen: true })` (in CLI: `pwa-nav snapshot --screen`). If the screen or route is unmapped (exit code 13 `unmapped_screen`), run `pwa_learn` (or CLI `pwa-nav snapshot --learn`) to autonomously learn and persist `.agent/apps/<appSlug>/screens.json`, returning semantic `@id` targets immediately without prompting.
+2. **Continuous Screen Map Enrichment & Zero Loose Files**: Every snapshot or learn step collaborates in enriching `.agent/apps/<appSlug>/screens.json` with newly observed fields, actions, flows, journeys, and nested modal trees (`action.opens`). This process does NOT generate loose snapshot or ref files across the workspace—the persistent screen map `.agent/apps/<appSlug>/screens.json` is the sole, definitive file per application, while ephemeral `eN` refs exist only in the active session and are superseded by permanent `@id` targets.
 3. **Execute Semantic Action Directly**: Use semantic `@id` targets for live browser execution:
    - `pwa-nav click '@sign-in'` or MCP `pwa_click({ target: "@sign-in" })` (direct live click).
    - `pwa-nav fill '@email' "user@example.com"` or MCP `pwa_fill({ target: "@email", text: "..." })`.
@@ -96,7 +99,7 @@ Agents operate through two complementary navigation layers:
    - In MCP: call `pwa_click({ ref: "e1" })`, `pwa_click({ ref: "Sign in" })`, or `pwa_click({ target: "@sign-in" })` directly without requiring `snapshotId` (it resolves to the latest snapshot automatically).
    - In CLI: use `pwa-nav click --snapshot <id> <ref>` or semantic `pwa-nav click '@target'`.
 5. **Smart PWA Navigation & Assisted Auth**: Pass URL or installed app slug directly: `pwa-nav open notebook` or `pwa_open({ url: "notebook" })`. For login-walled apps (Google, bot walls), use `pwa-nav auth <app>` or MCP `pwa_auth` to launch in clean mode for user login and re-attach in debug mode.
-6. **Learn Screen**: When on a stable, new screen, run `pwa_learn` (or CLI `pwa-nav snapshot --learn --locale <bcp47>`) to register it into `screens/<app>.screens.json`.
+6. **Learn Screen**: When on a stable, new screen, run `pwa_learn` (or CLI `pwa-nav snapshot --learn --locale <bcp47>`) to register it into `.agent/apps/<appSlug>/screens.json`.
 
 ---
 
@@ -118,7 +121,7 @@ Agents operate through two complementary navigation layers:
 14. **Windows Virtual Desktop Sandboxes & Invisible Windows (Antigravity Invariant)**: In Windows agent environments (such as Antigravity or background agent harnesses), commands execute inside an isolated virtual desktop (`exebox-...`). Spawning Firefox directly from inside such a background harness causes the browser to run and respond to BiDi port 9222 and `pwa_snapshot`, but its GUI renders onto the hidden virtual desktop, making it completely invisible to the user (appearing "headless").
     - **Preferred Flow**: Instruct the user to launch their PWA normally from Windows (Start Menu shortcut or taskbar) with `--remote-debugging-port 9222`. `pwa-nav` attaches cleanly to the existing port.
     - **If Script Launching on Windows**: The launch must explicitly target the user's interactive desktop (`WinSta0\Default`) so the window is visible on their physical monitor.
-15. **Per-Application Storage Isolation & Zero Loose Files (`.agent/apps/<appSlug>/`)**: Snapshot and session data are strictly partitioned by application slug (e.g. `.agent/apps/linkedin.com/snapshot.json` and `.agent/apps/notebooklm.google.com/snapshot.json`). Snapshots and learn passes enrich the persistent screen map (`screens/<app>.screens.json`) without scattering loose ref or snapshot files across the workspace. Ephemeral `eN` refs expire upon mutation; agents operate on permanent `@id` targets. Agents must never read global or root `.agent/snapshot.json` files from prior sessions or user home directories. Always use `pwa_find` and `pwa_snapshot` via tool APIs.
+15. **Per-Application Storage Isolation & Zero Loose Files (`.agent/apps/<appSlug>/`)**: Snapshot and session data are strictly partitioned by application slug. The persistent screen map (`.agent/apps/<appSlug>/screens.json`) is the sole persistent file per application. Snapshots and learn passes continuously enrich this main json without scattering loose ref or snapshot files across the workspace. Ephemeral `eN` refs expire upon mutation; agents operate on permanent `@id` targets. Agents must never read snapshot files with file/shell tools. Always use `pwa_find` and `pwa_snapshot` via tool APIs.
 16. **Zero Shell/Process/Port Inspection Loops (Wait For Browser Startup)**: Agents **MUST NEVER** execute shell or PowerShell commands (`Get-Process`, `Get-NetTCPConnection`, `Get-CimInstance`, `firefoxpwa`, `netstat`, `ps`, `kill`, `taskkill`) to check if the browser is running, what process owns port 9222, what flags were passed, or what sites are registered. When opening an app with `pwa_open`, simply wait for the browser to launch and connect; `pwa-nav` handles port checking and connection retries internally.
 
 ---
@@ -140,7 +143,7 @@ Agents operate through two complementary navigation layers:
 | `10` | `protocol` | Low-level WebDriver BiDi protocol mismatch. Check connection parameters. |
 | `11` | `sensitive_target` | Sensitive field or human-only flow requested. Request the user to perform this action manually in the browser. |
 | `12` | `unknown_target` | Target `@id` does not exist in the screen map. Run `snapshot --screen` to inspect available semantic IDs. |
-| `13` | `unmapped_screen` | Current URL is not mapped to any known screen. Autonomously call `pwa_learn` (or `snapshot --learn --locale <bcp47>`) to register and enrich `screens/<app>.screens.json` with permanent `@id` targets without creating loose snapshot/ref files. |
+| `13` | `unmapped_screen` | Current URL is not mapped to any known screen. Autonomously call `pwa_learn` (or `snapshot --learn --locale <bcp47>`) to register and enrich `.agent/apps/<appSlug>/screens.json` with permanent `@id` targets without creating loose snapshot/ref files. |
 | `14` | `journey_step_failed` | Multi-screen journey step failed or route transition expectation mismatch. Verify screen state and transition. |
 | `15` | `file_upload_blocked` | File upload path is outside allowed safe directories or targets sensitive files. Ensure file is within workspace root or `.agent/`. |
 

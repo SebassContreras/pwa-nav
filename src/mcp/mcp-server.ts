@@ -17,7 +17,7 @@ import {
 import type { CallToolResult } from "@modelcontextprotocol/sdk/types.js";
 import { Ajv2020 } from "ajv/dist/2020.js";
 import type { ValidateFunction } from "ajv/dist/2020.js";
-import type { ScreenSource } from "../cli/cli-screens.js";
+import type { ScreenSource } from "../tools/index.js";
 import { readFile } from "node:fs/promises";
 import { isPwaNavError, PwaNavError } from "../core/errors.js";
 import { agentPath } from "../backend/backend.js";

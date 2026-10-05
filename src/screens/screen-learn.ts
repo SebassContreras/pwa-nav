@@ -276,10 +276,22 @@ export function learnScreen(raw: readonly RawElement[], page: LearnPage, options
         attached = true;
       }
     }
-    if (attached) {
-      dialogFields.forEach((f) => clusteredFieldIds.add(f.id));
-      dialogActions.forEach((a) => clusteredActionIds.add(a.id));
+    if (!attached) {
+      // If trigger could not be matched, encapsulate dialog in an action branch so modal controls don't pollute root
+      const virtualId = slugify(`modal-${dialogTitle}`);
+      const virtualTrigger: ScreenAction = {
+        id: virtualId,
+        role: "button",
+        name: dialogTitle,
+        kind: "button",
+        effect: "ui-state",
+        locator: { role: "button", name: dialogTitle },
+        opens: branch,
+      };
+      actions.push(virtualTrigger);
     }
+    dialogFields.forEach((f) => clusteredFieldIds.add(f.id));
+    dialogActions.forEach((a) => clusteredActionIds.add(a.id));
   }
 
   const rootFields = fields.filter((f) => !clusteredFieldIds.has(f.id));

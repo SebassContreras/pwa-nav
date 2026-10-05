@@ -5,9 +5,9 @@
 // Handlers reuse the `act flow:<id>` code path of the CLI (runSemanticAct); they never navigate.
 import { createHash } from "node:crypto";
 import { PwaNavError } from "../core/errors.js";
-import { runSemanticAct } from "../cli/cli-screens.js";
-import type { ScreenSource } from "../cli/cli-screens.js";
-import { ACTION_HINTS, actionOutcome, invalid, semanticContext } from "./mcp-tools.js";
+import type { ScreenSource } from "../tools/index.js";
+import { actTool } from "../tools/index.js";
+import { ACTION_HINTS, actionOutcome, invalid } from "./mcp-tools.js";
 import type { ToolDef } from "./mcp-tools.js";
 import { isSemanticToken } from "../screens/screen-resolve.js";
 import { findScreen, loadExplicitMap, loadScreenMapsFromDir, resolveScreensDir } from "../screens/screen-match.js";
@@ -222,7 +222,6 @@ export function buildFlowTools(map: ScreenMap, log: Log): FlowTools {
       annotations: ACTION_HINTS,
       async handler(args, ctx) {
         const backend = ctx.backendFactory({ armed: ctx.armed });
-        const sctx = semanticContext(ctx, backend);
         const tokens = [`flow:${flowId}`, ...flowInputTokens(args)];
         const url = await backend.currentUrl();
         if (url !== "" && findScreen(map, url).screen.id !== screenId) {
@@ -230,7 +229,7 @@ export function buildFlowTools(map: ScreenMap, log: Log): FlowTools {
             hint: `open the "${screenId}" screen first; flow tools never navigate`,
           });
         }
-        await runSemanticAct(sctx, tokens);
+        await actTool({ ops: tokens }, ctx);
         return actionOutcome(ctx, backend, null);
       },
     });

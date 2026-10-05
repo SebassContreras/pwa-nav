@@ -1,6 +1,6 @@
 # MCP server — `pwa-nav-mcp`
 
-Stdio MCP server (spec 006) exposing the same operations as the CLI (`open`, `snapshot`, `click`, `fill`, `extract`, `act`) over the live Firefox PWA (WebDriver BiDi). It calls the same `src/ops/ops.ts` layer as the CLI, so the gate, refs and errors behave identically.
+Stdio MCP server (spec 006, 012) exposing the same operations as the CLI (`open`, `snapshot`, `click`, `fill`, `upload`, `act`, `find`, `extract`, `wait`, `screenshot`, `auth`, `learn`, `journey`) over the live Firefox PWA (WebDriver BiDi). It delegates directly to the unified tools service layer (`src/tools/`), ensuring 100% operational and behavioral parity with the CLI.
 
 ## Why not `@playwright/mcp`
 
@@ -17,7 +17,7 @@ pnpm i && pnpm build
 node dist/mcp.js --port 9222
 ```
 
-stdout carries protocol frames only. Logs go to stderr (`pwa-nav-mcp ready (backend bidi, ARMED)`).
+stdout carries protocol frames only. Logs go to stderr (`pwa-nav-mcp ready (backend bidi, ARMED, 0 screen maps in ./screens)`). Note that starting with 0 screen maps is normal and expected; maps are generated autonomously via `pwa_learn` as you browse.
 
 ## Server options (operator only)
 

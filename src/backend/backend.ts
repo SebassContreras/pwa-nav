@@ -123,7 +123,7 @@ export async function loadSession(sessionPath: string): Promise<Session | null> 
 export function appSlugFromUrl(urlOrOrigin: string): string {
   try {
     const u = new URL(urlOrOrigin);
-    return u.hostname.replace(/^www\./, "").replace(/[^a-z0-9.-]/gi, "-").toLowerCase();
+    return u.hostname.replace(/^www\./, "").replace(/[^a-z0-9]+/gi, "-").replace(/^-+|-+$/g, "").toLowerCase() || "default";
   } catch {
     return "default";
   }

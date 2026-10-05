@@ -1,5 +1,6 @@
 // Screen lookup for spec 005 (T004): map by origin, route match, ambiguity.
 // Pure logic + directory IO. No browser calls.
+import { existsSync } from "node:fs";
 import { readdir } from "node:fs/promises";
 import { join } from "node:path";
 import { PwaNavError } from "../core/errors.js";
@@ -228,22 +229,61 @@ export async function loadExplicitMap(path: string): Promise<ScreenMap> {
   }
 }
 
-// Every `*.screens.json` in dir, sorted by name. Missing dir => []. Invalid files are not swallowed.
-export async function loadScreenMapsFromDir(dir: string): Promise<LoadedMap[]> {
-  let names: string[];
-  try {
-    names = await readdir(dir);
-  } catch (error) {
-    if ((error as NodeJS.ErrnoException).code === "ENOENT") {
-      return [];
+// Every `*.screens.json` or `screens.json` in dir or app subdirectories, sorted by name.
+export async function loadScreenMapsFromDir(
+  dir: string,
+  options: { agentDir?: string } = {},
+): Promise<LoadedMap[]> {
+  const dirsToScan: string[] = [dir];
+  if (options.agentDir !== undefined) {
+    const appsDir = join(options.agentDir, "apps");
+    if (dir !== appsDir && existsSync(appsDir)) {
+      dirsToScan.push(appsDir);
     }
-    throw error;
+  } else if (dir === "./screens" || dir === "screens") {
+    const defaultAppsDir = join(".agent", "apps");
+    if (existsSync(defaultAppsDir)) {
+      dirsToScan.push(defaultAppsDir);
+    }
   }
+
   const loaded: LoadedMap[] = [];
-  for (const name of names.filter((entry) => entry.endsWith(".screens.json")).sort()) {
-    const path = join(dir, name);
-    loaded.push({ path, map: await loadExplicitMap(path) });
+  const seenPaths = new Set<string>();
+
+  for (const scanDir of dirsToScan) {
+    let entries: import("node:fs").Dirent[];
+    try {
+      entries = await readdir(scanDir, { withFileTypes: true });
+    } catch (error) {
+      if ((error as NodeJS.ErrnoException).code === "ENOENT") {
+        continue;
+      }
+      throw error;
+    }
+
+    for (const entry of entries) {
+      if (entry.isFile() && entry.name.endsWith(".screens.json")) {
+        const fullPath = join(scanDir, entry.name);
+        if (!seenPaths.has(fullPath)) {
+          seenPaths.add(fullPath);
+          loaded.push({ path: fullPath, map: await loadExplicitMap(fullPath) });
+        }
+      } else if (entry.isDirectory()) {
+        const subDirPath = join(scanDir, entry.name);
+        const screensJsonPath = join(subDirPath, "screens.json");
+        const slugScreensJsonPath = join(subDirPath, `${entry.name}.screens.json`);
+        if (existsSync(screensJsonPath) && !seenPaths.has(screensJsonPath)) {
+          seenPaths.add(screensJsonPath);
+          loaded.push({ path: screensJsonPath, map: await loadExplicitMap(screensJsonPath) });
+        } else if (existsSync(slugScreensJsonPath) && !seenPaths.has(slugScreensJsonPath)) {
+          seenPaths.add(slugScreensJsonPath);
+          loaded.push({ path: slugScreensJsonPath, map: await loadExplicitMap(slugScreensJsonPath) });
+        }
+      }
+    }
   }
+
+  loaded.sort((a, b) => a.path.localeCompare(b.path));
   return loaded;
 }
 

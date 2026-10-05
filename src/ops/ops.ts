@@ -5,6 +5,7 @@
 // Default backend is OfflineBackend (click/fill log intent + supersede the snapshot,
 // snapshot input from a caller-supplied ARIA tree); BidiBackend drives a live browser.
 // extract is read-only (never supersedes) and never calls the backend.
+import { existsSync } from "node:fs";
 import { writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { normalize } from "../core/snapshot.js";
@@ -143,24 +144,30 @@ export async function autoCollaborateScreen(
     const origin = page.origin;
     const rawHostname = page.hostname.replace(/^www\./, "");
     const appId = slugify(rawHostname) || "app";
-    const dir = options?.screensDir ?? resolveScreensDir({});
+    const appDir = join(backend.agentDir, "apps", appId);
     let screenMapPath = options?.screenMapPath;
     let existingMap: ScreenMap | undefined;
 
     if (!screenMapPath) {
-      try {
-        const loaded = await loadScreenMapsFromDir(dir);
-        const match = loaded.find((item) => item.map.app.origin === origin);
-        if (match) {
-          screenMapPath = match.path;
-          existingMap = match.map;
+      const appMap = join(appDir, "screens.json");
+      if (existsSync(appMap)) {
+        screenMapPath = appMap;
+      } else {
+        const dir = options?.screensDir ?? resolveScreensDir({});
+        try {
+          const loaded = await loadScreenMapsFromDir(dir, { agentDir: backend.agentDir });
+          const match = loaded.find((item) => item.map.app.origin === origin);
+          if (match) {
+            screenMapPath = match.path;
+            existingMap = match.map;
+          }
+        } catch {
+          // ignore
         }
-      } catch {
-        // ignore
       }
     }
     if (!screenMapPath) {
-      screenMapPath = join(dir, `${appId}.screens.json`);
+      screenMapPath = join(appDir, "screens.json");
     }
 
     if (existingMap === undefined) {
@@ -220,7 +227,7 @@ export async function autoCollaborateScreen(
 // Returns the collected raw elements too, so `snapshot --learn` never collects twice.
 export async function captureLiveSnapshot(
   backend: Backend,
-  options: LiveSnapshotOptions & { includeAll?: boolean } = {},
+  options: LiveSnapshotOptions & { includeAll?: boolean; skipAutoCollaborate?: boolean } = {},
 ): Promise<{ snapshot: Snapshot; raw: RawElement[] }> {
   const live = await backend.collect({ includeAll: options.includeAll === true });
   const built = buildLiveSnapshot(live.raw, { url: live.url, title: live.title });
@@ -228,6 +235,9 @@ export async function captureLiveSnapshot(
     agentDir: backend.agentDir,
     includeAll: options.includeAll === true,
   });
+  if (options.skipAutoCollaborate !== true) {
+    await autoCollaborateScreen(backend, live.raw, built.snapshot).catch(() => null);
+  }
   const stored = agentPath(backend.agentDir, "snapshot.json");
   if (options.outPath !== undefined && options.outPath !== stored) {
     await ensureParentDir(options.outPath);

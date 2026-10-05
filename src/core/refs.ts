@@ -49,18 +49,20 @@ const memSnapshots = new Map<string, Snapshot>();
 const memSidecars = new Map<string, LocatorSidecar>();
 let memLatestSnapshotId: string | null = null;
 let memLastActiveAction: ActiveAction | null = null;
-async function pruneOldRefFiles(agentDir: string, maxSnapshots = 5): Promise<void> {
+async function pruneOldRefFiles(agentDir: string, maxSnapshots = 20): Promise<void> {
   try {
     const dir = resolvePath(join(agentDir, REFS_DIR));
     const entries = await readdir(dir);
-    const locatorFiles = entries.filter((e) => e.endsWith(".locators.json"));
-    if (locatorFiles.length <= maxSnapshots) {
+    const snapshotIds = entries
+      .filter((e) => e !== LATEST_FILE && !e.endsWith(".locators.json") && e.endsWith(".json"))
+      .map((e) => e.replace(/\.json$/, ""));
+    if (snapshotIds.length <= maxSnapshots) {
       return;
     }
     const withMtime = await Promise.all(
-      locatorFiles.map(async (file) => {
-        const fileStats = await stat(join(dir, file)).catch(() => null);
-        return { file, mtime: fileStats?.mtimeMs ?? 0, id: file.replace(/\.locators\.json$/, "") };
+      snapshotIds.map(async (id) => {
+        const fileStats = await stat(join(dir, `${id}.json`)).catch(() => null);
+        return { id, mtime: fileStats?.mtimeMs ?? 0 };
       }),
     );
     withMtime.sort((a, b) => b.mtime - a.mtime);
@@ -195,21 +197,7 @@ export async function save(snapshot: Snapshot, options: RefStoreOptions = {}): P
     JSON.stringify({ snapshotId: snapshot.snapshotId }, null, 2) + "\n",
     "utf8",
   );
-  await pruneOldRefFiles(agentDir, 5);
-
-  if (snapshot.url && snapshot.url.length > 0) {
-    try {
-      const u = new URL(snapshot.url);
-      const appSlug = u.hostname.replace(/^www\./, "").replace(/[^a-z0-9.-]/gi, "-").toLowerCase();
-      if (appSlug.length > 0) {
-        const appDir = resolvePath(join(agentDir, "apps", appSlug));
-        await mkdir(appDir, { recursive: true });
-        await writeFile(join(appDir, SNAPSHOT_FILE), body, "utf8");
-      }
-    } catch {
-      // ignore non-URL strings
-    }
-  }
+  await pruneOldRefFiles(agentDir, 20);
   return snapshot.snapshotId;
 }
 
@@ -292,7 +280,7 @@ export async function saveLive(
     JSON.stringify(sidecar, null, 2) + "\n",
     "utf8",
   );
-  await pruneOldRefFiles(agentDir, 5);
+  await pruneOldRefFiles(agentDir, 20);
   return snapshot.snapshotId;
 }
 

@@ -1,0 +1,35 @@
+# Tasks: 012-tools-service-layer
+
+- [x] T001: Create `src/tools/types.ts` defining `ToolContext`, `ToolOutcome`, and shared tool error/execution helpers.
+- [x] T002: Implement core navigation and observation tools in `src/tools/`:
+  - `src/tools/open.ts`
+  - `src/tools/snapshot.ts`
+  - `src/tools/screen.ts`
+  - `src/tools/learn.ts`
+- [x] T003: Implement interaction and state change tools in `src/tools/`:
+  - `src/tools/click.ts`
+  - `src/tools/fill.ts`
+  - `src/tools/upload.ts`
+  - `src/tools/act.ts`
+  - `src/tools/journey.ts`
+- [x] T004: Implement exploration, search and utility tools in `src/tools/`:
+  - `src/tools/find.ts`
+  - `src/tools/extract.ts`
+  - `src/tools/wait.ts`
+  - `src/tools/screenshot.ts`
+  - `src/tools/auth.ts`
+  - `src/tools/qa.ts`
+  - `src/tools/index.ts`
+- [x] T005: Refactor `src/mcp/mcp-tools.ts` to delegate directly to `src/tools/*`, removing all dependencies on `src/cli/`.
+- [x] T006: Refactor `src/cli.ts` and `src/cli/` to delegate directly to `src/tools/*`.
+- [x] T007: Relocate test files into dedicated `test/` subfolders:
+  - `src/bidi/test/`
+  - `src/browser/test/`
+  - `src/core/test/`
+  - `src/screens/test/`
+  - `src/tools/test/`
+  - `src/cli/test/`
+  - `src/mcp/test/`
+  - `src/test/`
+- [x] T008: Fix import paths in relocated tests and ensure all tests pass cleanly.
+- [x] T009: Verify full pipeline: `pnpm lint`, `pnpm build`, `pnpm test`.

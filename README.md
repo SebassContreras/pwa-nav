@@ -1,6 +1,6 @@
 # pwa-nav
 
-> **Stable CLI + MCP bridge for fluid QA testing and lawful, bot-proof browser automation on login-walled sites using your own authenticated Firefox PWA.**
+> **Stable CLI + MCP bridge for fluid QA testing and lawful, bot-proof browser automation on login-walled web apps using your own authenticated Firefox PWA.**
 
 [![Node.js Version](https://img.shields.io/badge/node-%3E%3D22.0.0-brightgreen.svg)](https://nodejs.org/)
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
@@ -8,32 +8,92 @@
 
 ---
 
+## ⚡ 5-Minute Quickstart
+
+Want to see `pwa-nav` in action immediately? Follow this quick progression:
+
+```bash
+# 1. Clone, install dependencies and build
+git clone https://github.com/SebassContreras/pwa-nav.git
+cd pwa-nav
+pnpm install
+pnpm build
+
+# 2. Run the offline smoke test to verify your build
+pnpm smoke
+
+# 3. Link globally so you can use `pwa-nav` and `pwa-nav-mcp` anywhere
+pnpm link --global
+```
+
+Now launch any web app you have installed in **PWAsForFirefox** (e.g. NotebookLM, Mercadona, or your SaaS portal) and inspect it:
+
+```powershell
+# Open installed PWA and attach via WebDriver BiDi (port 9222)
+pwa-nav open "Google NotebookLM"
+
+# Inspect the active UI elements in clean text (zero screenshots)
+pwa-nav snapshot
+
+# Search for a button or input
+pwa-nav find "New notebook"
+
+# Click with preview (dry-run preview is the CLI default)
+pwa-nav click '@new-notebook'
+
+# Execute live in your real browser (requires --armed)
+pwa-nav click '@new-notebook' --armed
+```
+
+---
+
 ## 💡 What Problem Does It Solve?
 
-Traditional browser automation tools (Playwright, Puppeteer, Selenium with Chromium) face severe roadblocks on the modern web:
+Traditional browser automation tools (Playwright, Puppeteer, Selenium with Chromium) face severe roadblocks on modern web applications:
 
-1. **Anti-Bot & CAPTCHA Walls**: Cloudflare Turnstile, reCAPTCHA, and bot-defense shields instantly detect automated Chromium instances, headless flags, and synthetic browser profiles, blocking access to web apps like Google NotebookLM, Mercadona, and enterprise portals.
-2. **Login & 2FA Barriers**: Storing passwords or handling 2FA tokens in automation scripts is brittle, insecure, and frequently triggers fraud alerts or account bans.
+1. **Anti-Bot & CAPTCHA Walls**: Cloudflare Turnstile, reCAPTCHA, and bot-defense shields detect synthetic browser profiles, headless flags, and Chromium automation binaries, blocking access to web apps like Google NotebookLM, Mercadona, and internal enterprise portals.
+2. **Login & 2FA Barriers**: Storing credentials or automating 2FA tokens in automation scripts is brittle, dangerous, and frequently triggers fraud alerts or account bans.
 3. **Massive Token Waste**: Dumping full HTML DOM trees into LLM contexts burns thousands of tokens per step, slows down agents, and causes hallucinations when locators change.
 
 ### The `pwa-nav` Solution:
 
 - **Attaches to Your Real Browser**: Connects directly to your everyday, already-authenticated **Firefox PWA** (Progressive Web App installed via PWAsForFirefox) over standard **W3C WebDriver BiDi** on loopback (`localhost:9222`).
-- **Zero Bot Footprints**: It's your authentic Firefox profile, with your active session, cookies, and human hardware fingerprint. You log in by hand; the agent operates lawfully and seamlessly alongside you.
-- **Accessibility Tree Contracts**: Instead of pixel coordinates or messy CSS selectors, `pwa-nav` uses a clean accessibility snapshot (`.agent/snapshot.json`) with ephemeral refs (`e1`, `e2`, ...). Mutations invalidate refs immediately, preventing stale misclicks.
-- **Screen Maps & User Journeys**: Declarative screen models (`screens/<app>.screens.json`) provide semantic `@id` targets, slashing LLM token consumption by up to **86%** and enabling declarative multi-screen workflows (`pwa-nav journey <name>`).
-- **Built-in Model Context Protocol (MCP)**: Exposes all browser operations and declarative flows directly to AI assistants (Claude Desktop, Cursor, Antigravity, etc.).
+- **Zero Bot Footprints**: It runs in your authentic Firefox profile with your active sessions, cookies, and human hardware fingerprint. You log in once by hand; the agent operates lawfully and seamlessly alongside you.
+- **Accessibility Tree Contracts**: Instead of pixel coordinates or brittle CSS selectors, `pwa-nav` uses a clean accessibility snapshot with ephemeral refs (`e1`, `e2`, ...). Mutations invalidate refs immediately, preventing stale misclicks.
+- **Screen Maps & User Journeys**: Declarative screen models (`screens/<app>.screens.json`) provide permanent semantic `@id` targets, slashing LLM token consumption by up to **86%** and enabling declarative multi-screen workflows (`pwa-nav journey <name>`).
+- **Native Model Context Protocol (MCP)**: Exposes all browser tools and workflows directly to AI coding assistants (Claude Desktop, Cursor, Antigravity, Claude Code, Windsurf, etc.).
 
 ---
 
-## 🚀 Quickstart: Running in 5 Minutes
+## 📋 Prerequisites
 
-### Prerequisites
-- **Node.js**: `v22.0.0` or higher.
-- **pnpm**: `v11.0.0` or higher (`npm install -g pnpm`).
-- **Firefox** with the [PWAsForFirefox extension and native runtime](https://github.com/filips123/PWAsForFirefox) installed.
+Before installing `pwa-nav`, ensure you have the following installed on your system:
 
-### Step 1: Install & Build
+### 1. Node.js & Package Manager
+- **Node.js**: `v22.0.0` or higher (`node --version`).
+- **pnpm**: `v10.0.0` or higher (`pnpm --version`), or `npm` / `corepack`.
+
+### 2. Firefox & PWAsForFirefox
+PWAsForFirefox turns any website into an isolated, standalone desktop app running with its own dedicated profile. It consists of **two parts** (both are mandatory):
+
+| Component | Purpose | Installation Link |
+|---|---|---|
+| **1. Firefox Add-on** | Browser extension to trigger PWA installation from the address bar | [PWAsForFirefox Add-on](https://addons.mozilla.org/firefox/addon/pwas-for-firefox/) |
+| **2. Native Runtime** | Native OS host that manages standalone profiles and desktop shortcuts | [PWAsForFirefox Releases](https://github.com/filips123/PWAsForFirefox/releases) |
+
+*Download the native installer for your OS (Windows: `.msi` or `.exe`, Linux: `.deb`/`.rpm`/Flatpak, macOS: `.pkg`).*
+
+### 3. Install Your Target PWA & Log In Once
+1. Open Firefox and navigate to your target web application (e.g. Google NotebookLM, Mercadona, Jira, or your local web app).
+2. Click the **PWAsForFirefox install icon** in Firefox's address bar.
+3. Complete the installation prompt. The web app is now installed as a desktop PWA with its own dedicated profile.
+4. Launch the installed PWA from your Start Menu / desktop and **log in manually** (including 2FA if required).
+
+---
+
+## 📦 Installation & Setup
+
+### Step 1: Clone and Build `pwa-nav`
 
 ```bash
 git clone https://github.com/SebassContreras/pwa-nav.git
@@ -42,100 +102,62 @@ pnpm install
 pnpm build
 ```
 
-Verify everything is working with the built-in smoke test:
+Verify that the build succeeded by running the offline smoke test:
 ```bash
 pnpm smoke
 ```
+*(You should see `smoke passed: open + snapshot verified`).*
 
-### Step 2: Install or Identify Your Target PWA
-1. Open Firefox, go to any web app you want to test or automate (e.g., your local app, Mercadona, Google NotebookLM, or your own SaaS).
-2. Install it as a PWA using the PWAsForFirefox extension button in the address bar.
-3. Log in to the application normally.
+### Step 2: Choose How to Run `pwa-nav`
 
-### Step 3: Launch Your PWA (On-Demand & Assisted Auth)
+You can run `pwa-nav` in two ways:
 
-Launch your installed PWA on demand with remote debugging enabled:
-```powershell
-pwa-nav open notebook
+#### Option 1: Global Link (Recommended for CLI and MCP)
+Link the binaries globally so `pwa-nav` and `pwa-nav-mcp` are available in your system `PATH`:
+
+```bash
+# With pnpm:
+pnpm link --global
+
+# Or with npm:
+npm link
 ```
-*(Automatically resolves installed apps like Gemini Notebook, launches the runtime with port 9222 if closed, and connects immediately).*
 
-> [!TIP]
-> **Assisted Login for Google & Login-Walled Apps**: If an app uses Google Sign-In or strict bot walls that block interactive logins when debugging ports are open, run:
-> ```powershell
-> pwa-nav auth notebook
-> ```
-> This opens the PWA in clean mode for you to log in normally, and re-attaches in debug mode once authenticated.
+Now you can run `pwa-nav <command>` and `pwa-nav-mcp` directly from any terminal.
 
-### Step 4: Your First Navigation Loop
+#### Option 2: Local Project Execution
+If you prefer not to link globally, run commands directly from the repo directory:
+```bash
+# Using Node directly:
+node dist/cli.js <command>
+node dist/mcp.js
 
-```powershell
-# 1. Connect / Navigate to your installed PWA (auto-whitelisted)
-pwa-nav open notebook
-
-# 2. Take an accessibility snapshot
-pwa-nav snapshot
-
-# 3. Dry-run an action (prints the execution plan, sends NO input)
-pwa-nav click '@sign-in'
-
-# 4. Execute the action for real (armed)
-pwa-nav click '@sign-in' --armed
-
-# 5. Re-snapshot after mutation
-pwa-nav snapshot
+# Or using pnpm exec:
+pnpm exec pwa-nav <command>
 ```
 
 ---
 
-## 🗺️ Screen Maps & Multi-Screen Journeys
+## 🚀 How to Use
 
-For repeated testing and high-speed agent navigation without round trips, use the **Screen Map subsystem** (`docs/screen-map.md`):
-
-### 1. Learn & Continuously Enrich a Screen
-Once on a screen you want to map, run:
-```powershell
-pwa-nav snapshot --learn --locale es-ES --access public
-```
-This generates or updates `screens/<app-id>.screens.json` with semantic IDs (`@search-input`, `@submit-button`, `@cart-link`). Every snapshot and learn step collaborates in enriching this single map (fields, actions, journeys, and nested modal branches), while raw session data stays strictly isolated in `.agent/apps/<appSlug>/snapshot.json` without scattering loose files across your workspace.
-
-### 2. View Compact Screen Info
-Instead of collecting full DOM trees, inspect the screen's compact summary (saves 86% tokens):
-```powershell
-pwa-nav snapshot --screen
-```
-
-### 3. Act on Semantic Targets
-Interact directly with stable `@id` targets without passing snapshot IDs:
-```powershell
-# Note: Always quote '@id' in PowerShell
-pwa-nav fill '@search-box' "olive oil" --armed
-pwa-nav click '@search-btn' --armed
-```
-
-### 4. Action Trees & Modal Branches (`opens`)
-When an action opens a modal dialog or sub-view (like clicking `@crear-publicacion` to author a post), the screen map captures this in `action.opens`. The controls inside the modal (`@editor-post`, `@boton-publicar`) are directly addressable by `@id` without re-scanning or re-learning background elements. Rich contenteditable editors are mapped as `textbox` with placeholders extracted automatically.
-
-### 5. Execute Multi-Screen User Journeys
-Declare complex cross-screen workflows in `screens/<app>.screens.json` and run them in one command:
-```powershell
-# Dry-run preview
-pwa-nav journey checkout-flow query="olive oil"
-
-# Armed execution (settles network & DOM, validates expected screens)
-pwa-nav journey checkout-flow query="olive oil" --armed
-```
-If a step fails or the destination route does not match `expectScreen`, the journey halts immediately with exit code `14` (`journey_step_failed`), preserving evidence.
+`pwa-nav` offers two complementary interfaces:
+1. **As an MCP Server** for autonomous AI assistants (Claude, Cursor, Antigravity, Claude Code, Windsurf).
+2. **As a CLI Tool** for terminal users, developers, and QA scripts.
 
 ---
 
-## 🤖 MCP Server Integration (AI Agents)
+### Interface A: Using with AI Assistants via MCP (Recommended)
 
-`pwa-nav` includes a standard W3C BiDi MCP server (`pwa-nav-mcp`) over stdio for Claude Desktop, Cursor, Windsurf, Claude Code, or Antigravity.
+In MCP mode, `pwa-nav` runs an stdio server (`dist/mcp.js` or `pwa-nav-mcp`) where tools are **armed by default** (actions execute directly in the browser window).
 
-### Adding to Your Agent / MCP Client
+#### 1. Configure Your MCP Client
 
-Add to your client config (`mcp.json`, `claude_desktop_config.json`, or `.vscode/mcp.json`):
+Add `pwa-nav` to your client configuration using the absolute path to `dist/mcp.js`:
+
+##### Claude Desktop
+File location:
+- Windows: `%APPDATA%\Claude\claude_desktop_config.json`
+- macOS: `~/Library/Application Support/Claude/claude_desktop_config.json`
 
 ```json
 {
@@ -150,99 +172,273 @@ Add to your client config (`mcp.json`, `claude_desktop_config.json`, or `.vscode
 }
 ```
 
+##### Cursor
+File location: `.cursor/mcp.json` or `Settings > Features > MCP > Add New MCP Server`:
+```json
+{
+  "mcpServers": {
+    "pwa-nav": {
+      "command": "node",
+      "args": [
+        "C:/path/to/pwa-nav/dist/mcp.js"
+      ]
+    }
+  }
+}
+```
+
+##### Claude Code
+Run from your terminal:
+```bash
+claude mcp add pwa-nav -- node C:/path/to/pwa-nav/dist/mcp.js
+```
+
+##### Antigravity / Generic Stdio MCP Clients
+If you linked globally, you can also specify the binary command directly:
+```json
+{
+  "mcpServers": {
+    "pwa-nav": {
+      "command": "pwa-nav-mcp"
+    }
+  }
+}
+```
+
 > [!TIP]
-> **Zero Manual Firefox Configuration**: You do not need to specify `"--port", "9222"`. The server defaults to port `9222`. The runtime binary is spawned with `--remote-debugging-port 9222` on demand, keeping your Firefox profile and `config.json` clean so normal manual browsing and logins (like Google Accounts) remain unblocked.
+> **Zero-Config Port & Automatic Launch**: Passing `--port 9222` is optional (9222 is the default). When the agent calls `pwa_open({ url: "notebook" })`, `pwa-nav` automatically finds your installed PWA profile, launches the Firefox PWA runtime with `--remote-debugging-port 9222` if it is closed, and connects seamlessly.
 
-### Server Flags & Options
+> [!NOTE]
+> **Initial Startup Notice (`0 screen maps in ./screens`)**:
+> When the MCP server starts, it prints a message to stderr like:
+> ```text
+> pwa-nav-mcp ready (backend bidi, ARMED, 0 screen maps in ./screens)
+> ```
+> **This is completely normal and expected.** The repository does not ship with pre-baked screen maps for your personal apps. `pwa-nav` is fully functional from the very first second: as the AI agent navigates to an unmapped screen, it calls `pwa_learn` to autonomously generate and enrich `screens/<app>.screens.json`.
 
-The MCP server accepts the following command-line flags in `"args"`:
+#### 2. Key MCP Tools Available to Agents
 
-| Flag | Env Variable | Default | Purpose |
-|---|---|---|---|
-| *(none)* | - | - | Minimal invocation: `node <path>/dist/mcp.js`. Runs in direct active **armed** mode on port 9222. |
-| `--dry-run` | `PWA_NAV_DRY_RUN=1` | *off* | Run in dry-run mode (previews mutations). Direct active execution (armed) is default. |
-| `--armed` | `PWA_NAV_ARMED=1` | *on* (active) | Retained for backward compatibility (active mode is default). |
-| `--port <n>` | - | `9222` | Optional. Override BiDi port only if your PWA uses a non-standard port (1024-65535). |
-| `--screens-dir <dir>` | `PWA_NAV_SCREENS_DIR` | `./screens` | Directory where screen maps (`*.screens.json`) are stored. |
-| `--screen-map <file>` | - | *auto-discovery* | Explicit path to a single screen map file. |
-| `--agent-dir <dir>` | - | `.agent` | Output directory for `.agent/allow.json`, sessions, and screenshots. |
-| `--backend offline\|bidi` | - | `bidi` | Use `offline` for testing against static fixtures without a browser. |
-
-The MCP server exposes:
-- **Core tools**: `pwa_open`, `pwa_snapshot`, `pwa_find`, `pwa_click`, `pwa_fill`, `pwa_upload`, `pwa_screenshot`, `pwa_extract`, `pwa_act`, `pwa_learn`, `pwa_wait`.
-- **Dynamic flow tools**: `flow_<screen>_<flow>` for single-screen mapped tasks.
-- **Dynamic journey tools**: `journey_<id>` for multi-screen workflows with `destructiveHint: true`.
-- **Resources**: `pwa-nav://screens/<app-id>` and `pwa-nav://snapshot/latest`.
+| MCP Tool | Description |
+|---|---|
+| `pwa_open` | Opens an installed PWA by slug/name (e.g. `"notebook"`) or navigates to an approved URL. |
+| `pwa_auth` | Assisted login workflow for Google Accounts and anti-bot protected login pages. |
+| `pwa_snapshot` | Inspects the active screen in clean text (`screen: true` for compact screen map view). |
+| `pwa_find` | Fast element search across accessible names, roles, placeholders, and modal dialogs. |
+| `pwa_click` | Clicks elements by semantic `@id` (e.g. `@submit-btn`) or ref (`e1`). |
+| `pwa_fill` | Types text into inputs, textareas, and rich `contenteditable` editors. |
+| `pwa_upload` | Safely uploads local files to `<input type="file">`. |
+| `pwa_wait` | Deterministically waits for background AI generation or DOM conditions (no arbitrary sleeps). |
+| `pwa_learn` | Autonomously learns and persists new screen maps into `screens/<app>.screens.json`. |
+| `pwa_act` | Executes batched mutations (e.g. `fill:@input=query`, `click:@submit`) in a single BiDi turn. |
 
 ---
 
-## 📖 Command Reference
+### Interface B: Using the CLI in Terminal
+
+The CLI is designed for interactive exploration, manual workflows, and continuous QA testing.
+
+> [!IMPORTANT]
+> **Safety Mode in CLI**: To prevent accidental clicks, write operations (`click`, `fill`, `upload`, `act`, `journey`) in the CLI run in **dry-run mode** (preview only) by default. Pass `--armed` to execute the action live in the browser.
+>
+> **PowerShell Splatting**: In Windows PowerShell, tokens starting with `@` (e.g. `@sign-in`) must always be enclosed in single quotes: `'@sign-in'` or `click:'@sign-in'`.
+
+#### 1. Open and Connect to Your PWA
+
+Open an installed PWA by its name or partial slug:
+
+```powershell
+# Open installed PWA by name (case-insensitive):
+pwa-nav open "Google NotebookLM"
+
+# Or open by partial slug:
+pwa-nav open notebook
+
+# Or open any web URL (requires explicit consent flag on first visit):
+pwa-nav open https://example.com --allow-origin
+```
+
+*(If the PWA window is closed, `pwa-nav open` automatically starts the runtime with `--remote-debugging-port 9222` and attaches).*
+
+#### 2. Assisted Login for Protected Sites (`auth`)
+
+If an application uses Google Sign-In or strict bot walls that detect active debugging ports during login, use the assisted `auth` command:
+
+```powershell
+pwa-nav auth notebook
+```
+
+1. `pwa-nav` launches the PWA in **clean mode** (no debugging flags).
+2. You sign in comfortably in the browser window with your credentials and 2FA.
+3. Press **Enter** in the terminal: `pwa-nav` restarts the PWA with debugging port 9222 enabled, keeping your authenticated session intact.
+
+#### 3. Inspect the Screen (Snapshot)
+
+```powershell
+# Interactive summary of inputs, buttons, links, and active dialogs:
+pwa-nav snapshot
+
+# Filter snapshot by text query or role:
+pwa-nav snapshot --query "Search" --role textbox
+
+# Inspect the compact screen-map view (saves 86% tokens):
+pwa-nav snapshot --screen
+```
+
+#### 4. Find Elements (`find`)
+
+Locate controls without dumping the entire page:
+
+```powershell
+# Search for any button or input matching text:
+pwa-nav find "Save"
+
+# Search inside the active modal dialog only:
+pwa-nav find "Confirm" --dialog
+```
+
+#### 5. Interact with Elements (`click` and `fill`)
+
+```powershell
+# 1. Preview click (dry-run):
+pwa-nav click '@sign-in'
+
+# 2. Execute click live in browser:
+pwa-nav click '@sign-in' --armed
+
+# 3. Fill text into an input or rich contenteditable editor:
+pwa-nav fill '@search-input' "Quantum computing" --armed
+
+# 4. Click using ephemeral ref from snapshot:
+pwa-nav click --snapshot snap-123 e1 --armed
+```
+
+#### 6. Deterministic Waiting (`wait`)
+
+Never use arbitrary shell pauses (`sleep`, `Start-Sleep`). Wait deterministically for async rendering:
+
+```powershell
+# Wait for element to become visible (timeout in ms or s):
+pwa-nav wait '@results-card' --state visible --timeout 30s
+
+# Wait for text notice to disappear:
+pwa-nav wait --query "Generating response..." --state hidden --timeout 60s
+```
+
+#### 7. Atomic Multi-Action Chaining (`act`)
+
+Batch multiple actions into a single BiDi turn without round-trips:
+
+```powershell
+pwa-nav act fill:'@search'="AI trends" click:'@search-button' --armed
+```
+
+---
+
+## 🗺️ Screen Maps & Multi-Screen Journeys
+
+For repeatable, high-speed automation without token waste, `pwa-nav` uses declarative **Screen Maps** (`docs/screen-map.md`):
+
+### 1. Auto-Learn a Screen
+Navigate to any page in your PWA and run:
+```powershell
+pwa-nav snapshot --learn --locale en-US --access authenticated
+```
+This generates or enriches `screens/<app-id>.screens.json` with semantic IDs (`@search-input`, `@submit-button`, `@cart-link`). Subsequent snapshots enrich the same map without creating loose files in your workspace.
+
+### 2. Modals and Subdialogs (`opens`)
+When clicking a button opens a modal or subdialog (e.g. clicking `@new-post` opens a post composer), `pwa-nav` stores this in `action.opens`. The controls inside the modal (`@post-textarea`, `@publish-button`) become addressable immediately by `@id` without re-scanning background elements.
+
+### 3. Declarative Multi-Screen User Journeys
+Declare multi-step user journeys in `screens/<app>.screens.json` and execute them across route transitions with route verification and network settling:
+
+```powershell
+# Preview journey steps:
+pwa-nav journey checkout-journey item="shoes"
+
+# Execute live in browser:
+pwa-nav journey checkout-journey item="shoes" --armed
+```
+If any intermediate step fails or the destination URL does not match `expectScreen`, execution halts immediately with exit code `14` (`journey_step_failed`), preserving evidence.
+
+---
+
+## 📖 Complete CLI Command Reference
 
 | Command | Description |
 |---|---|
-| `pwa-nav open <url> [--launch] [--site <ULID>] [--allow-origin]` | Navigate to URL. Requires origin in `.agent/allow.json` or explicit `--allow-origin`. |
-| `pwa-nav snapshot [-i \| --all] [--query <str>] [--role <str>] [--json] [--out <path>]` | Capture live accessibility DOM snapshot. `-i` interactive elements only (default). Optional `--query` and `--role` filters. Highlights active modal/dialog. |
-| `pwa-nav snapshot --screen [--screen-map <f>]` | Print compact view of mapped screen matching current URL (no DOM dump). |
-| `pwa-nav snapshot --learn [--prune] [--locale <lang>]` | Learn live screen into `screens/<app>.screens.json` and show diff. |
-| `pwa-nav find [<query>] [--role <str>] [--dialog] [--offset <n>] [--limit <n>] [--snapshot <id>]` | Fast targeted search across names, roles, placeholders, values, and dialog titles with modal filtering. |
-| `pwa-nav click --snapshot <id> [--armed] <ref>` | Click element by snapshot ref (e.g. `e3`). Dry-run unless `--armed`. |
-| `pwa-nav click [--armed] '@<id>'` | Click element by semantic ID (e.g. `'@submit-btn'`). |
-| `pwa-nav fill --snapshot <id> [--armed] <ref> <text>` | Fill field by ref (supports inputs, textareas, and rich `contenteditable` editors). |
-| `pwa-nav fill [--armed] '@<id>' <text>` | Fill field by semantic ID. Sensitive fields are blocked (exit 11). |
-| `pwa-nav upload --snapshot <id> [--armed] <ref> <path...>` | Upload local file(s) to `<input type="file">`. Dry-run unless `--armed`. |
-| `pwa-nav upload [--armed] '@<id>' <path...>` | Upload local file(s) by semantic ID. |
-| `pwa-nav act --snapshot <id> [--armed] <ops...>` | Batch mutations (`click:<ref>`, `fill:<ref>=<text>`, `upload:<ref>=<path>`) in a single session. |
-| `pwa-nav act [--armed] <semantic-ops...>` | Batch semantic ops (`click:'@id'`, `fill:'@id'=val`, `upload:'@id'=path`, `flow:<id>`). |
+| `pwa-nav open <url\|app> [--launch] [--site <ULID>] [--allow-origin]` | Open an installed PWA or navigate to a URL. Auto-whitelists installed apps. |
+| `pwa-nav auth [<app\|url>] [--clean] [--debug] [--port <n>]` | Assisted login workflow for Google accounts and bot-walled login screens. |
+| `pwa-nav snapshot [-i \| --all] [--query <str>] [--role <str>] [--json] [--out <path>]` | Capture live accessibility DOM snapshot. Highlights active modal/dialogs. |
+| `pwa-nav snapshot --screen [--screen-map <f>] [--screens-dir <dir>]` | Print compact view of mapped screen matching current URL (no DOM dump). |
+| `pwa-nav snapshot --learn [--prune] [--locale <lang>] [--access <level>]` | Learn live screen into `screens/<app>.screens.json` and show diff. |
+| `pwa-nav find [<query>] [--role <str>] [--dialog] [--offset <n>] [--limit <n>]` | Fast targeted element search across names, roles, placeholders, and dialogs. |
+| `pwa-nav click [--armed] '@<id>'` | Click element by permanent semantic ID (e.g. `'@submit-btn'`). |
+| `pwa-nav click --snapshot <id> [--armed] <ref>` | Click element by snapshot ref (e.g. `e3`). |
+| `pwa-nav fill [--armed] '@<id>' <text>` | Type text into input, textarea, or `contenteditable` editor by semantic ID. |
+| `pwa-nav fill --snapshot <id> [--armed] <ref> <text>` | Type text by snapshot ref. Sensitive fields are strictly blocked (exit 11). |
+| `pwa-nav upload [--armed] '@<id>' <path...>` | Upload local safe file(s) to file inputs by semantic ID. |
+| `pwa-nav upload --snapshot <id> [--armed] <ref> <path...>` | Upload local file(s) by snapshot ref. |
+| `pwa-nav act [--armed] <ops...>` | Batch mutations (`click:'@id'`, `fill:'@id'=val`, `flow:<id>`) in a single BiDi turn. |
 | `pwa-nav journey <name> [key=value...] [--armed]` | Execute declarative multi-screen user journey across route transitions. |
+| `pwa-nav wait <target> [--state visible\|hidden\|enabled] [--timeout <ms>]` | Wait deterministically for an element or query condition. |
 | `pwa-nav screenshot [--out <path>] [--format png\|jpeg\|webp]` | Capture visual screenshot to disk (`.agent/screenshot.png` by default). |
-| `pwa-nav extract [--snapshot <id>] [--mode all\|text\|links] [--query <str>] [--role <str>] [--offset <n>] [--limit <n>]` | Fast read-only text or links extraction with query/role filtering and pagination. |
-| `pwa-nav wait <target> [--state visible\|hidden\|enabled] [--timeout <ms>] [--interval <ms>]` | Wait deterministically for an element or query to become visible, hidden, or enabled. |
-| `pwa-nav qa run <check-file>` | Run offline JSON check file and save per-step evidence to `.agent/evidence/`. |
+| `pwa-nav extract [--snapshot <id>] [--mode all\|text\|links] [--query <str>]` | Extract clean text or links for bulk scraping without altering state. |
+| `pwa-nav qa run <check-file>` | Run offline JSON QA test suite and save per-step evidence to `.agent/evidence/`. |
 
 ### Global Flags
 - `--backend offline|bidi`: Default is `bidi` (live Firefox PWA). Use `offline` for fixture checks.
 - `--port <n>`: BiDi debugging port (default: `9222`, env: `PWA_NAV_PORT`).
 - `--context <id>`: Target browsing context ID when multiple tabs are open.
-- `--screen-map <file>`: Explicit path to screen map JSON.
-- `--screens-dir <dir>`: Directory containing screen maps (default: `./screens`).
+- `--screens-dir <dir>`: Directory containing screen maps (default: `./screens`, env: `PWA_NAV_SCREENS_DIR`).
+- `--screen-map <file>`: Explicit path to a single screen map file.
+
+---
+
+## ⚙️ Environment Variables
+
+| Variable | Default | Purpose |
+|---|---|---|
+| `PWA_NAV_PORT` | `9222` | Override WebDriver BiDi debugging port. |
+| `PWA_NAV_BACKEND` | `bidi` | Default backend mode (`bidi` or `offline`). |
+| `PWA_NAV_SCREENS_DIR` | `./screens` | Directory where screen map JSON files are stored. |
+| `PWA_NAV_DRY_RUN` | `0` | Set to `1` to force dry-run mode in MCP server. |
+| `PWA_NAV_KILL_SWITCH` | — | Path to emergency kill-switch file (or set to `1`). |
+| `PWA_NAV_FIREFOXPWA_DIR` | Auto | Override PWAsForFirefox data directory. |
 
 ---
 
 ## 🛡️ Security & Safety Gates
 
-1. **Execution-First & Armed by Default (MCP)**: Actions execute directly and actively on the browser by default. Use `--dry-run` when simulation/preview is explicitly requested.
-2. **Sensitive Fields Barrier**: Password fields, tokens, and payment inputs (`sensitive: true` / `humanOnly: true`) are never typed by the agent (fails fast with code 11 `sensitive_target`). The user types them by hand.
-3. **Origin Allow-List**: Navigation is strictly blocked unless the origin is approved in `.agent/allow.json` or explicitly passed via `--allow-origin` (code 6 `origin_blocked`).
-4. **Kill-Switch**: Creating `.agent/kill` or setting `PWA_NAV_KILL_SWITCH` immediately terminates any armed operation (code 7 `kill_switch`).
+1. **User's Own Sessions**: Operates exclusively in your authenticated Firefox profile. Never automates credentials or bypasses CAPTCHAs.
+2. **Sensitive Fields Barrier**: Password fields, tokens, and payment inputs (`sensitive: true` / `humanOnly: true`) are never typed by the agent (fails fast with code 11 `sensitive_target`). You type them by hand.
+3. **Origin Allow-List Gate**: Navigation to uninstalled external origins is blocked unless registered in `.agent/allow.json` or explicitly passed with `--allow-origin` (code 6 `origin_blocked`). Installed Firefox PWAs are auto-whitelisted.
+4. **Emergency Kill-Switch**: Creating `.agent/kill` or setting `PWA_NAV_KILL_SWITCH` immediately terminates any armed operation (code 7 `kill_switch`).
 5. **Untrusted Page Content**: All HTML page contents, aria names, and element text are treated strictly as untrusted data, never instructions.
-6. **File Upload Security Gate**: Local file uploads (`pwa_upload`, `upload`) are strictly restricted to files within allowed safe directories (workspace root or `.agent/`). Files attempting path traversal (`..`), sensitive environment files (`.env*`), or private keys (`id_rsa`, etc.) are blocked immediately before touching the browser (fails fast with code 15 `file_upload_blocked`).
-7. **Visual Screenshots & Context Economy**: Binary images and screenshots are saved directly to disk (`.agent/screenshot.png` or `--out <path>`). Binary image data and base64 strings are never dumped into chat or agent context.
-8. **Text-First & Vision-Free Automation (Zero Random Screenshots)**: `pwa_screenshot` is strictly restricted to user-requested image artifacts. Agents must never take screenshots to inspect state or discover UI elements. Re-read state in pure text with `pwa_snapshot`.
-9. **Autonomous Screen Learning**: Agents autonomously register new screens using `pwa_learn` when encountering unmapped routes, keeping maps persisted without human intervention.
-10. **PowerShell Splatting Guard**: In PowerShell on Windows, `@id` without quotes is treated as an empty array splatting variable. Semantic targets must always be quoted: `'@id'` or `click:'@id'`.
+6. **File Upload Security Boundary**: File uploads (`pwa_upload`, `upload`) are strictly restricted to files within allowed safe directories (workspace root or `.agent/`). Path traversal (`..`) or targeting sensitive files (`.env*`, private keys) is blocked immediately (exit code 15 `file_upload_blocked`).
+7. **Text-First & Vision-Free Automation**: `pwa_screenshot` is strictly restricted to user-requested image artifacts. Agents must never take random screenshots to discover UI elements or check state; state is re-inspected in pure text with `pwa_snapshot`.
 
 ---
 
-## 🚦 Exit Codes
+## 🚦 Exit Codes & Troubleshooting
 
-| Code | Name | Description & Action |
+| Code | Name | Common Cause & Recovery Action |
 |:---:|---|---|
-| `0` | `ok` | Success. |
-| `1` | `failure` | General error or QA check failure. |
-| `2` | `invalid_args` | Missing or invalid arguments/flags. |
-| `3` | `stale_ref` | Snapshot or `eN` ref expired due to page mutation. Re-snapshot! |
-| `4` | `no_browser` | BiDi port is closed. Launch PWA with remote debugging. |
-| `5` | `session_busy` | Firefox BiDi session in use. Only one active session is allowed. |
-| `6` | `origin_blocked` | Origin not allowed. Re-run with `--allow-origin` if authorized. |
-| `7` | `kill_switch` | Kill-switch active (`.agent/kill`). Operation aborted. |
+| `0` | `ok` | Command completed successfully. |
+| `1` | `failure` | General error or QA check failure. Check error message. |
+| `2` | `invalid_args` | Missing or malformed CLI arguments/flags. Run with `--help`. |
+| `3` | `stale_ref` | Snapshot ref (`eN`) expired due to page mutation. Run `snapshot` and retry. |
+| `4` | `no_browser` | Port 9222 is closed. Run `pwa-nav open <app>` to launch with debugging. |
+| `5` | `session_busy` | Another client or orphan is connected to BiDi. Restart the PWA window. |
+| `6` | `origin_blocked` | Target URL is not allow-listed. Run `open <url> --allow-origin`. |
+| `7` | `kill_switch` | Kill-switch file `.agent/kill` exists. Remove it to resume. |
 | `8` | `not_actionable` | Element is hidden, covered, disabled, or non-interactable. |
-| `9` | `timeout` | Action, network idle, or navigation timed out. |
-| `10` | `protocol` | Low-level WebDriver BiDi protocol failure. |
-| `11` | `sensitive_target` | Refusal to type into sensitive field or execute human-only flow. |
-| `12` | `unknown_target` | Semantic `@id` not found in screen map. |
-| `13` | `unmapped_screen` | Route not recognized in screen map. Autonomously learn and enrich `screens/<app>.screens.json`. |
-| `14` | `journey_step_failed` | Journey transition failed or expected screen not reached. |
-| `15` | `file_upload_blocked` | File path is outside allowed safe directories or targets sensitive files. |
+| `9` | `timeout` | Browser action, network idle, or navigation timed out. |
+| `10` | `protocol` | Low-level WebDriver BiDi protocol mismatch. |
+| `11` | `sensitive_target` | Refusal to type into sensitive field or execute human-only flow. Type manually! |
+| `12` | `unknown_target` | Semantic `@id` not found in screen map. Run `snapshot --screen` to inspect IDs. |
+| `13` | `unmapped_screen` | Route not recognized in screen map. Run `snapshot --learn` to register it. |
+| `14` | `journey_step_failed` | Multi-screen journey transition failed or expected screen not reached. |
+| `15` | `file_upload_blocked` | File upload path is outside allowed directories or targets sensitive files. |
 
 ---
 
@@ -252,7 +448,7 @@ Run the full CI verification chain:
 ```bash
 pnpm lint && pnpm build && pnpm test && pnpm smoke
 ```
-- **340+ Automated Tests** covering protocol serialization, BiDi fake server, DOM collection, semantic resolution, screen maps, multi-screen journeys, visual screenshots, and MCP conformance.
+- **358 Automated Tests** across dedicated module test suites (`src/*/test/`) covering WebDriver BiDi serialization, DOM collectors, semantic target resolution, screen maps, multi-screen journeys, the unified tools service layer (`src/tools/`), and MCP server conformance.
 
 ---
 
@@ -268,4 +464,4 @@ pnpm lint && pnpm build && pnpm test && pnpm smoke
 
 ## ⚖️ Lawful Use Policy
 
-`pwa-nav` is designed strictly for testing and automating your **own web applications** and **personal, authenticated sessions**. It does not bypass paywalls, bot walls, or access controls. All credentials remain in the user's custody.
+`pwa-nav` is designed strictly for QA testing and automating your **own web applications** and **personal, authenticated sessions**. It does not bypass paywalls, bot walls, or access controls. All credentials remain in the user's custody.

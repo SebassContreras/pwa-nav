@@ -30,7 +30,7 @@ To register `pwa-nav` in an AI agent or MCP client (Claude Desktop, Cursor, Clau
 
 ## 1. Tool Selection (CLI vs MCP)
 
-Choose the interface based on your environment:
+Both CLI and MCP delegate 100% of their operations to the unified Tools Service Layer (`src/tools/`), ensuring identical capabilities, execution semantics, safety gates, and error handling across both interfaces. Choose the interface based on your environment:
 
 | Capability | CLI Command | MCP Tool Name | Notes |
 |---|---|---|---|
