@@ -63,12 +63,12 @@ export function resolveAgentDir(
 ): string {
   const fromOption = options.cacheDir;
   if (fromOption !== undefined && fromOption.trim() !== "") {
-    return resolve(fromOption);
+    return resolve(cwd, fromOption);
   }
 
   const fromEnv = env.PWA_NAV_CACHE_DIR;
   if (fromEnv !== undefined && fromEnv.trim() !== "") {
-    return resolve(fromEnv);
+    return resolve(cwd, fromEnv);
   }
 
   const projectRoot = findProjectRoot(cwd);
@@ -93,18 +93,12 @@ export function resolveScreensDir(
 ): string {
   const fromOption = options.screensDir;
   if (fromOption !== undefined && fromOption.trim() !== "") {
-    return fromOption;
+    return resolve(cwd, fromOption);
   }
 
   const fromEnv = env.PWA_NAV_SCREENS_DIR;
   if (fromEnv !== undefined && fromEnv.trim() !== "") {
-    return fromEnv;
-  }
-
-  // If a legacy ./screens directory already exists on disk in cwd, honor it for backward compatibility
-  const legacyScreens = join(cwd, "screens");
-  if (existsSync(legacyScreens)) {
-    return legacyScreens;
+    return resolve(cwd, fromEnv);
   }
 
   return join(resolveAgentDir({ cacheDir: options.cacheDir }, env, cwd), "screens");

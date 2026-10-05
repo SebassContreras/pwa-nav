@@ -11,6 +11,7 @@ import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { randomUUID } from "node:crypto";
 import { join, resolve } from "node:path";
 import { load as loadSnapshot, latestSnapshotId } from "../core/refs.js";
+import { resolveAgentDir } from "../core/storage.js";
 import {
   DEFAULT_SESSION_PATH,
   DEFAULT_SNAPSHOT_PATH,
@@ -257,7 +258,7 @@ async function saveStepEvidence(
   options: OpOptions = {},
   forceScreenshot: boolean = false,
 ): Promise<void> {
-  const store = { agentDir: options.backend?.agentDir ?? ".agent" };
+  const store = { agentDir: options.backend?.agentDir ?? resolveAgentDir() };
   const op = step.op;
   if (currentId !== null) {
     const snapshot = await loadSnapshot(currentId, store);
@@ -271,7 +272,7 @@ async function saveStepEvidence(
   } else {
     // No snapshot context (e.g. open before any snapshot): keep the session state.
     try {
-      const sessionRaw = await readFile(DEFAULT_SESSION_PATH, "utf8");
+      const sessionRaw = await readFile(join(store.agentDir, "session.json"), "utf8");
       await writeFile(join(evidenceAbs, `step-${n.toString()}-${op}-session.json`), sessionRaw, "utf8");
     } catch {
       // No session either (e.g. a failing first step): nothing to copy.

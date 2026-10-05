@@ -54,7 +54,11 @@ export async function executeSemantic(
 ): Promise<SemanticExecResult> {
   const { backend, armed } = ctx;
   const lines: string[] = [];
-  const fresh = await performLiveSnapshot(backend, { quiet: true });
+  const fresh = await performLiveSnapshot(backend, {
+    quiet: true,
+    ...(ctx.screensDir ? { screensDir: ctx.screensDir } : {}),
+    ...(ctx.screenMap ? { screenMapPath: ctx.screenMap } : {}),
+  });
   const sidecar = await loadLocators(fresh.snapshotId, { agentDir: backend.agentDir });
   const ops: ActOp[] = planned.map((step) => {
     const ref = refFor(sidecar, step.target.locator, step.target, fresh.snapshotId);

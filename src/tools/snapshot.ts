@@ -120,6 +120,8 @@ export async function snapshotTool(args: SnapshotArgs, ctx: ToolContext): Promis
     includeAll: all,
     ...(query !== undefined ? { query } : {}),
     ...(role !== undefined ? { role } : {}),
+    ...(ctx.screens.screensDir !== undefined ? { screensDir: ctx.screens.screensDir } : {}),
+    ...(ctx.screens.screenMap !== undefined ? { screenMapPath: ctx.screens.screenMap } : {}),
   });
 
   if (screenshot) {

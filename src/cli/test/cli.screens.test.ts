@@ -121,8 +121,8 @@ async function withFake(fn: (dir: string, server: FakeBidiServer, page: Page) =>
 }
 
 async function seedDemo(dir: string): Promise<string> {
-  await mkdir(join(dir, "screens"), { recursive: true });
-  const target = join(dir, "screens", "demo-app.screens.json");
+  await mkdir(join(dir, ".agent", "screens"), { recursive: true });
+  const target = join(dir, ".agent", "screens", "demo-app.screens.json");
   await copyFile(join(ROOT, "examples", "screens", "demo-app.screens.json"), target);
   return target;
 }
@@ -381,8 +381,8 @@ test("a non-human flow runs as one batch with one new snapshot", async () => {
       app: { id: "synthetic", name: "Synthetic", origin: ORIGIN, locale: "en", learnedAt: "2026-10-01T00:00:00Z" },
       screens: [screen],
     };
-    await mkdir(join(dir, "screens"), { recursive: true });
-    await writeFile(join(dir, "screens", "synthetic.screens.json"), JSON.stringify(map), "utf8");
+    await mkdir(join(dir, ".agent", "screens"), { recursive: true });
+    await writeFile(join(dir, ".agent", "screens", "synthetic.screens.json"), JSON.stringify(map), "utf8");
     const p = ["--port", port(server)];
 
     const bad = await run(dir, ["act", "flow:search", `other=${SECRET}`, ...p]);
@@ -466,7 +466,7 @@ test("help documents the screen flags, @id grammar and exit codes", async () => 
 test("journey command: dry-run, missing args, and execution", async () => {
   await withFake(async (dir, server) => {
     await seedDemo(dir);
-    const mapRaw = await readFile(join(dir, "screens", "demo-app.screens.json"), "utf8");
+    const mapRaw = await readFile(join(dir, ".agent", "screens", "demo-app.screens.json"), "utf8");
     const map = JSON.parse(mapRaw) as ScreenMap;
     map.journeys = [
       {
@@ -486,7 +486,7 @@ test("journey command: dry-run, missing args, and execution", async () => {
         ],
       },
     ];
-    await writeFile(join(dir, "screens", "demo-app.screens.json"), JSON.stringify(map), "utf8");
+    await writeFile(join(dir, ".agent", "screens", "demo-app.screens.json"), JSON.stringify(map), "utf8");
     const p = ["--port", port(server)];
 
     // Missing name -> exit 2

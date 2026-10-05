@@ -4,6 +4,7 @@
 import { mkdir, readdir, readFile, stat, unlink, writeFile } from "node:fs/promises";
 import { join, resolve as resolvePath } from "node:path";
 import { PwaNavError } from "./errors.js";
+import { resolveAgentDir } from "./storage.js";
 import type { LiveExtras } from "../browser/live-snapshot.js";
 import type { Locator } from "../screens/screen-map.js";
 import type { Snapshot, SnapshotElement } from "./snapshot.js";
@@ -98,7 +99,9 @@ export function clearLastActiveAction(): void {
 
 
 function agentDirOf(options: RefStoreOptions = {}): string {
-  return options.agentDir ?? ".agent";
+  return options.agentDir !== undefined && options.agentDir.trim() !== ""
+    ? resolvePath(options.agentDir)
+    : resolveAgentDir();
 }
 
 function snapshotPath(agentDir: string): string {

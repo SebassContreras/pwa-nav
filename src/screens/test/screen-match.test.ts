@@ -201,8 +201,8 @@ describe("selectMap", () => {
 
 describe("screens dir", () => {
   it("resolves option, env, default", () => {
-    assert.equal(resolveScreensDir({ screensDir: "o" }, { PWA_NAV_SCREENS_DIR: "e" }), "o");
-    assert.equal(resolveScreensDir({}, { PWA_NAV_SCREENS_DIR: "e" }), "e");
+    assert.equal(resolveScreensDir({ screensDir: "o" }, { PWA_NAV_SCREENS_DIR: "e" }), resolve(process.cwd(), "o"));
+    assert.equal(resolveScreensDir({}, { PWA_NAV_SCREENS_DIR: "e" }), resolve(process.cwd(), "e"));
     assert.equal(resolveScreensDir(undefined, {}), join(process.cwd(), ".agent", "screens"));
     assert.equal(resolveScreensDir({ cacheDir: "/custom/agent" }, {}), join(resolve("/custom/agent"), "screens"));
   });

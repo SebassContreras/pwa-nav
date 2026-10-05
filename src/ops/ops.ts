@@ -36,6 +36,7 @@ import {
 } from "../core/refs.js";
 import type { Screen, ScreenMap } from "../screens/screen-map.js";
 import { loadExplicitMap, loadScreenMapsFromDir, resolveScreensDir } from "../screens/screen-match.js";
+import { resolveAgentDir } from "../core/storage.js";
 import { learnScreen, slugify } from "../screens/screen-learn.js";
 import { learnIntoFile } from "../screens/screen-store.js";
 import { collectAllTargets } from "../screens/screen-resolve.js";
@@ -53,10 +54,10 @@ import {
 export { ensureParentDir, isHttpUrl, loadSession, parseSession };
 export type { ActOp, Backend, Session };
 
-export const DEFAULT_SESSION_PATH = ".agent/session.json";
-export const DEFAULT_SNAPSHOT_PATH = ".agent/snapshot.json";
-export const DEFAULT_ACTIONS_PATH = ".agent/actions.log";
-export const DEFAULT_SCREENSHOT_PATH = ".agent/screenshot.png";
+export const DEFAULT_SESSION_PATH = join(resolveAgentDir(), "session.json");
+export const DEFAULT_SNAPSHOT_PATH = join(resolveAgentDir(), "snapshot.json");
+export const DEFAULT_ACTIONS_PATH = join(resolveAgentDir(), "actions.log");
+export const DEFAULT_SCREENSHOT_PATH = join(resolveAgentDir(), "screenshot.png");
 
 export interface SnapshotPerformOptions {
   url: string;
@@ -120,6 +121,10 @@ export interface LiveSnapshotOptions {
   quiet?: boolean;
   query?: string;
   role?: string;
+  screensDir?: string;
+  screenMapPath?: string;
+  access?: Screen["access"];
+  locale?: string;
 }
 
 export interface AutoCollaborateResult {
@@ -153,7 +158,7 @@ export async function autoCollaborateScreen(
       if (existsSync(appMap)) {
         screenMapPath = appMap;
       } else {
-        const dir = options?.screensDir ?? resolveScreensDir({});
+        const dir = options?.screensDir ?? resolveScreensDir({ cacheDir: backend.agentDir });
         try {
           const loaded = await loadScreenMapsFromDir(dir, { agentDir: backend.agentDir });
           const match = loaded.find((item) => item.map.app.origin === origin);
@@ -236,7 +241,7 @@ export async function captureLiveSnapshot(
     includeAll: options.includeAll === true,
   });
   if (options.skipAutoCollaborate !== true) {
-    await autoCollaborateScreen(backend, live.raw, built.snapshot).catch(() => null);
+    await autoCollaborateScreen(backend, live.raw, built.snapshot, options).catch(() => null);
   }
   const stored = agentPath(backend.agentDir, "snapshot.json");
   if (options.outPath !== undefined && options.outPath !== stored) {
