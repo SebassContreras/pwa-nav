@@ -18,11 +18,18 @@ export async function clickTool(args: ClickArgs, ctx: ToolContext): Promise<Tool
   const ref = args.ref;
 
   let semanticId: string | undefined;
+  let semanticValue: string | undefined;
   let rawRef: string | undefined;
 
   if (target !== undefined) {
     if (ref !== undefined) throw invalid("pass either target or ref, not both.");
-    const parsed = parseTarget(target.startsWith("@") ? target : `@${target}`);
+    let token = target.startsWith("@") ? target : `@${target}`;
+    const eq = token.indexOf("=");
+    if (eq >= 0) {
+      semanticValue = token.slice(eq + 1);
+      token = token.slice(0, eq);
+    }
+    const parsed = parseTarget(token);
     if (parsed.kind === "id") {
       semanticId = parsed.id;
     } else {
@@ -55,7 +62,7 @@ export async function clickTool(args: ClickArgs, ctx: ToolContext): Promise<Tool
       armed: effectiveCtx.armed,
     };
     const screen = await screenAt(semCtx);
-    const resolved = resolveTarget(screen, semanticId, "click");
+    const resolved = resolveTarget(screen, semanticId, "click", semanticValue);
     setLastActiveAction({ id: resolved.id, name: resolved.name, role: resolved.role });
     const exec = await executeSemantic(semCtx, [{ intent: "click", target: resolved }], "single");
     return actionOutcome(effectiveCtx, backend, exec.nextSnapshotId, `@${semanticId}`);

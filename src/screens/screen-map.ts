@@ -123,6 +123,14 @@ export interface A11yFinding {
   wcag?: string;
 }
 
+export interface EntityPattern {
+  id: string;
+  containerRole: string;
+  containerName?: string;
+  itemRole: string;
+  actionTarget?: string;
+}
+
 export interface Screen {
   id: string;
   route: string;
@@ -134,6 +142,7 @@ export interface Screen {
   actions: ScreenAction[];
   links: ScreenLink[];
   flows: ScreenFlow[];
+  patterns?: EntityPattern[];
   a11y?: A11yFinding[];
 }
 
@@ -218,6 +227,7 @@ export function screenElements(screen: Screen): { role: string; name: string }[]
     ...screen.fields.map(({ role, name }) => ({ role, name })),
     ...screen.actions.map(({ role, name }) => ({ role, name })),
     ...screen.links.map(({ name }) => ({ role: "link", name })),
+    ...(screen.patterns ?? []).map((p) => ({ role: p.containerRole, name: p.containerName ?? "" })),
   ];
   const collectOpens = (branch: OpensBranch): void => {
     if (branch.fields) result.push(...branch.fields.map(({ role, name }) => ({ role, name })));

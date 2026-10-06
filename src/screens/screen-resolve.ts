@@ -4,7 +4,7 @@
 import { Ajv2020 } from "ajv/dist/2020.js";
 import { PwaNavError } from "../core/errors.js";
 import { StaleRefError, type LocatorSidecar } from "../core/refs.js";
-import type { Locator, OpensBranch, Screen, ScreenAction, ScreenField, ScreenLink } from "./screen-map.js";
+import type { Locator, OpensBranch, Screen, ScreenAction, ScreenField, ScreenLink, EntityPattern } from "./screen-map.js";
 
 export type TargetKind = "field" | "action" | "link";
 export type Intent = "click" | "fill" | "upload";
@@ -34,7 +34,7 @@ export interface ResolvedFlow {
 export type ParsedTarget = { kind: "ref"; ref: string } | { kind: "id"; id: string };
 
 export type SemanticAct =
-  | { kind: "click"; id: string }
+  | { kind: "click"; id: string; text?: string }
   | { kind: "fill"; id: string; text: string }
   | { kind: "upload"; id: string; files: readonly string[] }
   | { kind: "flow"; flowId: string };
@@ -75,7 +75,17 @@ export function parseSemanticAct(token: string): SemanticAct {
     return { kind: "flow", flowId };
   }
   if (token.startsWith("click:@")) {
-    const target = parseTarget(token.slice("click:".length));
+    const remainder = token.slice("click:".length);
+    const eq = remainder.indexOf("=");
+    if (eq >= 0) {
+      const target = parseTarget(remainder.slice(0, eq));
+      const text = remainder.slice(eq + 1);
+      if (target.kind !== "id" || text.length === 0) {
+        throw new PwaNavError("invalid_args", "invalid click token (expected click:@<id>[=<text>])");
+      }
+      return { kind: "click", id: target.id, text };
+    }
+    const target = parseTarget(remainder);
     if (target.kind !== "id") {
       throw new PwaNavError("invalid_args", "invalid click token (expected click:@<id>)");
     }
@@ -133,6 +143,7 @@ export function collectAllTargets(screen: Screen): {
   fields: ScreenField[];
   actions: ScreenAction[];
   links: ScreenLink[];
+  patterns: EntityPattern[];
 } {
   const fields = [...screen.fields];
   const actions = [...screen.actions];
@@ -150,12 +161,12 @@ export function collectAllTargets(screen: Screen): {
   for (const a of screen.actions) {
     if (a.opens) collectBranch(a.opens);
   }
-  return { fields, actions, links };
+  return { fields, actions, links, patterns: screen.patterns ?? [] };
 }
 
 function availableIds(screen: Screen): string[] {
-  const { fields, actions, links } = collectAllTargets(screen);
-  return [...fields, ...actions, ...links].map((entry) => `@${entry.id}`);
+  const { fields, actions, links, patterns } = collectAllTargets(screen);
+  return [...fields, ...actions, ...links, ...patterns].map((entry) => `@${entry.id}`);
 }
 
 function listHint(label: string, ids: readonly string[]): string {
@@ -167,11 +178,12 @@ function listHint(label: string, ids: readonly string[]): string {
   return `${label}: ${shown.join(", ")}${omitted > 0 ? ` (+${omitted.toString()} more omitted)` : ""}`;
 }
 
-export function resolveTarget(screen: Screen, id: string, intent: Intent): ResolvedTarget {
-  const { fields, actions, links } = collectAllTargets(screen);
+export function resolveTarget(screen: Screen, id: string, intent: Intent, text?: string): ResolvedTarget {
+  const { fields, actions, links, patterns } = collectAllTargets(screen);
   const field = fields.find((entry) => entry.id === id);
   const action = actions.find((entry) => entry.id === id);
   const link = links.find((entry) => entry.id === id);
+  const pattern = patterns.find((entry) => entry.id === id);
 
   let resolved: ResolvedTarget;
   if (field !== undefined) {
@@ -207,6 +219,20 @@ export function resolveTarget(screen: Screen, id: string, intent: Intent): Resol
       locator: link.locator,
       sensitive: false,
       agentFillable: false,
+      requiresSensitive: false,
+    };
+  } else if (pattern !== undefined) {
+    if (text === undefined) {
+      throw new PwaNavError("invalid_args", `target @${id} is a dynamic pattern and requires a value (e.g. click:@${id}="value")`);
+    }
+    resolved = {
+      id,
+      kind: "action", // Patterns act like actions/fields dynamically
+      role: pattern.itemRole,
+      name: text, // Use the provided dynamic text as the name to search for
+      locator: { role: pattern.itemRole, name: text }, // Occurrences not supported in dynamic patterns for now
+      sensitive: false,
+      agentFillable: true,
       requiresSensitive: false,
     };
   } else {
@@ -286,13 +312,16 @@ export function resolveFlow(screen: Screen, flowId: string, inputs: Record<strin
     if (parsed.kind !== "id") {
       throw new PwaNavError("invalid_args", `flow @${flowId} has a non-semantic step target`);
     }
-    const target = resolveTarget(screen, parsed.id, step.op);
+    const text = step.from === undefined ? undefined : inputs[step.from];
+    if (step.from !== undefined && text === undefined) {
+      throw new PwaNavError("invalid_args", `flow @${flowId} is missing an input for @${parsed.id}`);
+    }
+    const target = resolveTarget(screen, parsed.id, step.op, text);
     if (step.op === "click") {
       return { op: "click", target };
     }
-    const text = step.from === undefined ? undefined : inputs[step.from];
     if (text === undefined) {
-      throw new PwaNavError("invalid_args", `flow @${flowId} is missing an input for @${parsed.id}`);
+      throw new PwaNavError("invalid_args", `flow @${flowId} is missing an input for fill step @${parsed.id}`);
     }
     return { op: "fill", target, text };
   });

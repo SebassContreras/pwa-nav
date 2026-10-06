@@ -209,7 +209,20 @@
         "actions": { "type": "array", "items": { "$ref": "#/$defs/action" } },
         "links": { "type": "array", "items": { "$ref": "#/$defs/link" } },
         "flows": { "type": "array", "items": { "$ref": "#/$defs/flow" } },
+        "patterns": { "type": "array", "items": { "$ref": "#/$defs/entityPattern" } },
         "a11y": { "type": "array", "items": { "$ref": "#/$defs/a11yFinding" } }
+      }
+    },
+    "entityPattern": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "containerRole", "itemRole"],
+      "properties": {
+        "id": { "$ref": "#/$defs/slug" },
+        "containerRole": { "type": "string" },
+        "containerName": { "type": "string" },
+        "itemRole": { "type": "string" },
+        "actionTarget": { "type": "string", "pattern": "^@[a-z0-9]+(-[a-z0-9]+)*$" }
       }
     },
     "unmapped": {

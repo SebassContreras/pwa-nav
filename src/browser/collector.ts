@@ -40,6 +40,10 @@ export interface RawElement {
   dialog?: string;
   /** Enclosing container/landmark context (e.g. "dialog: Crear una publicación"). */
   container?: string;
+  /** Enclosing W3C container role (e.g. listbox, grid, region, combobox, menu) */
+  containerRole?: string;
+  /** Accessible name of the enclosing container */
+  containerName?: string;
 }
 
 export interface CollectOptions {
@@ -241,6 +245,21 @@ function collectImpl(root: Document, options?: CollectOptions): { items: RawElem
     return undefined;
   };
 
+  const containerOf = (node: Element): { role: string; name: string } | undefined => {
+    try {
+      const c = node.closest('[role="listbox"], [role="grid"], [role="region"], [role="combobox"], [role="menu"], [role="list"], ul, ol, table, tbody');
+      if (c !== null && c !== node) {
+        const cRole = roleOf(c) || c.localName;
+        const [cName] = nameOf(c, cRole);
+        if (["listbox", "grid", "region", "combobox", "menu", "list", "table", "rowgroup"].includes(cRole)) {
+          return { role: cRole, name: cName !== "" ? cName : cRole };
+        }
+      }
+    } catch {
+    }
+    return undefined;
+  };
+
   const isDisabled = (el: Element): boolean => {
     if (el.getAttribute("aria-disabled") === "true") return true;
     try {
@@ -305,6 +324,13 @@ function collectImpl(root: Document, options?: CollectOptions): { items: RawElem
       if (dName !== undefined) {
         item.dialog = dName;
         item.container = `dialog: ${dName}`;
+      } else {
+        const cInfo = containerOf(el);
+        if (cInfo !== undefined) {
+          item.containerRole = cInfo.role;
+          item.containerName = cInfo.name;
+          item.container = `${cInfo.role}: ${cInfo.name}`;
+        }
       }
       results.push(item);
       nodes.push(el);

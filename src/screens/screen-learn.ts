@@ -14,6 +14,7 @@ import {
   type ScreenAction,
   type ScreenField,
   type ScreenLink,
+  type EntityPattern,
 } from "./screen-map.js";
 
 export interface LearnPage {
@@ -140,20 +141,73 @@ export function learnScreen(raw: readonly RawElement[], page: LearnPage, options
   const submitNames = options.submitNames ?? new Set<string>();
 
   // Classify first (dropping ignored roles and hrefless links) so ids are assigned over survivors only.
-  const entries: { raw: RawElement; kind: Kind; link?: { href: string; external: boolean } }[] = [];
+  // Classify first (dropping ignored roles and hrefless links)
+  const allEntries: { raw: RawElement; kind: Kind; link?: { href: string; external: boolean } }[] = [];
   for (const element of raw) {
     const kind = kindOf(element.role);
-    if (kind === undefined) {
-      continue;
-    }
+    if (kind === undefined) continue;
     if (kind === "link") {
       const link = element.href === undefined ? undefined : classifyHref(element.href, page.url, page.appOrigin);
-      if (link !== undefined) {
-        entries.push({ raw: element, kind, link });
-      }
+      if (link !== undefined) allEntries.push({ raw: element, kind, link });
       continue;
     }
-    entries.push({ raw: element, kind });
+    allEntries.push({ raw: element, kind });
+  }
+
+  // Detect patterns: repeating elements within the same semantic container
+  const groups = new Map<string, typeof allEntries>();
+  for (const entry of allEntries) {
+    if (entry.raw.containerRole) {
+      const groupKey = `${entry.raw.containerRole}\t${entry.raw.containerName || ""}\t${entry.raw.role}`;
+      let group = groups.get(groupKey);
+      if (!group) {
+        group = [];
+        groups.set(groupKey, group);
+      }
+      group.push(entry);
+    }
+  }
+
+  const patterns: EntityPattern[] = [];
+  const patternKeys = new Set<string>();
+  const patternIds = new Set<string>();
+
+  for (const [key, group] of groups.entries()) {
+    if (group.length >= 2) {
+      patternKeys.add(key);
+      const [containerRole, containerName, itemRole] = key.split("\t");
+      
+      let baseId = slugify(`${containerName || containerRole}-item`);
+      if (!baseId) baseId = "item";
+      let id = baseId;
+      for (let suffix = 2; patternIds.has(id); suffix += 1) {
+        id = `${baseId}-${suffix.toString()}`;
+      }
+      patternIds.add(id);
+
+      patterns.push({
+        id,
+        containerRole: containerRole as string,
+        ...(containerName ? { containerName } : {}),
+        itemRole: itemRole as string,
+        actionTarget: `@${id}`,
+      });
+    }
+  }
+
+  // Filter out elements that are captured by patterns
+  const entries: typeof allEntries = [];
+  for (const entry of allEntries) {
+    let isPattern = false;
+    if (entry.raw.containerRole) {
+      const groupKey = `${entry.raw.containerRole}\t${entry.raw.containerName || ""}\t${entry.raw.role}`;
+      if (patternKeys.has(groupKey)) {
+        isPattern = true;
+      }
+    }
+    if (!isPattern) {
+      entries.push(entry);
+    }
   }
 
   const ids = deriveIds(entries.map((entry) => entry.raw), options.existingIds);
@@ -308,6 +362,7 @@ export function learnScreen(raw: readonly RawElement[], page: LearnPage, options
     actions: rootActions,
     links,
     flows: [],
+    ...(patterns.length > 0 ? { patterns } : {}),
     ...(findings.length > 0 ? { a11y: findings } : {}),
   };
   screen.fingerprint = fingerprintOf(screenElements(screen));

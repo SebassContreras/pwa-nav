@@ -49,7 +49,7 @@ export async function actTool(args: ActArgs, ctx: ToolContext): Promise<ToolOutc
     };
 
     const items: (
-      | { kind: "click"; id: string }
+      | { kind: "click"; id: string; text?: string }
       | { kind: "fill"; id: string; text: string }
       | { kind: "upload"; id: string; files: readonly string[] }
       | { kind: "flow"; flowId: string; inputs: string[] }
@@ -76,9 +76,9 @@ export async function actTool(args: ActArgs, ctx: ToolContext): Promise<ToolOutc
 
     for (const item of items) {
       if (item.kind === "click") {
-        planned.push({ intent: "click", target: resolveTarget(screen, item.id, "click") });
+        planned.push({ intent: "click", target: resolveTarget(screen, item.id, "click", item.text) });
       } else if (item.kind === "fill") {
-        planned.push({ intent: "fill", target: resolveTarget(screen, item.id, "fill"), text: item.text });
+        planned.push({ intent: "fill", target: resolveTarget(screen, item.id, "fill", item.text), text: item.text });
       } else if (item.kind === "upload") {
         planned.push({ intent: "upload", target: resolveTarget(screen, item.id, "upload"), files: item.files });
       } else {
