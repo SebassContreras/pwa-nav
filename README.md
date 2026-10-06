@@ -73,8 +73,11 @@ Before installing `pwa-nav`, ensure you have the following installed on your sys
 - **Node.js**: `v22.0.0` or higher (`node --version`).
 - **pnpm**: `v10.0.0` or higher (`pnpm --version`), or `npm` / `corepack`.
 
-### 2. Firefox & PWAsForFirefox
-PWAsForFirefox turns any website into an isolated, standalone desktop app running with its own dedicated profile. It consists of **two parts** (both are mandatory):
+### 2. Standard Firefox OR PWAsForFirefox
+You can use `pwa-nav` with your standard Firefox browser to navigate the general web, OR use it with isolated, dedicated apps via PWAsForFirefox.
+
+**For PWA Mode (Optional but recommended for dedicated apps):**
+PWAsForFirefox turns any website into an isolated, standalone desktop app running with its own dedicated profile. It consists of **two parts**:
 
 | Component | Purpose | Installation Link |
 |---|---|---|
@@ -83,11 +86,15 @@ PWAsForFirefox turns any website into an isolated, standalone desktop app runnin
 
 *Download the native installer for your OS (Windows: `.msi` or `.exe`, Linux: `.deb`/`.rpm`/Flatpak, macOS: `.pkg`).*
 
-### 3. Install Your Target PWA & Log In Once
-1. Open Firefox and navigate to your target web application (e.g. Google NotebookLM, Mercadona, Jira, or your local web app).
+### 3. Log In Manually
+**For Free Mode (Standard Firefox):**
+Run `pwa-nav open "https://target-website.com" --launch` and log in to your account.
+
+**For PWA Mode:**
+1. Open Firefox and navigate to your target web application.
 2. Click the **PWAsForFirefox install icon** in Firefox's address bar.
-3. Complete the installation prompt. The web app is now installed as a desktop PWA with its own dedicated profile.
-4. Launch the installed PWA from your Start Menu / desktop and **log in manually** (including 2FA if required).
+3. Complete the installation prompt.
+4. Launch the installed PWA and **log in manually** (including 2FA if required).
 
 ---
 

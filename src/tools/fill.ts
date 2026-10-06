@@ -19,14 +19,16 @@ export async function fillTool(args: FillArgs, ctx: ToolContext): Promise<ToolOu
   const ref = args.ref;
   const text = args.text;
 
-  let semanticId: string | undefined;
+  let semanticTarget: { id: string; query?: string; occurrence?: number; scopedId?: string } | undefined;
   let rawRef: string | undefined;
+  let displayTarget = "";
 
   if (target !== undefined) {
     if (ref !== undefined) throw invalid("pass either target or ref, not both.");
     const parsed = parseTarget(target.startsWith("@") ? target : `@${target}`);
     if (parsed.kind === "id") {
-      semanticId = parsed.id;
+      semanticTarget = parsed;
+      displayTarget = `@${parsed.id}`;
     } else {
       rawRef = parsed.ref;
     }
@@ -34,7 +36,8 @@ export async function fillTool(args: FillArgs, ctx: ToolContext): Promise<ToolOu
     if (ref.startsWith("@")) {
       const parsed = parseTarget(ref);
       if (parsed.kind === "id") {
-        semanticId = parsed.id;
+        semanticTarget = parsed;
+        displayTarget = `@${parsed.id}`;
       } else {
         rawRef = parsed.ref;
       }
@@ -47,7 +50,7 @@ export async function fillTool(args: FillArgs, ctx: ToolContext): Promise<ToolOu
 
   const backend = getBackend(effectiveCtx);
 
-  if (semanticId !== undefined) {
+  if (semanticTarget !== undefined) {
     if (effectiveCtx.mode === "offline") {
       throw invalid("semantic targets need the live backend (--backend bidi).");
     }
@@ -57,9 +60,9 @@ export async function fillTool(args: FillArgs, ctx: ToolContext): Promise<ToolOu
       armed: effectiveCtx.armed,
     };
     const screen = await screenAt(semCtx);
-    const resolved = resolveTarget(screen, semanticId, "fill");
+    const resolved = resolveTarget(screen, semanticTarget, "fill");
     const exec = await executeSemantic(semCtx, [{ intent: "fill", target: resolved, text }], "single");
-    return actionOutcome(effectiveCtx, backend, exec.nextSnapshotId, `@${semanticId}`);
+    return actionOutcome(effectiveCtx, backend, exec.nextSnapshotId, displayTarget);
   }
 
   // Raw ref execution

@@ -173,10 +173,11 @@ export function learnScreen(raw: readonly RawElement[], page: LearnPage, options
   const patternIds = new Set<string>();
 
   for (const [key, group] of groups.entries()) {
-    if (group.length >= 2) {
+    const [containerRole = "", containerName = "", itemRole = ""] = key.split("\t");
+    const isListContainer = ["list", "grid", "rowgroup", "treegrid", "table", "feed"].includes(containerRole);
+    
+    if (group.length >= 2 || (group.length === 1 && isListContainer)) {
       patternKeys.add(key);
-      const [containerRole, containerName, itemRole] = key.split("\t");
-      
       let baseId = slugify(`${containerName || containerRole}-item`);
       if (!baseId) baseId = "item";
       let id = baseId;
@@ -187,9 +188,9 @@ export function learnScreen(raw: readonly RawElement[], page: LearnPage, options
 
       patterns.push({
         id,
-        containerRole: containerRole as string,
+        containerRole,
         ...(containerName ? { containerName } : {}),
-        itemRole: itemRole as string,
+        itemRole,
         actionTarget: `@${id}`,
       });
     }

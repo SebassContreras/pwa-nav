@@ -42,6 +42,8 @@ import {
   tcpProbe,
   type PortProbe,
 } from "./pwa-runtime.js";
+import { launchStandardFirefox } from "./standard-runtime.js";
+import { join } from "node:path";
 
 export function endpointFor(port: number, host: string = DEFAULT_HOST): string {
   const shown = host.includes(":") && !host.startsWith("[") ? `[${host}]` : host;
@@ -65,6 +67,7 @@ export interface BidiBackendOptions {
   session?: TopLevelContextOptions;
   probe?: PortProbe;
   launchFn?: typeof launchPwa;
+  launchStandardFn?: typeof import("./standard-runtime.js").launchStandardFirefox;
   /** Test hook: runs after each completed armed op of a batch (index is zero-based). */
   onOpDone?: (index: number) => void | Promise<void>;
 }
@@ -216,15 +219,29 @@ export class BidiBackend implements Backend {
     if (!portOpen) {
       // Auto-launch if launch: true was passed OR if this is an installed PWA
       try {
-        await (this.options.launchFn ?? launchPwa)({
-          origin: new URL(target).origin,
-          port: this.port,
-          host: this.host,
-          env: this.env,
-          platform: this.platform,
-          ...(this.options.siteId === undefined ? {} : { siteId: this.options.siteId }),
-          ...(this.options.probe === undefined ? {} : { probe: this.options.probe }),
-        });
+        const origin = new URL(target).origin;
+        const isPwa = this.options.siteId !== undefined || installedOrigins.includes(origin);
+        
+        if (isPwa) {
+          await (this.options.launchFn ?? launchPwa)({
+            origin,
+            port: this.port,
+            host: this.host,
+            env: this.env,
+            platform: this.platform,
+            ...(this.options.siteId === undefined ? {} : { siteId: this.options.siteId }),
+            ...(this.options.probe === undefined ? {} : { probe: this.options.probe }),
+          });
+        } else {
+          await (this.options.launchStandardFn ?? launchStandardFirefox)({
+            targetUrl: target,
+            port: this.port,
+            profileDir: join(this.agentDir, "browser-profile"),
+            host: this.host,
+            platform: this.platform,
+            env: this.env,
+          });
+        }
       } catch (err) {
         if (this.options.launch === true) throw err;
         // Non-fatal if launch was not explicitly requested; run() will throw standard no_browser hint

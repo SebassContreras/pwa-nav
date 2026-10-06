@@ -97,8 +97,8 @@ Always follow this decision path to minimize token consumption and avoid breakin
 1. **Initial Screen Check**: Upon opening or navigating to an app, run `pwa_snapshot({ screen: true })` (or CLI `pwa-nav snapshot --screen`) to inspect the screen map.
 2. **Autonomous Learning on Unmapped Route**: If the screen is new or the route changed (`unmapped_screen`), the agent autonomously calls `pwa_learn({ locale: "es" })` (or CLI `snapshot --learn`) to register `screens/<app>.screens.json` without asking the user.
 3. **Continuous Screen Map Enrichment & Zero Loose Files**: Every snapshot or learn step collaborates in enriching `screens/<app>.screens.json` with newly observed fields, actions, flows, and nested modal trees (`opens`). No loose snapshot or ref files are created in the workspace (raw session data is strictly confined to `.agent/apps/<appSlug>/snapshot.json`).
-4. **Plan & Execute Semantic Actions**: Plan actions using stable `'@id'` targets or invoke journeys/flows:
-   - In MCP: `pwa_click({ target: "@submit-btn" })` or `pwa_fill({ target: "@query", text: "term" })`
+4. **Plan & Execute Semantic Actions**: Plan actions using stable `'@id'` targets, dynamic patterns (`@pattern(query)>@scopedId[occurrence]`), or invoke journeys/flows:
+   - In MCP: `pwa_click({ target: "@submit-btn" })` or `pwa_click({ target: "@contact(Fede)>@delete-btn" })`
    - In CLI: `pwa-nav click --snapshot <id> '@submit-btn'`
    - Batch: `pwa-nav act --snapshot <id> "fill:'@query'=laptop" "click:'@search-btn'"`
    - Journey: `pwa-nav journey checkout address="Main St 12"`

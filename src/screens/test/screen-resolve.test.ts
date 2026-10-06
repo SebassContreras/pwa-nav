@@ -94,7 +94,7 @@ function assertNoSecret(error: PwaNavError): void {
 
 test("parseTarget: refs, ids and invalid @ tokens", () => {
   assert.deepEqual(parseTarget("e12"), { kind: "ref", ref: "e12" });
-  assert.deepEqual(parseTarget("@sign-in"), { kind: "id", id: "sign-in" });
+  assert.deepEqual(parseTarget("@sign-in"), { kind: "id", id: "sign-in", query: undefined, scopedId: undefined, occurrence: undefined });
   for (const bad of ["@", "@Sign", "@a--b", "@-a", "@a b"]) {
     assert.equal(thrown(() => parseTarget(bad)).code, "invalid_args");
   }
@@ -109,8 +109,8 @@ test("isSemanticToken routes only the extended grammar", () => {
 });
 
 test("parseSemanticAct", () => {
-  assert.deepEqual(parseSemanticAct("click:@go"), { kind: "click", id: "go" });
-  assert.deepEqual(parseSemanticAct("fill:@q=a=b c"), { kind: "fill", id: "q", text: "a=b c" });
+  assert.deepEqual(parseSemanticAct("click:@go"), { kind: "click", target: { kind: "id", id: "go", query: undefined, scopedId: undefined, occurrence: undefined } });
+  assert.deepEqual(parseSemanticAct("fill:@q=a=b c"), { kind: "fill", target: { kind: "id", id: "q", query: undefined, scopedId: undefined, occurrence: undefined }, text: "a=b c" });
   assert.deepEqual(parseSemanticAct("flow:find"), { kind: "flow", flowId: "find" });
   for (const bad of ["fill:@q", "fill:@q=", "fill:@Q=x", "click:@", "flow:", "flow:Bad", "click:e1"]) {
     assert.equal(thrown(() => parseSemanticAct(bad)).code, "invalid_args");
@@ -130,14 +130,14 @@ test("parseFlowInputs", () => {
 });
 
 test("resolveTarget: field, action, link", () => {
-  const field = resolveTarget(search, "q", "fill");
+  const field = resolveTarget(search, { id: "q" }, "fill");
   assert.equal(field.kind, "field");
   assert.deepEqual(field.locator, loc("searchbox", "Query"));
-  const action = resolveTarget(search, "go", "click");
+  const action = resolveTarget(search, { id: "go" }, "click");
   assert.equal(action.kind, "action");
   assert.equal(action.locator.occurrence, 1);
   assert.equal(action.requiresSensitive, false);
-  const link = resolveTarget(search, "home", "click");
+  const link = resolveTarget(search, { id: "home" }, "click");
   assert.equal(link.kind, "link");
   assert.equal(link.role, "link");
 });
@@ -179,26 +179,26 @@ test("resolveTarget: targets inside action opensBranch", () => {
       },
     ],
   };
-  const nestedField = resolveTarget(withBranch, "filter-tag", "fill");
+  const nestedField = resolveTarget(withBranch, { id: "filter-tag" }, "fill");
   assert.equal(nestedField.kind, "field");
   assert.equal(nestedField.id, "filter-tag");
 
-  const nestedAction = resolveTarget(withBranch, "apply-filters", "click");
+  const nestedAction = resolveTarget(withBranch, { id: "apply-filters" }, "click");
   assert.equal(nestedAction.kind, "action");
   assert.equal(nestedAction.id, "apply-filters");
 });
 
 test("resolveTarget: error codes", () => {
-  assert.equal(thrown(() => resolveTarget(search, "nope", "click")).code, "unknown_target");
-  const fillAction = thrown(() => resolveTarget(search, "go", "fill"));
+  assert.equal(thrown(() => resolveTarget(search, { id: "nope" }, "click")).code, "unknown_target");
+  const fillAction = thrown(() => resolveTarget(search, { id: "go" }, "fill"));
   assert.equal(fillAction.code, "invalid_args");
   assert.equal(fillAction.message, "cannot fill action @go");
-  assert.equal(thrown(() => resolveTarget(search, "home", "fill")).code, "invalid_args");
-  assert.equal(thrown(() => resolveTarget(search, "q", "click")).code, "invalid_args");
+  assert.equal(thrown(() => resolveTarget(search, { id: "home" }, "fill")).code, "invalid_args");
+  assert.equal(thrown(() => resolveTarget(search, { id: "q" }, "click")).code, "invalid_args");
 });
 
 test("unknown_target hint lists ids and truncates", () => {
-  const hint = thrown(() => resolveTarget(search, "nope", "click")).hint ?? "";
+  const hint = thrown(() => resolveTarget(search, { id: "nope" }, "click")).hint ?? "";
   assert.match(hint, /@q, @go, @home/);
   const many: Screen = {
     ...search,
@@ -210,20 +210,20 @@ test("unknown_target hint lists ids and truncates", () => {
       locator: loc("link", "n", i),
     })),
   };
-  const long = thrown(() => resolveTarget(many, "nope", "click")).hint ?? "";
+  const long = thrown(() => resolveTarget(many, { id: "nope" }, "click")).hint ?? "";
   assert.match(long, /12 more omitted/);
   assert.ok(!long.includes("@l29"));
 });
 
 test("demo-app: sensitive gate", async () => {
   const demo = await demoScreen();
-  const refusal = thrown(() => resolveTarget(demo, "password", "fill"));
+  const refusal = thrown(() => resolveTarget(demo, { id: "password" }, "fill"));
   assert.equal(refusal.code, "sensitive_target");
   assert.equal(refusal.message, "refusing to fill sensitive field @password");
   assert.equal(refusal.hint, "the user must fill it by hand; the agent never types credentials");
-  assert.equal(resolveTarget(demo, "email", "fill").id, "email");
-  assert.equal(resolveTarget(demo, "sign-in", "click").requiresSensitive, true);
-  assert.equal(resolveTarget(demo, "show-password", "click").requiresSensitive, false);
+  assert.equal(resolveTarget(demo, { id: "email" }, "fill").id, "email");
+  assert.equal(resolveTarget(demo, { id: "sign-in" }, "click").requiresSensitive, true);
+  assert.equal(resolveTarget(demo, { id: "show-password" }, "click").requiresSensitive, false);
 });
 
 test("agentFillable=false alone is refused", () => {
@@ -231,7 +231,7 @@ test("agentFillable=false alone is refused", () => {
     ...search,
     fields: search.fields.map((f) => ({ ...f, agentFillable: false })),
   };
-  assert.equal(thrown(() => resolveTarget(locked, "q", "fill")).code, "sensitive_target");
+  assert.equal(thrown(() => resolveTarget(locked, { id: "q" }, "fill")).code, "sensitive_target");
 });
 
 test("resolveFlow: valid flow on non-humanOnly screen", () => {
@@ -281,12 +281,12 @@ test("resolveFlow: fill step bound to a sensitive field is refused", () => {
 
 test("describeResolved omits values", async () => {
   const demo = await demoScreen();
-  const line = describeResolved(resolveTarget(demo, "sign-in", "click"), "click");
+  const line = describeResolved(resolveTarget(demo, { id: "sign-in" }, "click"), "click");
   assert.match(line, /click @sign-in: button "Sign in"/);
   assert.match(line, /occurrence 0/);
   assert.match(line, /sensitive/);
   assert.equal(
-    describeResolved(resolveTarget(search, "q", "fill"), "fill"),
+    describeResolved(resolveTarget(search, { id: "q" }, "fill"), "fill"),
     'fill @q: searchbox "Query" (field, occurrence 0)',
   );
 });

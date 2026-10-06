@@ -17,21 +17,25 @@ export async function clickTool(args: ClickArgs, ctx: ToolContext): Promise<Tool
   const target = args.target;
   const ref = args.ref;
 
-  let semanticId: string | undefined;
-  let semanticValue: string | undefined;
+  let semanticTarget: { id: string; query?: string; occurrence?: number; scopedId?: string } | undefined;
   let rawRef: string | undefined;
+  let displayTarget = "";
 
   if (target !== undefined) {
     if (ref !== undefined) throw invalid("pass either target or ref, not both.");
     let token = target.startsWith("@") ? target : `@${target}`;
+    // legacy support for target="id=value"
     const eq = token.indexOf("=");
+    let fallbackQuery: string | undefined;
     if (eq >= 0) {
-      semanticValue = token.slice(eq + 1);
+      fallbackQuery = token.slice(eq + 1);
       token = token.slice(0, eq);
     }
     const parsed = parseTarget(token);
     if (parsed.kind === "id") {
-      semanticId = parsed.id;
+      if (parsed.query === undefined && fallbackQuery !== undefined) parsed.query = fallbackQuery;
+      semanticTarget = parsed;
+      displayTarget = `@${parsed.id}`;
     } else {
       rawRef = parsed.ref;
     }
@@ -39,7 +43,8 @@ export async function clickTool(args: ClickArgs, ctx: ToolContext): Promise<Tool
     if (ref.startsWith("@")) {
       const parsed = parseTarget(ref);
       if (parsed.kind === "id") {
-        semanticId = parsed.id;
+        semanticTarget = parsed;
+        displayTarget = `@${parsed.id}`;
       } else {
         rawRef = parsed.ref;
       }
@@ -52,7 +57,7 @@ export async function clickTool(args: ClickArgs, ctx: ToolContext): Promise<Tool
 
   const backend = getBackend(effectiveCtx);
 
-  if (semanticId !== undefined) {
+  if (semanticTarget !== undefined) {
     if (effectiveCtx.mode === "offline") {
       throw invalid("semantic targets need the live backend (--backend bidi).");
     }
@@ -62,10 +67,10 @@ export async function clickTool(args: ClickArgs, ctx: ToolContext): Promise<Tool
       armed: effectiveCtx.armed,
     };
     const screen = await screenAt(semCtx);
-    const resolved = resolveTarget(screen, semanticId, "click", semanticValue);
+    const resolved = resolveTarget(screen, semanticTarget, "click");
     setLastActiveAction({ id: resolved.id, name: resolved.name, role: resolved.role });
     const exec = await executeSemantic(semCtx, [{ intent: "click", target: resolved }], "single");
-    return actionOutcome(effectiveCtx, backend, exec.nextSnapshotId, `@${semanticId}`);
+    return actionOutcome(effectiveCtx, backend, exec.nextSnapshotId, displayTarget);
   }
 
   // Raw ref execution

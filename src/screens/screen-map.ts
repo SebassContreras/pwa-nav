@@ -129,6 +129,8 @@ export interface EntityPattern {
   containerName?: string;
   itemRole: string;
   actionTarget?: string;
+  actions?: ScreenAction[];
+  fields?: ScreenField[];
 }
 
 export interface Screen {
@@ -227,7 +229,11 @@ export function screenElements(screen: Screen): { role: string; name: string }[]
     ...screen.fields.map(({ role, name }) => ({ role, name })),
     ...screen.actions.map(({ role, name }) => ({ role, name })),
     ...screen.links.map(({ name }) => ({ role: "link", name })),
-    ...(screen.patterns ?? []).map((p) => ({ role: p.containerRole, name: p.containerName ?? "" })),
+    ...(screen.patterns ?? []).flatMap((p) => [
+      { role: p.containerRole, name: p.containerName ?? "" },
+      ...(p.fields ?? []).map(({ role, name }) => ({ role, name })),
+      ...(p.actions ?? []).map(({ role, name }) => ({ role, name }))
+    ]),
   ];
   const collectOpens = (branch: OpensBranch): void => {
     if (branch.fields) result.push(...branch.fields.map(({ role, name }) => ({ role, name })));
@@ -241,6 +247,11 @@ export function screenElements(screen: Screen): { role: string; name: string }[]
   };
   for (const action of screen.actions) {
     if (action.opens) collectOpens(action.opens);
+  }
+  for (const pattern of screen.patterns ?? []) {
+    for (const action of pattern.actions ?? []) {
+      if (action.opens) collectOpens(action.opens);
+    }
   }
   return result;
 }

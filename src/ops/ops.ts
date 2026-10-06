@@ -783,41 +783,66 @@ export interface AuthRelayResult {
 }
 
 export async function performAuthRelay(options: AuthRelayOptions): Promise<AuthRelayResult> {
-  const pwaDir = firefoxPwaDir(process.platform, process.env);
-  const cfg = await readConfig(pwaDir);
-  const target = options.appOrUrl ?? (cfg.sites[0]?.name || cfg.sites[0]?.origin);
-  if (!target) {
-    throw new PwaNavError("no_browser", "no installed Firefox PWA found to authenticate");
+  const isPwaOnly = options.appOrUrl && options.appOrUrl !== "standard";
+  let targetUrl = options.appOrUrl ?? "https://google.com";
+  let site;
+  let pwaDir;
+
+  try {
+    pwaDir = firefoxPwaDir(process.platform, process.env);
+    const cfg = await readConfig(pwaDir);
+    targetUrl = options.appOrUrl ?? (cfg.sites[0]?.name || cfg.sites[0]?.origin) ?? targetUrl;
+    site = findSite(cfg, targetUrl);
+  } catch (err) {
+    if (isPwaOnly) {
+      // Just fallback to standard using the provided URL
+      targetUrl = options.appOrUrl!;
+    }
   }
-  const site = findSite(cfg, target);
 
   if (options.action === "clean") {
-    await cleanDebuggingPortConfigured();
-    const res = await launchPwaClean({ origin: site.origin, siteId: site.ulid });
-    const msg = `PWA '${site.name ?? site.origin}' launched in clean mode (no debugging port). Please sign in manually in the browser window. When finished, re-run with '--debug' or call pwa_auth({ action: 'debug' }) to resume automation.`;
-    if (options.quiet !== true) {
-      console.log(msg);
+    if (site) {
+      await cleanDebuggingPortConfigured();
+      const res = await launchPwaClean({ origin: site.origin, siteId: site.ulid });
+      const msg = `PWA '${site.name ?? site.origin}' launched in clean mode (no debugging port). Please sign in manually in the browser window. When finished, re-run with '--debug' or call pwa_auth({ action: 'debug' }) to resume automation.`;
+      if (options.quiet !== true) console.log(msg);
+      return { status: "clean_started", message: msg, command: res.command, siteId: site.ulid };
+    } else {
+      // Launch standard firefox in clean mode (without remote debugging port)
+      const { launchStandardFirefox } = await import("../browser/standard-runtime.js");
+      const { join } = await import("node:path");
+      const agentDir = resolveAgentDir();
+      await launchStandardFirefox({
+        targetUrl,
+        port: 0, // Ignored since we won't pass remote debugging port in clean mode, but wait we need to update standard-runtime to skip port if 0 or just not use it. Let's just use a random unused port for standard? No, standard-runtime uses the port unconditionally. Let's fix that later, or just pass a port and let it run. Wait, clean mode means we don't connect. So passing a port doesn't hurt as long as no client connects, but standard-runtime might complain.
+        // Actually, just let the user login in standard.
+        profileDir: join(agentDir, "browser-profile"),
+      });
+      const msg = `Standard Firefox launched for '${targetUrl}'. Please sign in manually in the browser window.`;
+      if (options.quiet !== true) console.log(msg);
+      return { status: "clean_started", message: msg };
     }
-    return {
-      status: "clean_started",
-      message: msg,
-      command: res.command,
-      siteId: site.ulid,
-    };
   }
 
   // action === "debug"
   const port = options.port ?? 9222;
-  const res = await launchPwa({ origin: site.origin, siteId: site.ulid, port });
-  const msg = `PWA '${site.name ?? site.origin}' restarted in debug mode on port ${String(res.port)}. Session preserved from clean login. Ready for automation.`;
-  if (options.quiet !== true) {
-    console.log(msg);
+  if (site) {
+    const res = await launchPwa({ origin: site.origin, siteId: site.ulid, port });
+    const msg = `PWA '${site.name ?? site.origin}' restarted in debug mode on port ${String(res.port)}. Session preserved from clean login. Ready for automation.`;
+    if (options.quiet !== true) console.log(msg);
+    return { status: "debug_resumed", message: msg, command: res.command, siteId: site.ulid };
+  } else {
+    const { launchStandardFirefox } = await import("../browser/standard-runtime.js");
+    const { join } = await import("node:path");
+    const agentDir = resolveAgentDir();
+    await launchStandardFirefox({
+      targetUrl,
+      port,
+      profileDir: join(agentDir, "browser-profile"),
+    });
+    const msg = `Standard Firefox restarted in debug mode on port ${String(port)}. Ready for automation.`;
+    if (options.quiet !== true) console.log(msg);
+    return { status: "debug_resumed", message: msg };
   }
-  return {
-    status: "debug_resumed",
-    message: msg,
-    command: res.command,
-    siteId: site.ulid,
-  };
 }
 

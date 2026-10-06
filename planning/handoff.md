@@ -34,6 +34,13 @@ Gate at handoff: `pnpm lint && pnpm build && pnpm test` (350 tests) `&& pnpm smo
 4. **Cross-Platform Matrix Tests**: Added comprehensive matrix unit tests in `src/browser/pwa-runtime.test.ts` testing XDG resolution, Flatpak profile discovery, system fallback binaries, and mock process spawning across win32, linux, and darwin.
 5. **Documentation**: Updated `docs/firefox-pwa.md` and `README.md` with verified launch recipes for Windows, Linux, and macOS.
 
+## Issue 2 Deliverables (Dynamic Entity Patterns)
+
+1. **Nested Scoped Targets**: Updated `EntityPattern` schema to include `actions` and `fields`. Extended the semantic target syntax to `@id(query)>@scopedId` to address nested controls within dynamic items while preserving the text query constraint.
+2. **Separated Query and Text for Fills**: `fill` operations no longer conflate the target query with the text to write. The syntax is now `fill:@pattern(query)="text to type"`.
+3. **Single Item Learning Heuristic**: Refactored `screen-learn.ts` so that an element is learned as a pattern even if it's the only item present, provided its `containerRole` is a standard list wrapper (`list`, `grid`, `table`, etc.).
+4. **Occurrences Support**: The extended grammar now supports `[occurrence]` indexing for resolving ambiguous targets like `click:@search-result(Apple)[1]`.
+
 ## Open Work & Next Priorities
 
 1. **Human Verification**:

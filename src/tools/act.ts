@@ -1,6 +1,6 @@
 import { parseActOp, performAct } from "../ops/ops.js";
 import type { ActOp } from "../ops/ops.js";
-import { isSemanticToken, parseFlowInputs, parseSemanticAct, resolveFlow, resolveTarget } from "../screens/screen-resolve.js";
+import { isSemanticToken, parseFlowInputs, parseSemanticAct, resolveFlow, resolveTarget, type ParsedTarget } from "../screens/screen-resolve.js";
 import { actionOutcome, getBackend } from "./common.js";
 import { executeSemantic, screenAt, type Planned, type SemanticContext } from "./semantic-exec.js";
 import { invalid, NO_INPUT_LINE, type ToolContext, type ToolOutcome } from "./types.js";
@@ -49,9 +49,9 @@ export async function actTool(args: ActArgs, ctx: ToolContext): Promise<ToolOutc
     };
 
     const items: (
-      | { kind: "click"; id: string; text?: string }
-      | { kind: "fill"; id: string; text: string }
-      | { kind: "upload"; id: string; files: readonly string[] }
+      | { kind: "click"; target: ParsedTarget }
+      | { kind: "fill"; target: ParsedTarget; text: string }
+      | { kind: "upload"; target: ParsedTarget; files: readonly string[] }
       | { kind: "flow"; flowId: string; inputs: string[] }
     )[] = [];
 
@@ -76,11 +76,14 @@ export async function actTool(args: ActArgs, ctx: ToolContext): Promise<ToolOutc
 
     for (const item of items) {
       if (item.kind === "click") {
-        planned.push({ intent: "click", target: resolveTarget(screen, item.id, "click", item.text) });
+        if (item.target.kind !== "id") throw invalid("expected id target");
+        planned.push({ intent: "click", target: resolveTarget(screen, item.target, "click") });
       } else if (item.kind === "fill") {
-        planned.push({ intent: "fill", target: resolveTarget(screen, item.id, "fill", item.text), text: item.text });
+        if (item.target.kind !== "id") throw invalid("expected id target");
+        planned.push({ intent: "fill", target: resolveTarget(screen, item.target, "fill"), text: item.text });
       } else if (item.kind === "upload") {
-        planned.push({ intent: "upload", target: resolveTarget(screen, item.id, "upload"), files: item.files });
+        if (item.target.kind !== "id") throw invalid("expected id target");
+        planned.push({ intent: "upload", target: resolveTarget(screen, item.target, "upload"), files: item.files });
       } else {
         let flowInputs: Record<string, string> = {};
         let parseError: PwaNavError | undefined;

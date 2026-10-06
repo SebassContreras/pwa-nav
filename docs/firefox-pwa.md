@@ -6,6 +6,20 @@ Status: validated by unit tests with a fake BiDi server; real-browser E2E is opt
 
 ## Launch recipe
 
+pwa-nav supports two modes of operation:
+1. **Free Mode (Default):** Uses the standard OS Firefox to navigate the web with a dedicated agent profile.
+2. **PWA Mode (Legacy):** Drives an installed Firefox PWA.
+
+### Free Mode (Standard Firefox)
+`pwa-nav open <url> --launch` automatically finds your standard Firefox and launches it using a fresh profile isolated in `.agent/browser-profile`. No PWAsForFirefox installation required.
+
+| OS | Default Binary Locations |
+|---|---|
+| Windows | `%ProgramFiles%\Mozilla Firefox\firefox.exe` |
+| Linux | `/usr/bin/firefox` or `/snap/bin/firefox` |
+| macOS | `/Applications/Firefox.app/Contents/MacOS/firefox` |
+
+### PWA Mode (PWAsForFirefox)
 The PWA runtime must be started with `--remote-debugging-port`. `firefoxpwa site launch <id> -- --remote-debugging-port` DROPS the flag, so spawn the runtime directly.
 
 | OS | Runtime / data dir | Status |

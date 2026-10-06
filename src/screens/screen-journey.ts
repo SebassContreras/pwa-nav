@@ -3,7 +3,7 @@
 import { Ajv2020 } from "ajv/dist/2020.js";
 import { PwaNavError } from "../core/errors.js";
 import type { Screen, ScreenMap, Journey, JourneyStep } from "./screen-map.js";
-import { resolveTarget, resolveFlow, type ResolvedStep } from "./screen-resolve.js";
+import { parseTarget, resolveTarget, resolveFlow, type ResolvedStep } from "./screen-resolve.js";
 
 export interface ResolvedJourneyStep {
   screenId: string;
@@ -146,39 +146,47 @@ export function resolveJourneyStep(
   }
 
   if (actionStr.startsWith("click:@")) {
-    const targetId = actionStr.slice("click:@".length);
-    const target = resolveTarget(screen, targetId, "click");
+    const targetStr = actionStr.slice("click:".length);
+    const parsed = parseTarget(targetStr);
+    if (parsed.kind !== "id") throw new PwaNavError("invalid_args", "expected semantic id");
+    const target = resolveTarget(screen, parsed, "click");
     return {
       screenId: step.screenId,
-      actionSummary: `click @${targetId}`,
+      actionSummary: `click @${parsed.id}`,
       expectScreen: step.expectScreen,
       resolvedSteps: [{ op: "click", target }],
     };
   }
 
   if (actionStr.startsWith("fill:@")) {
-    const remainder = actionStr.slice("fill:@".length);
+    const remainder = actionStr.slice("fill:".length);
     const eqIndex = remainder.indexOf("=");
     if (eqIndex >= 0) {
-      const targetId = remainder.slice(0, eqIndex);
+      const targetStr = remainder.slice(0, eqIndex);
       const text = remainder.slice(eqIndex + 1);
-      const target = resolveTarget(screen, targetId, "fill");
+      const parsed = parseTarget(targetStr);
+      if (parsed.kind !== "id") throw new PwaNavError("invalid_args", "expected semantic id");
+      if (parsed.query === undefined) parsed.query = text; // fallback for legacy
+      const target = resolveTarget(screen, parsed, "fill");
       return {
         screenId: step.screenId,
-        actionSummary: `fill @${targetId}`,
+        actionSummary: `fill @${parsed.id}`,
         expectScreen: step.expectScreen,
         resolvedSteps: [{ op: "fill", target, text }],
       };
     } else {
-      const targetId = remainder;
-      const text = stepInputs[targetId] ?? stepInputs["text"] ?? stepInputs["value"];
+      const targetStr = remainder;
+      const parsed = parseTarget(targetStr);
+      if (parsed.kind !== "id") throw new PwaNavError("invalid_args", "expected semantic id");
+      const text = stepInputs[parsed.id] ?? stepInputs["text"] ?? stepInputs["value"];
       if (text === undefined) {
-        throw new PwaNavError("invalid_args", `missing fill text for target @${targetId} in journey step`);
+        throw new PwaNavError("invalid_args", `missing fill text for target @${parsed.id} in journey step`);
       }
-      const target = resolveTarget(screen, targetId, "fill");
+      if (parsed.query === undefined) parsed.query = text;
+      const target = resolveTarget(screen, parsed, "fill");
       return {
         screenId: step.screenId,
-        actionSummary: `fill @${targetId}`,
+        actionSummary: `fill @${parsed.id}`,
         expectScreen: step.expectScreen,
         resolvedSteps: [{ op: "fill", target, text }],
       };
@@ -186,14 +194,17 @@ export function resolveJourneyStep(
   }
 
   if (actionStr.startsWith("@")) {
-    const targetId = actionStr.slice(1);
+    const parsed = parseTarget(actionStr);
+    if (parsed.kind !== "id") throw new PwaNavError("invalid_args", "expected semantic id");
+    const targetId = parsed.id;
     const field = screen.fields.find((f) => f.id === targetId);
     if (field !== undefined) {
       const text = stepInputs[targetId] ?? stepInputs["text"] ?? stepInputs["value"];
       if (text === undefined) {
         throw new PwaNavError("invalid_args", `missing fill text for target @${targetId} in journey step`);
       }
-      const target = resolveTarget(screen, targetId, "fill");
+      if (parsed.query === undefined) parsed.query = text;
+      const target = resolveTarget(screen, parsed, "fill");
       return {
         screenId: step.screenId,
         actionSummary: `fill @${targetId}`,
@@ -201,7 +212,7 @@ export function resolveJourneyStep(
         resolvedSteps: [{ op: "fill", target, text }],
       };
     } else {
-      const target = resolveTarget(screen, targetId, "click");
+      const target = resolveTarget(screen, parsed, "click");
       return {
         screenId: step.screenId,
         actionSummary: `click @${targetId}`,

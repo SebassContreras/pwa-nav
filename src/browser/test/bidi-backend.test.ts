@@ -216,12 +216,16 @@ test("open --launch: launches only when the port is closed, then navigates", asy
     launched.push(`${options.origin} ${String(options.port)}`);
     return Promise.resolve({ siteId: "S", port: options.port, command: "cmd", pid: undefined });
   };
+  const launchStandardFn: NonNullable<BidiBackendOptions["launchStandardFn"]> = (options) => {
+    launched.push(`${options.targetUrl} ${String(options.port)}`);
+    return Promise.resolve({} as any);
+  };
   await withEnv(
     async (e) => {
       await e.backend.open("https://app.test/home", { allowOrigin: true });
-      assert.deepEqual(launched, [`https://app.test ${String(e.server.port)}`]);
+      assert.deepEqual(launched, [`https://app.test/home ${String(e.server.port)}`]);
     },
-    { launch: true, launchFn, probe: () => Promise.resolve(false) },
+    { launch: true, launchFn, launchStandardFn, probe: () => Promise.resolve(false) },
   );
   launched.length = 0;
   await withEnv(
@@ -229,7 +233,7 @@ test("open --launch: launches only when the port is closed, then navigates", asy
       await e.backend.open("https://app.test/home", { allowOrigin: true });
       assert.deepEqual(launched, []);
     },
-    { launch: true, launchFn, probe: () => Promise.resolve(true) },
+    { launch: true, launchFn, launchStandardFn, probe: () => Promise.resolve(true) },
   );
 });
 

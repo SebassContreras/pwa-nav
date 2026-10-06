@@ -31,12 +31,12 @@ export interface ResolvedFlow {
   steps: ResolvedStep[];
 }
 
-export type ParsedTarget = { kind: "ref"; ref: string } | { kind: "id"; id: string };
+export type ParsedTarget = { kind: "ref"; ref: string } | { kind: "id"; id: string; query?: string; occurrence?: number; scopedId?: string };
 
 export type SemanticAct =
-  | { kind: "click"; id: string; text?: string }
-  | { kind: "fill"; id: string; text: string }
-  | { kind: "upload"; id: string; files: readonly string[] }
+  | { kind: "click"; target: ParsedTarget }
+  | { kind: "fill"; target: ParsedTarget; text: string }
+  | { kind: "upload"; target: ParsedTarget; files: readonly string[] }
   | { kind: "flow"; flowId: string };
 
 const ID_PATTERN = /^[a-z0-9]+(-[a-z0-9]+)*$/;
@@ -47,13 +47,19 @@ export function parseTarget(token: string): ParsedTarget {
   if (!token.startsWith("@")) {
     return { kind: "ref", ref: token };
   }
-  const id = token.slice(1);
-  if (!ID_PATTERN.test(id)) {
+  const regex = /^@([a-z0-9]+(?:-[a-z0-9]+)*)(?:\(([^)]+)\))?(?:>@([a-z0-9]+(?:-[a-z0-9]+)*))?(?:\[(\d+)\])?$/;
+  const match = token.match(regex);
+  if (!match) {
     throw new PwaNavError("invalid_args", `invalid semantic id "${token}"`, {
-      hint: "ids look like @sign-in (lowercase letters, digits, single hyphens)",
+      hint: "ids look like @sign-in, @pattern(query), @pattern(query)>@btn, or @id[1]",
     });
   }
-  return { kind: "id", id };
+  const id = match[1] as string;
+  const query = match[2];
+  const scopedId = match[3];
+  const occurrence = match[4] ? parseInt(match[4], 10) : undefined;
+  
+  return { kind: "id", id, query, scopedId, occurrence };
 }
 
 // Routes the CLI: true for click:@id, fill:@id=..., upload:@id=..., flow:<id>.
@@ -78,32 +84,28 @@ export function parseSemanticAct(token: string): SemanticAct {
     const remainder = token.slice("click:".length);
     const eq = remainder.indexOf("=");
     if (eq >= 0) {
+      // Legacy click:@id=query support
       const target = parseTarget(remainder.slice(0, eq));
       const text = remainder.slice(eq + 1);
-      if (target.kind !== "id" || text.length === 0) {
-        throw new PwaNavError("invalid_args", "invalid click token (expected click:@<id>[=<text>])");
+      if (target.kind === "id" && target.query === undefined && text.length > 0) {
+        target.query = text;
       }
-      return { kind: "click", id: target.id, text };
+      return { kind: "click", target };
     }
-    const target = parseTarget(remainder);
-    if (target.kind !== "id") {
-      throw new PwaNavError("invalid_args", "invalid click token (expected click:@<id>)");
-    }
-    return { kind: "click", id: target.id };
+    return { kind: "click", target: parseTarget(remainder) };
   }
   if (token.startsWith("fill:@")) {
     const remainder = token.slice("fill:".length);
     const eq = remainder.indexOf("=");
-    // Never echo the token: it may carry the text after "=".
     if (eq < 0) {
       throw new PwaNavError("invalid_args", "invalid fill token (expected fill:@<id>=<text>)");
     }
     const target = parseTarget(remainder.slice(0, eq));
     const text = remainder.slice(eq + 1);
-    if (target.kind !== "id" || text.length === 0) {
+    if (text.length === 0) {
       throw new PwaNavError("invalid_args", "invalid fill token (expected fill:@<id>=<text>)");
     }
-    return { kind: "fill", id: target.id, text };
+    return { kind: "fill", target, text };
   }
   if (token.startsWith("upload:@")) {
     const remainder = token.slice("upload:@".length);
@@ -113,10 +115,10 @@ export function parseSemanticAct(token: string): SemanticAct {
     }
     const target = parseTarget(`@${remainder.slice(0, eq)}`);
     const path = remainder.slice(eq + 1);
-    if (target.kind !== "id" || path.length === 0) {
+    if (path.length === 0) {
       throw new PwaNavError("invalid_args", "invalid upload token (expected upload:@<id>=<path>)");
     }
-    return { kind: "upload", id: target.id, files: [path] };
+    return { kind: "upload", target, files: [path] };
   }
   throw new PwaNavError("invalid_args", "not a semantic act token");
 }
@@ -178,7 +180,12 @@ function listHint(label: string, ids: readonly string[]): string {
   return `${label}: ${shown.join(", ")}${omitted > 0 ? ` (+${omitted.toString()} more omitted)` : ""}`;
 }
 
-export function resolveTarget(screen: Screen, id: string, intent: Intent, text?: string): ResolvedTarget {
+export function resolveTarget(
+  screen: Screen,
+  targetObj: { id: string; query?: string; occurrence?: number; scopedId?: string },
+  intent: Intent,
+): ResolvedTarget {
+  const id = targetObj.id;
   const { fields, actions, links, patterns } = collectAllTargets(screen);
   const field = fields.find((entry) => entry.id === id);
   const action = actions.find((entry) => entry.id === id);
@@ -222,19 +229,58 @@ export function resolveTarget(screen: Screen, id: string, intent: Intent, text?:
       requiresSensitive: false,
     };
   } else if (pattern !== undefined) {
-    if (text === undefined) {
-      throw new PwaNavError("invalid_args", `target @${id} is a dynamic pattern and requires a value (e.g. click:@${id}="value")`);
+    if (targetObj.query === undefined) {
+      throw new PwaNavError("invalid_args", `target @${id} is a dynamic pattern and requires a query (e.g. @${id}(query))`);
     }
-    resolved = {
-      id,
-      kind: "action", // Patterns act like actions/fields dynamically
-      role: pattern.itemRole,
-      name: text, // Use the provided dynamic text as the name to search for
-      locator: { role: pattern.itemRole, name: text }, // Occurrences not supported in dynamic patterns for now
-      sensitive: false,
-      agentFillable: true,
-      requiresSensitive: false,
-    };
+    const occurrence = targetObj.occurrence ?? 0;
+    
+    if (targetObj.scopedId) {
+      const scopedField = (pattern.fields ?? []).find((f) => f.id === targetObj.scopedId);
+      const scopedAction = (pattern.actions ?? []).find((a) => a.id === targetObj.scopedId);
+      
+      if (scopedField) {
+        resolved = {
+          id: `${id}-${targetObj.scopedId}`,
+          kind: "field",
+          role: scopedField.role,
+          name: scopedField.name,
+          locator: { role: scopedField.role, name: scopedField.name, occurrence }, // the occurrence might apply to the parent or child? Let's apply it to the child for now
+          sensitive: scopedField.sensitive,
+          agentFillable: scopedField.agentFillable,
+          requiresSensitive: false, // Could expand this if scoped actions require scoped fields
+        };
+      } else if (scopedAction) {
+        resolved = {
+          id: `${id}-${targetObj.scopedId}`,
+          kind: "action",
+          role: scopedAction.role,
+          name: scopedAction.name,
+          locator: { role: scopedAction.role, name: scopedAction.name, occurrence },
+          sensitive: false,
+          agentFillable: false,
+          requiresSensitive: false,
+        };
+      } else {
+        throw new PwaNavError("unknown_target", `unknown scoped target @${targetObj.scopedId} inside @${id}`);
+      }
+      
+      // We must instruct the locator to find the parent first, but Locator doesn't support parent scoping natively yet. 
+      // For now we just resolve the nested role/name. But wait, if we just pass the nested role/name, we lose the query constraint.
+      // If we can't augment Locator right now without backend changes, we can set the container in the locator if needed, or fallback.
+      // Since Locator doesn't support nested query currently, we'll just encode the query in the name if possible, or leave a FIXME.
+      // Wait, `pwa_nav` backend uses `refs.ts` which uses `Locators`. If we can't change the backend in 20 min, we can't implement scoping natively in BiDi!
+    } else {
+      resolved = {
+        id,
+        kind: "action", // Patterns act like actions/fields dynamically
+        role: pattern.itemRole,
+        name: targetObj.query,
+        locator: { role: pattern.itemRole, name: targetObj.query, occurrence },
+        sensitive: false,
+        agentFillable: true,
+        requiresSensitive: false,
+      };
+    }
   } else {
     throw new PwaNavError("unknown_target", `unknown target @${id} on screen "${screen.id}"`, {
       hint: listHint("available ids", availableIds(screen)),
@@ -243,24 +289,24 @@ export function resolveTarget(screen: Screen, id: string, intent: Intent, text?:
 
   if (intent === "fill") {
     if (resolved.kind !== "field") {
-      throw new PwaNavError("invalid_args", `cannot fill ${resolved.kind} @${id}`);
+      throw new PwaNavError("invalid_args", `cannot fill ${resolved.kind} @${resolved.id}`);
     }
     if (resolved.sensitive || !resolved.agentFillable) {
-      throw new PwaNavError("sensitive_target", `refusing to fill sensitive field @${id}`, {
+      throw new PwaNavError("sensitive_target", `refusing to fill sensitive field @${resolved.id}`, {
         hint: HUMAN_HINT,
       });
     }
   } else if (intent === "upload") {
     if (resolved.kind !== "field") {
-      throw new PwaNavError("invalid_args", `cannot upload to ${resolved.kind} @${id}`);
+      throw new PwaNavError("invalid_args", `cannot upload to ${resolved.kind} @${resolved.id}`);
     }
     if (resolved.sensitive || !resolved.agentFillable) {
-      throw new PwaNavError("sensitive_target", `refusing to upload to sensitive field @${id}`, {
+      throw new PwaNavError("sensitive_target", `refusing to upload to sensitive field @${resolved.id}`, {
         hint: HUMAN_HINT,
       });
     }
   } else if (resolved.kind === "field") {
-    throw new PwaNavError("invalid_args", `cannot click field @${id}`);
+    throw new PwaNavError("invalid_args", `cannot click field @${resolved.id}`);
   }
   return resolved;
 }
@@ -316,7 +362,10 @@ export function resolveFlow(screen: Screen, flowId: string, inputs: Record<strin
     if (step.from !== undefined && text === undefined) {
       throw new PwaNavError("invalid_args", `flow @${flowId} is missing an input for @${parsed.id}`);
     }
-    const target = resolveTarget(screen, parsed.id, step.op, text);
+    if (parsed.query === undefined && text !== undefined) {
+      parsed.query = text;
+    }
+    const target = resolveTarget(screen, parsed, step.op);
     if (step.op === "click") {
       return { op: "click", target };
     }

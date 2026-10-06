@@ -222,7 +222,9 @@
         "containerRole": { "type": "string" },
         "containerName": { "type": "string" },
         "itemRole": { "type": "string" },
-        "actionTarget": { "type": "string", "pattern": "^@[a-z0-9]+(-[a-z0-9]+)*$" }
+        "actionTarget": { "type": "string", "pattern": "^@[a-z0-9]+(-[a-z0-9]+)*$" },
+        "actions": { "type": "array", "items": { "$ref": "#/$defs/action" } },
+        "fields": { "type": "array", "items": { "$ref": "#/$defs/field" } }
       }
     },
     "unmapped": {

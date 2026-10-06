@@ -20,10 +20,11 @@ Schema: `schemas/screen-map.schema.json` (JSON Schema 2020-12, `additionalProper
 |---|---|
 | `schemaVersion` | `1.x.y` |
 | `app` | `{id, name, origin, version?, locale, learnedAt}` |
-| `screens[]` | `{id, route, title, access, fingerprint, observedAt, fields[], actions[], links[], flows[], a11y[]?}`; `route` is a literal or `:param` pathname |
+| `screens[]` | `{id, route, title, access, fingerprint, observedAt, fields[], actions[], links[], flows[], patterns[], a11y[]?}`; `route` is a literal or `:param` pathname |
 | `fields[]` | role, name, `nameSource`, `inputType`, `sensitive`, `agentFillable`, `locator`, optional `placeholder`, `dialog`, `container` |
 | `actions[]` | `kind` (submit/toggle/button), `effect` (none/ui-state/submit), `requires[]`, `locator`, optional `dialog`, `container`, `opens` (`OpensBranch`: subdialog/modal/view tree) |
 | `links[]` | `href`, `external`, `locator` |
+| `patterns[]`| `id`, `containerRole`, `containerName`, `itemRole`, `actionTarget`, optional nested `fields[]` and `actions[]` |
 | `flows[]` | `{id, description, humanOnly, inputSchema, steps[{op: fill\|click, target: @id, from?}]}`, shaped like MCP tool descriptors |
 | `journeys[]` | `{id, description, humanOnly?, inputSchema?, steps[{screenId, action, inputs?, expectScreen?}]}`, multi-screen declarative workflows |
 | `a11y[]` | findings (`code`, `target`, `detail`, `wcag`) |
@@ -96,6 +97,23 @@ When an action triggers a modal, dialog, or secondary view (for example, clickin
 - **Target Resolution**: Elements declared within `opens` branches are directly resolvable by name or `@id` (e.g., `@editor-post` or `@boton-publicar`).
 - **Dynamic Branch Expansion**: When `pwa_click` or `pwa_act` triggers an action that opens a modal, the response describes the opened branch and lists its available controls immediately.
 - **Per-Application Storage Isolation**: Sessions and raw snapshots are isolated under `.agent/apps/<appSlug>/` (e.g. `.agent/apps/linkedin.com/snapshot.json` and `.agent/apps/notebooklm.google.com/snapshot.json`) to prevent cross-contamination across different web apps.
+
+## Dynamic Entity Patterns
+
+When `snapshot --learn` detects repetitive list or grid items, it groups them into `patterns[]`. Rather than hardcoding static `@id` targets for every single data row (which would bloat the map infinitely), a pattern allows addressing elements dynamically by their textual content (query), with support for nested controls and occurrences.
+
+**Syntax:** `@patternId(query)>@scopedId[occurrence]`
+
+- `patternId`: The ID of the container pattern (e.g. `@contact-item`).
+- `query`: The textual content to search for inside the dynamic item (e.g. `Fede`).
+- `>@scopedId`: (Optional) Targets a nested control inside the matched dynamic item (e.g. `>@btn-delete`).
+- `[occurrence]`: (Optional) Selects the n-th match (0-indexed) if the query yields multiple results.
+
+**Examples:**
+- `click:@contact-item(Fede)`: Clicks on the main body of the list item containing "Fede".
+- `click:@contact-item(Fede)>@btn-delete`: Clicks the nested delete button inside the "Fede" card.
+- `fill:@contact-item(Fede)>@email-input="fede@example.com"`: Fills a specific nested input.
+- `click:@search-result(Apple)[1]`: Clicks the second search result containing "Apple".
 
 ## Commands
 
