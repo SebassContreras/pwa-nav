@@ -1,6 +1,5 @@
-import { describe, it, mock } from "node:test";
+import { describe, it } from "node:test";
 import * as assert from "node:assert";
-import { join } from "node:path";
 import { findStandardFirefox } from "../standard-runtime.js";
 import { PwaNavError } from "../../core/errors.js";
 

@@ -218,7 +218,7 @@ test("open --launch: launches only when the port is closed, then navigates", asy
   };
   const launchStandardFn: NonNullable<BidiBackendOptions["launchStandardFn"]> = (options) => {
     launched.push(`${options.targetUrl} ${String(options.port)}`);
-    return Promise.resolve({} as any);
+    return Promise.resolve({ port: options.port, command: "stdcmd", pid: undefined });
   };
   await withEnv(
     async (e) => {
