@@ -62,9 +62,7 @@ This file is the single agent-instructions entrypoint; there is no `CLAUDE.md`. 
 When configuring `pwa-nav` as an MCP server for any agent environment:
 
 - **Command**: `node <abs-path>/dist/mcp.js` (transport: stdio).
-- **Default Port & Browser Modes**: Defaults to port `9222`. Passing `--port 9222` is optional.
-  - **Free Mode (Default)**: Automatically locates the standard OS Firefox binary and runs an isolated agent profile in `.agent/browser-profile` without requiring the user to install any PWAs.
-  - **PWA Mode**: For domains matching installed PWAsForFirefox apps, it cleanly attaches to them or launches them with `--remote-debugging-port 9222`.
+- **Default Port & Zero-Config Firefox PWA**: Defaults to port `9222`. Passing `--port 9222` is optional. The runtime binary is spawned with `--remote-debugging-port 9222` on demand, keeping FirefoxPWA's `config.json` clean so normal manual browsing and logins (like Google Accounts) remain unblocked.
 - **Available Server Flags (`args`)**:
   - `--dry-run` (or env `PWA_NAV_DRY_RUN=1`): Run in dry-run mode (previews mutations without executing). By default, the server runs in direct active **armed** mode.
   - `--armed`: Retained for backward compatibility (active mode is already the default).
@@ -83,8 +81,8 @@ Agents operate through two complementary navigation layers:
 #### 1. Screen Map & User Journey Loop (Recommended & Autonomous)
 1. **Inspect / Auto-Learn Screen (First-Pass Discovery)**: Upon opening or navigating to an application, run `pwa_snapshot({ screen: true })` (in CLI: `pwa-nav snapshot --screen`). If the screen or route is unmapped (exit code 13 `unmapped_screen`), run `pwa_learn` (or CLI `pwa-nav snapshot --learn`) to autonomously learn and persist `.agent/apps/<appSlug>/screens.json`, returning semantic `@id` targets immediately without prompting.
 2. **Continuous Screen Map Enrichment & Zero Loose Files**: Every snapshot or learn step collaborates in enriching `.agent/apps/<appSlug>/screens.json` with newly observed fields, actions, flows, journeys, and nested modal trees (`action.opens`). This process does NOT generate loose snapshot or ref files across the workspace—the persistent screen map `.agent/apps/<appSlug>/screens.json` is the sole, definitive file per application, while ephemeral `eN` refs exist only in the active session and are superseded by permanent `@id` targets.
-3. **Execute Semantic Action Directly**: Use semantic `@id` targets or dynamic patterns (`@pattern(query)>@scopedId[occurrence]`) for live browser execution:
-   - `pwa-nav click '@sign-in'` or MCP `pwa_click({ target: "@contact(Fede)>@btn-delete" })` (direct live click).
+3. **Execute Semantic Action Directly**: Use semantic `@id` targets for live browser execution:
+   - `pwa-nav click '@sign-in'` or MCP `pwa_click({ target: "@sign-in" })` (direct live click).
    - `pwa-nav fill '@email' "user@example.com"` or MCP `pwa_fill({ target: "@email", text: "..." })`.
    - `pwa-nav upload '@resume' ./file.pdf` (safe paths only).
    - `pwa-nav act flow:login-flow username="alice"` (single-screen flow).
@@ -156,17 +154,3 @@ Agents operate through two complementary navigation layers:
 - Maintain Clean Architecture boundaries strictly: domain logic in `src/core/`, screen map models in `src/screens/`, protocol logic in `src/bidi/`, browser adapters in `src/browser/`, business ops in `src/ops/`, CLI in `src/cli/`, MCP in `src/mcp/`.
 - Never invent stack requirements or bypass the interview/spec loop.
 - All code comments and documentation must be written in English. Communicate with the user in Spanish.
-
-<!-- spectrace:protocol -->
-## Working on tasks
-
-In this repo the script is .spectrace/trace.py. Use python on Windows, python3 elsewhere.
-
-1. python .spectrace/trace.py status — pick the 
-ext task, or the one you were asked for.
-2. python .spectrace/trace.py start NNN/TNNN — before editing anything.
-3. Read the spec's equirements.md and design.md; do only that task.
-4. Verify it against the task text and the R items it covers.
-5. python .spectrace/trace.py done NNN/TNNN — records exactly what changed. Stuck? lock NNN/TNNN "reason".
-6. Before saying you're finished: python .spectrace/trace.py check must exit 0.
-<!-- /spectrace:protocol -->
