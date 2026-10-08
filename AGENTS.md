@@ -156,3 +156,17 @@ Agents operate through two complementary navigation layers:
 - Maintain Clean Architecture boundaries strictly: domain logic in `src/core/`, screen map models in `src/screens/`, protocol logic in `src/bidi/`, browser adapters in `src/browser/`, business ops in `src/ops/`, CLI in `src/cli/`, MCP in `src/mcp/`.
 - Never invent stack requirements or bypass the interview/spec loop.
 - All code comments and documentation must be written in English. Communicate with the user in Spanish.
+
+<!-- spectrace:protocol -->
+## Working on tasks
+
+In this repo the script is .spectrace/trace.py. Use python on Windows, python3 elsewhere.
+
+1. python .spectrace/trace.py status — pick the 
+ext task, or the one you were asked for.
+2. python .spectrace/trace.py start NNN/TNNN — before editing anything.
+3. Read the spec's equirements.md and design.md; do only that task.
+4. Verify it against the task text and the R items it covers.
+5. python .spectrace/trace.py done NNN/TNNN — records exactly what changed. Stuck? lock NNN/TNNN "reason".
+6. Before saying you're finished: python .spectrace/trace.py check must exit 0.
+<!-- /spectrace:protocol -->
