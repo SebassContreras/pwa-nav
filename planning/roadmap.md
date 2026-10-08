@@ -4,6 +4,6 @@ Index of every spec - status, dependencies, pipeline stage, and priority. Read t
 
 | ID | Spec | Status | Depends on | Stage | Priority |
 |---|---|---|---|---|---|
-| 001 | screen-map-filtering | todo | - | build | 1 |
+| 001 | screen-map-filtering | done        | - | —     | 1 |
 | 002 | multi-pwa-isolation | todo | - | design | 2 |
 | 003 | free-mode-profiles | done | - | — | 3 |

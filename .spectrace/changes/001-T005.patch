@@ -1,0 +1,30 @@
+diff --git a/src/screens/screen-learn.ts b/src/screens/screen-learn.ts
+index d097b92..6c41138 100644
+--- a/src/screens/screen-learn.ts
++++ b/src/screens/screen-learn.ts
+@@ -116,6 +116,17 @@ export function isProse(raw: Pick<RawElement, "name" | "nameSource">): boolean {
+   return name.split(/\s+/).length >= 5 && /[.!?…]$/.test(name);
+ }
+ 
++// Transient per-message controls (EN + ES), compared accent-folded and lowercased.
++const TRANSIENT_NAME_PREFIXES: readonly string[] = [
++  "reaction", "view reactions", "quoted message", "reaccion", "ver reacciones", "mensaje citado",
++];
++
++/** Name starts with a transient blocklist prefix (reactions, quoted messages). */
++export function isTransientName(name: string): boolean {
++  const folded = name.normalize("NFD").replace(/\p{M}+/gu, "").toLowerCase().trim();
++  return TRANSIENT_NAME_PREFIXES.some((prefix) => folded.startsWith(prefix));
++}
++
+ type Kind = "field" | "action" | "link";
+ 
+ function kindOf(role: string): Kind | undefined {
+@@ -158,6 +169,7 @@ export function learnScreen(raw: readonly RawElement[], page: LearnPage, options
+     if (kind === undefined) continue;
+     const dynamic = element.containerRole !== undefined && DYNAMIC_CONTAINER_ROLES.has(element.containerRole);
+     if (!dynamic && isProse(element)) continue;
++    if (isTransientName(element.name)) continue;
+     if (kind === "link") {
+       const link = element.href === undefined ? undefined : classifyHref(element.href, page.url, page.appOrigin);
+       if (link !== undefined) allEntries.push({ raw: element, kind, link });

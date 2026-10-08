@@ -223,6 +223,7 @@
         "containerName": { "type": "string" },
         "itemRole": { "type": "string" },
         "actionTarget": { "type": "string", "pattern": "^@[a-z0-9]+(-[a-z0-9]+)*$" },
+        "dynamicChildren": { "type": "boolean", "description": "Items are user content (feed/log/article): never persisted as individual targets." },
         "actions": { "type": "array", "items": { "$ref": "#/$defs/action" } },
         "fields": { "type": "array", "items": { "$ref": "#/$defs/field" } }
       }

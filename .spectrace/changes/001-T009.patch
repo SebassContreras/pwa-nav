@@ -1,0 +1,19 @@
+diff --git a/src/screens/test/screen-filtering.test.ts b/src/screens/test/screen-filtering.test.ts
+index a7f6908..9915cd1 100644
+--- a/src/screens/test/screen-filtering.test.ts
++++ b/src/screens/test/screen-filtering.test.ts
+@@ -50,3 +50,14 @@ test("live snapshot still lists and resolves every excluded element (R4, D5)", (
+     assert.equal(findByLocator(raw, locator)?.element.name, name);
+   }
+ });
++
++test("chrome controls are persisted exactly as without the content (R6)", () => {
++  const chromeOnly = raw.filter((e) => !CONTENT.includes(e.name));
++  const baseline = learnScreen(chromeOnly, PAGE, { now: NOW });
++  assert.deepEqual(learned.fields, baseline.fields);
++  assert.deepEqual(learned.actions, baseline.actions);
++  assert.deepEqual(learned.links, baseline.links);
++  assert.deepEqual(learned.links.map((l) => l.id), ["sign-in"]);
++  assert.deepEqual(learned.fields.map((f) => f.id), ["search", "message"]);
++  assert.deepEqual(learned.actions.map((a) => a.id), ["attach-file", "send"]);
++});

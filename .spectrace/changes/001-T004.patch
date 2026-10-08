@@ -1,0 +1,27 @@
+diff --git a/src/screens/screen-learn.ts b/src/screens/screen-learn.ts
+index c3900de..d097b92 100644
+--- a/src/screens/screen-learn.ts
++++ b/src/screens/screen-learn.ts
+@@ -109,6 +109,13 @@ export function deriveIds(
+   });
+ }
+ 
++/** Content-named prose (a message, not a control): 5+ words ending in sentence punctuation. */
++export function isProse(raw: Pick<RawElement, "name" | "nameSource">): boolean {
++  if (raw.nameSource !== "content") return false;
++  const name = raw.name.trim();
++  return name.split(/\s+/).length >= 5 && /[.!?…]$/.test(name);
++}
++
+ type Kind = "field" | "action" | "link";
+ 
+ function kindOf(role: string): Kind | undefined {
+@@ -149,6 +156,8 @@ export function learnScreen(raw: readonly RawElement[], page: LearnPage, options
+   for (const element of raw) {
+     const kind = kindOf(element.role);
+     if (kind === undefined) continue;
++    const dynamic = element.containerRole !== undefined && DYNAMIC_CONTAINER_ROLES.has(element.containerRole);
++    if (!dynamic && isProse(element)) continue;
+     if (kind === "link") {
+       const link = element.href === undefined ? undefined : classifyHref(element.href, page.url, page.appOrigin);
+       if (link !== undefined) allEntries.push({ raw: element, kind, link });

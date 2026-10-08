@@ -24,7 +24,7 @@ Schema: `schemas/screen-map.schema.json` (JSON Schema 2020-12, `additionalProper
 | `fields[]` | role, name, `nameSource`, `inputType`, `sensitive`, `agentFillable`, `locator`, optional `placeholder`, `dialog`, `container` |
 | `actions[]` | `kind` (submit/toggle/button), `effect` (none/ui-state/submit), `requires[]`, `locator`, optional `dialog`, `container`, `opens` (`OpensBranch`: subdialog/modal/view tree) |
 | `links[]` | `href`, `external`, `locator` |
-| `patterns[]`| `id`, `containerRole`, `containerName`, `itemRole`, `actionTarget`, optional nested `fields[]` and `actions[]` |
+| `patterns[]`| `id`, `containerRole`, `containerName`, `itemRole`, `actionTarget`, optional `dynamicChildren`, optional nested `fields[]` and `actions[]` |
 | `flows[]` | `{id, description, humanOnly, inputSchema, steps[{op: fill\|click, target: @id, from?}]}`, shaped like MCP tool descriptors |
 | `journeys[]` | `{id, description, humanOnly?, inputSchema?, steps[{screenId, action, inputs?, expectScreen?}]}`, multi-screen declarative workflows |
 | `a11y[]` | findings (`code`, `target`, `detail`, `wcag`) |
@@ -114,6 +114,16 @@ When `snapshot --learn` detects repetitive list or grid items, it groups them in
 - `click:@contact-item(Fede)>@btn-delete`: Clicks the nested delete button inside the "Fede" card.
 - `fill:@contact-item(Fede)>@email-input="fede@example.com"`: Fills a specific nested input.
 - `click:@search-result(Apple)[1]`: Clicks the second search result containing "Apple".
+
+### What learning never persists
+
+Learning (`pwa_learn` and the auto-learn in `pwa_snapshot`) keeps user content out of `screens.json`. Live snapshots are not filtered: every element below is still listed with a ref and can be found, clicked or filled.
+
+- **Dynamic content regions.** Elements inside an ARIA `feed`, `log` or `article` never become fields, actions or links. The collector reports the outermost `feed`/`log` ancestor (or an `article`) as the container, and learning folds every element in it into one pattern per item role with `dynamicChildren: true` - even a single element. Address items with the pattern syntax, e.g. `@conversation-with-fede-item(Hello)`.
+- **Prose.** Outside those regions, an element named from its own text (`nameSource: "content"`) with at least 5 words and ending in `.`, `!`, `?` or `…` is skipped. Labels, `aria-label`, titles and placeholders are never judged as prose.
+- **Transient controls.** Any element whose accent-folded, lowercased name starts with `reaction`, `view reactions`, `quoted message`, `reaccion`, `ver reacciones` or `mensaje citado` is skipped, wherever it sits.
+
+On re-learn, patterns merge by id: learned patterns replace stored ones with the same id and new ones are added. Entries an older learn persisted (including content the rules above now exclude, and patterns not seen again) are kept, and removed only with `--prune`.
 
 ## Commands
 

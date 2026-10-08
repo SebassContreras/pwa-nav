@@ -1,0 +1,80 @@
+diff --git a/checks/fixtures/chat.html b/checks/fixtures/chat.html
+new file mode 100644
+index 0000000..eae8f17
+--- /dev/null
++++ b/checks/fixtures/chat.html
+@@ -0,0 +1,29 @@
++<!doctype html>
++<html lang="en">
++<head><title>Chat</title></head>
++<body>
++  <header>
++    <a href="/login">Sign in</a>
++    <input type="search" aria-label="Search">
++  </header>
++  <main>
++    <div role="log" aria-label="Conversation with Fede">
++      <div role="article">
++        <button>Hey, are we still meeting tomorrow at noon?</button>
++        <button aria-label="Reaction 👍 1">👍</button>
++        <button>View reactions</button>
++      </div>
++      <div role="article">
++        <button aria-label="Quoted message: are we still meeting">are we still meeting</button>
++        <button>Yes, see you at the usual place!</button>
++        <a href="/u/fede">Fede</a>
++      </div>
++    </div>
++    <p><button>Thanks, that works perfectly for me.</button></p>
++    <button aria-label="Reacción ❤️">❤️</button>
++    <button aria-label="Attach file">📎</button>
++    <div contenteditable="true" aria-label="Message"></div>
++    <button>Send</button>
++  </main>
++</body>
++</html>
+diff --git a/src/screens/test/screen-filtering.test.ts b/src/screens/test/screen-filtering.test.ts
+new file mode 100644
+index 0000000..322ed45
+--- /dev/null
++++ b/src/screens/test/screen-filtering.test.ts
+@@ -0,0 +1,39 @@
++// Spec 001-screen-map-filtering: user content stays out of screens.json, live snapshots keep it.
++import assert from "node:assert/strict";
++import { readFileSync } from "node:fs";
++import { test } from "node:test";
++import { JSDOM } from "jsdom";
++import { collectInteractive, type RawElement } from "../../browser/collector.js";
++import { learnScreen } from "../screen-learn.js";
++import type { Screen } from "../screen-map.js";
++
++const html = readFileSync(new URL("../../../checks/fixtures/chat.html", import.meta.url), "utf8");
++const raw: RawElement[] = collectInteractive(new JSDOM(html).window.document);
++const PAGE = { url: "http://localhost:8080/chat", title: "Chat", appOrigin: "http://localhost:8080" };
++const NOW = new Date("2026-10-08T10:00:00Z");
++const learned = learnScreen(raw, PAGE, { now: NOW });
++
++const persistedNames = (screen: Screen): string[] =>
++  [...screen.fields, ...screen.actions, ...screen.links].map((e) => e.name);
++
++const CONTENT = [
++  "Hey, are we still meeting tomorrow at noon?",
++  "Reaction 👍 1",
++  "View reactions",
++  "Quoted message: are we still meeting",
++  "Yes, see you at the usual place!",
++  "Fede",
++  "Thanks, that works perfectly for me.",
++  "Reacción ❤️",
++];
++
++test("chat fixture persists only patterns for message content (R1, R2, R3, R5)", () => {
++  const names = persistedNames(learned);
++  for (const name of CONTENT) assert.ok(!names.includes(name), `persisted: ${name}`);
++  const patterns = learned.patterns ?? [];
++  assert.deepEqual(
++    patterns.map((p) => [p.containerRole, p.itemRole, p.dynamicChildren]),
++    [["log", "button", true], ["log", "link", true]],
++  );
++  for (const p of patterns) assert.equal(p.containerName, "Conversation with Fede");
++});

@@ -43,6 +43,9 @@ const FIELD_ROLES: ReadonlySet<string> = new Set([
 const ACTION_ROLES: ReadonlySet<string> = new Set(["button", "menuitem", "tab", "option"]);
 // Toggles/choices are not required to submit a form.
 const OPTIONAL_FIELD_ROLES: ReadonlySet<string> = new Set(["checkbox", "radio", "switch"]);
+// User-content streams (WAI-ARIA feed/log/article): their elements are never persisted
+// as individual targets, only as one `dynamicChildren` pattern per item role.
+const DYNAMIC_CONTAINER_ROLES: ReadonlySet<string> = new Set(["feed", "log", "article"]);
 
 const SENSITIVE_AUTOCOMPLETE: ReadonlySet<string> = new Set(["current-password", "new-password", "one-time-code"]);
 // Broad on purpose: a false positive only forces the user to fill by hand.
@@ -106,6 +109,24 @@ export function deriveIds(
   });
 }
 
+/** Content-named prose (a message, not a control): 5+ words ending in sentence punctuation. */
+export function isProse(raw: Pick<RawElement, "name" | "nameSource">): boolean {
+  if (raw.nameSource !== "content") return false;
+  const name = raw.name.trim();
+  return name.split(/\s+/).length >= 5 && /[.!?…]$/.test(name);
+}
+
+// Transient per-message controls (EN + ES), compared accent-folded and lowercased.
+const TRANSIENT_NAME_PREFIXES: readonly string[] = [
+  "reaction", "view reactions", "quoted message", "reaccion", "ver reacciones", "mensaje citado",
+];
+
+/** Name starts with a transient blocklist prefix (reactions, quoted messages). */
+export function isTransientName(name: string): boolean {
+  const folded = name.normalize("NFD").replace(/\p{M}+/gu, "").toLowerCase().trim();
+  return TRANSIENT_NAME_PREFIXES.some((prefix) => folded.startsWith(prefix));
+}
+
 type Kind = "field" | "action" | "link";
 
 function kindOf(role: string): Kind | undefined {
@@ -146,6 +167,9 @@ export function learnScreen(raw: readonly RawElement[], page: LearnPage, options
   for (const element of raw) {
     const kind = kindOf(element.role);
     if (kind === undefined) continue;
+    const dynamic = element.containerRole !== undefined && DYNAMIC_CONTAINER_ROLES.has(element.containerRole);
+    if (!dynamic && isProse(element)) continue;
+    if (isTransientName(element.name)) continue;
     if (kind === "link") {
       const link = element.href === undefined ? undefined : classifyHref(element.href, page.url, page.appOrigin);
       if (link !== undefined) allEntries.push({ raw: element, kind, link });
@@ -175,8 +199,9 @@ export function learnScreen(raw: readonly RawElement[], page: LearnPage, options
   for (const [key, group] of groups.entries()) {
     const [containerRole = "", containerName = "", itemRole = ""] = key.split("\t");
     const isListContainer = ["list", "grid", "rowgroup", "treegrid", "table", "feed"].includes(containerRole);
-    
-    if (group.length >= 2 || (group.length === 1 && isListContainer)) {
+    const dynamic = DYNAMIC_CONTAINER_ROLES.has(containerRole);
+
+    if (dynamic || group.length >= 2 || (group.length === 1 && isListContainer)) {
       patternKeys.add(key);
       let baseId = slugify(`${containerName || containerRole}-item`);
       if (!baseId) baseId = "item";
@@ -192,6 +217,7 @@ export function learnScreen(raw: readonly RawElement[], page: LearnPage, options
         ...(containerName ? { containerName } : {}),
         itemRole,
         actionTarget: `@${id}`,
+        ...(dynamic ? { dynamicChildren: true } : {}),
       });
     }
   }

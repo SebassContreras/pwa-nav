@@ -1,0 +1,53 @@
+diff --git a/src/browser/test/collector.test.ts b/src/browser/test/collector.test.ts
+index 5abdc1b..77cfdd4 100644
+--- a/src/browser/test/collector.test.ts
++++ b/src/browser/test/collector.test.ts
+@@ -248,10 +248,11 @@ test("collector reports the outermost feed/log ancestor, or an article, as conta
+      <div role="list" aria-label="Nav"><button>Home</button></div>`,
+   );
+   const [reply, ana, like, home] = els;
+-  assert.equal(reply?.containerRole, "log");
+-  assert.equal(reply?.containerName, "Messages");
+-  assert.equal(ana?.containerRole, "log");
+-  assert.equal(like?.containerRole, "article");
+-  assert.equal(like?.containerName, "Post");
+-  assert.equal(home?.containerRole, "list");
++  assert.ok(reply && ana && like && home);
++  assert.equal(reply.containerRole, "log");
++  assert.equal(reply.containerName, "Messages");
++  assert.equal(ana.containerRole, "log");
++  assert.equal(like.containerRole, "article");
++  assert.equal(like.containerName, "Post");
++  assert.equal(home.containerRole, "list");
+ });
+diff --git a/src/screens/test/screen-filtering.test.ts b/src/screens/test/screen-filtering.test.ts
+index 9915cd1..5382f9c 100644
+--- a/src/screens/test/screen-filtering.test.ts
++++ b/src/screens/test/screen-filtering.test.ts
+@@ -7,6 +7,7 @@ import { collectInteractive, type RawElement } from "../../browser/collector.js"
+ import { buildLiveSnapshot } from "../../browser/live-snapshot.js";
+ import { findByLocator } from "../../browser/locate.js";
+ import { learnScreen } from "../screen-learn.js";
++import { mergeScreen } from "../screen-merge.js";
+ import type { Screen } from "../screen-map.js";
+ 
+ const html = readFileSync(new URL("../../../checks/fixtures/chat.html", import.meta.url), "utf8");
+@@ -61,3 +62,18 @@ test("chrome controls are persisted exactly as without the content (R6)", () =>
+   assert.deepEqual(learned.fields.map((f) => f.id), ["search", "message"]);
+   assert.deepEqual(learned.actions.map((a) => a.id), ["attach-file", "send"]);
+ });
++
++test("re-learning a polluted screen keeps junk without prune, removes it with prune (R5, R7)", () => {
++  const junk = { id: "view-reactions", role: "button", name: "View reactions", nameSource: "content" as const, kind: "button" as const, effect: "none" as const, locator: { role: "button", name: "View reactions", occurrence: 0 } };
++  const polluted: Screen = { ...learned, actions: [...learned.actions, junk] };
++  delete polluted.patterns;
++
++  const kept = mergeScreen(polluted, learned, { now: NOW }).screen;
++  assert.ok(kept.actions.some((a) => a.id === "view-reactions"));
++  assert.deepEqual(kept.patterns, learned.patterns);
++
++  const pruned = mergeScreen(polluted, learned, { now: NOW, prune: true }).screen;
++  assert.ok(!pruned.actions.some((a) => a.id === "view-reactions"));
++  assert.deepEqual(pruned.patterns, learned.patterns);
++  assert.deepEqual(pruned.actions.map((a) => a.id), learned.actions.map((a) => a.id));
++});

@@ -129,6 +129,8 @@ export interface EntityPattern {
   containerName?: string;
   itemRole: string;
   actionTarget?: string;
+  /** Items are user content (ARIA feed/log/article): no per-item ids are persisted. */
+  dynamicChildren?: boolean;
   actions?: ScreenAction[];
   fields?: ScreenField[];
 }

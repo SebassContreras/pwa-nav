@@ -1,0 +1,29 @@
+<!doctype html>
+<html lang="en">
+<head><title>Chat</title></head>
+<body>
+  <header>
+    <a href="/login">Sign in</a>
+    <input type="search" aria-label="Search">
+  </header>
+  <main>
+    <div role="log" aria-label="Conversation with Fede">
+      <div role="article">
+        <button>Hey, are we still meeting tomorrow at noon?</button>
+        <button aria-label="Reaction 👍 1">👍</button>
+        <button>View reactions</button>
+      </div>
+      <div role="article">
+        <button aria-label="Quoted message: are we still meeting">are we still meeting</button>
+        <button>Yes, see you at the usual place!</button>
+        <a href="/u/fede">Fede</a>
+      </div>
+    </div>
+    <p><button>Thanks, that works perfectly for me.</button></p>
+    <button aria-label="Reacción ❤️">❤️</button>
+    <button aria-label="Attach file">📎</button>
+    <div contenteditable="true" aria-label="Message"></div>
+    <button>Send</button>
+  </main>
+</body>
+</html>

@@ -1,0 +1,25 @@
+diff --git a/schemas/screen-map.schema.json b/schemas/screen-map.schema.json
+index 8c74fae..bf869a8 100644
+--- a/schemas/screen-map.schema.json
++++ b/schemas/screen-map.schema.json
+@@ -223,6 +223,7 @@
+         "containerName": { "type": "string" },
+         "itemRole": { "type": "string" },
+         "actionTarget": { "type": "string", "pattern": "^@[a-z0-9]+(-[a-z0-9]+)*$" },
++        "dynamicChildren": { "type": "boolean", "description": "Items are user content (feed/log/article): never persisted as individual targets." },
+         "actions": { "type": "array", "items": { "$ref": "#/$defs/action" } },
+         "fields": { "type": "array", "items": { "$ref": "#/$defs/field" } }
+       }
+diff --git a/src/screens/screen-map.ts b/src/screens/screen-map.ts
+index dcbb3a1..2692b89 100644
+--- a/src/screens/screen-map.ts
++++ b/src/screens/screen-map.ts
+@@ -129,6 +129,8 @@ export interface EntityPattern {
+   containerName?: string;
+   itemRole: string;
+   actionTarget?: string;
++  /** Items are user content (ARIA feed/log/article): no per-item ids are persisted. */
++  dynamicChildren?: boolean;
+   actions?: ScreenAction[];
+   fields?: ScreenField[];
+ }

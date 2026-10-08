@@ -1,0 +1,56 @@
+diff --git a/src/browser/collector.ts b/src/browser/collector.ts
+index 1d5830a..dd738bf 100644
+--- a/src/browser/collector.ts
++++ b/src/browser/collector.ts
+@@ -247,11 +247,22 @@ function collectImpl(root: Document, options?: CollectOptions): { items: RawElem
+ 
+   const containerOf = (node: Element): { role: string; name: string } | undefined => {
+     try {
+-      const c = node.closest('[role="listbox"], [role="grid"], [role="region"], [role="combobox"], [role="menu"], [role="list"], ul, ol, table, tbody');
++      // Dynamic streams (WAI-ARIA feed/log): report the OUTERMOST one so every item
++      // in the stream shares one container key.
++      let stream: Element | null = null;
++      for (let p = node.parentElement?.closest('[role="feed"], [role="log"]') ?? null; p !== null; p = p.parentElement?.closest('[role="feed"], [role="log"]') ?? null) {
++        stream = p;
++      }
++      if (stream !== null) {
++        const sRole = attrOf(stream, "role").trim().split(/\s+/)[0]?.toLowerCase() ?? "feed";
++        const [sName] = nameOf(stream, sRole);
++        return { role: sRole, name: sName !== "" ? sName : sRole };
++      }
++      const c = node.closest('[role="article"], article, [role="listbox"], [role="grid"], [role="region"], [role="combobox"], [role="menu"], [role="list"], ul, ol, table, tbody');
+       if (c !== null && c !== node) {
+-        const cRole = roleOf(c) || c.localName;
++        const cRole = roleOf(c) || (c.localName === "article" ? "article" : c.localName);
+         const [cName] = nameOf(c, cRole);
+-        if (["listbox", "grid", "region", "combobox", "menu", "list", "table", "rowgroup"].includes(cRole)) {
++        if (["article", "listbox", "grid", "region", "combobox", "menu", "list", "table", "rowgroup"].includes(cRole)) {
+           return { role: cRole, name: cName !== "" ? cName : cRole };
+         }
+       }
+diff --git a/src/browser/test/collector.test.ts b/src/browser/test/collector.test.ts
+index 999c228..5abdc1b 100644
+--- a/src/browser/test/collector.test.ts
++++ b/src/browser/test/collector.test.ts
+@@ -237,3 +237,21 @@ test("collector tracks enclosing dialog context", () => {
+ });
+ 
+ 
++
++test("collector reports the outermost feed/log ancestor, or an article, as container", () => {
++  const els = body(
++    `<div role="log" aria-label="Messages">
++       <div role="feed"><div role="article"><button>Reply</button></div></div>
++       <article><a href="/u/1">Ana</a></article>
++     </div>
++     <article aria-label="Post"><button>Like</button></article>
++     <div role="list" aria-label="Nav"><button>Home</button></div>`,
++  );
++  const [reply, ana, like, home] = els;
++  assert.equal(reply?.containerRole, "log");
++  assert.equal(reply?.containerName, "Messages");
++  assert.equal(ana?.containerRole, "log");
++  assert.equal(like?.containerRole, "article");
++  assert.equal(like?.containerName, "Post");
++  assert.equal(home?.containerRole, "list");
++});

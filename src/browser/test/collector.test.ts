@@ -237,3 +237,22 @@ test("collector tracks enclosing dialog context", () => {
 });
 
 
+
+test("collector reports the outermost feed/log ancestor, or an article, as container", () => {
+  const els = body(
+    `<div role="log" aria-label="Messages">
+       <div role="feed"><div role="article"><button>Reply</button></div></div>
+       <article><a href="/u/1">Ana</a></article>
+     </div>
+     <article aria-label="Post"><button>Like</button></article>
+     <div role="list" aria-label="Nav"><button>Home</button></div>`,
+  );
+  const [reply, ana, like, home] = els;
+  assert.ok(reply && ana && like && home);
+  assert.equal(reply.containerRole, "log");
+  assert.equal(reply.containerName, "Messages");
+  assert.equal(ana.containerRole, "log");
+  assert.equal(like.containerRole, "article");
+  assert.equal(like.containerName, "Post");
+  assert.equal(home.containerRole, "list");
+});

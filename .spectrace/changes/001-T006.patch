@@ -1,0 +1,59 @@
+diff --git a/src/screens/screen-merge.ts b/src/screens/screen-merge.ts
+index 47714a3..39d38d9 100644
+--- a/src/screens/screen-merge.ts
++++ b/src/screens/screen-merge.ts
+@@ -10,6 +10,7 @@ import {
+   screenElements,
+   validateScreenMap,
+   type A11yFinding,
++  type EntityPattern,
+   type Locator,
+   type Screen,
+   type ScreenAction,
+@@ -425,6 +426,13 @@ export function mergeScreen(
+     links,
+     flows: analysis.flows,
+   };
++  const patterns = mergePatterns(existing.patterns, learned.patterns, options.prune === true);
++  if (patterns.length > 0) {
++    screen.patterns = patterns;
++  } else {
++    delete screen.patterns;
++  }
++  const patternsChanged = !isDeepStrictEqual(patterns, existing.patterns ?? []);
+   if (a11y.length > 0 || existing.a11y !== undefined) {
+     screen.a11y = a11y;
+   }
+@@ -438,6 +446,7 @@ export function mergeScreen(
+     diff.a11y.added.length > 0 ||
+     diff.a11y.resolved.length > 0 ||
+     drop.size > 0 ||
++    patternsChanged ||
+     screen.fingerprint !== existing.fingerprint;
+   if (!contentChanged) {
+     return { screen: existing, diff };
+@@ -446,6 +455,24 @@ export function mergeScreen(
+   return { screen, diff };
+ }
+ 
++/** By id: learned replaces existing, new ones are added, unseen ones are dropped only with `prune`. */
++function mergePatterns(
++  existing: readonly EntityPattern[] = [],
++  learned: readonly EntityPattern[] = [],
++  prune: boolean,
++): EntityPattern[] {
++  const learnedById = new Map(learned.map((p) => [p.id, p]));
++  const out: EntityPattern[] = [];
++  for (const old of existing) {
++    const fresh = learnedById.get(old.id);
++    if (fresh !== undefined) out.push(fresh);
++    else if (!prune) out.push(old);
++  }
++  const existingIds = new Set(existing.map((p) => p.id));
++  for (const p of learned) if (!existingIds.has(p.id)) out.push(p);
++  return out;
++}
++
+ function routeOfHref(href: string, screen: Screen, origin: string): string | undefined {
+   try {
+     return new URL(href, new URL(screen.route, origin)).pathname;

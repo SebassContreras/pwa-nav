@@ -247,11 +247,22 @@ function collectImpl(root: Document, options?: CollectOptions): { items: RawElem
 
   const containerOf = (node: Element): { role: string; name: string } | undefined => {
     try {
-      const c = node.closest('[role="listbox"], [role="grid"], [role="region"], [role="combobox"], [role="menu"], [role="list"], ul, ol, table, tbody');
+      // Dynamic streams (WAI-ARIA feed/log): report the OUTERMOST one so every item
+      // in the stream shares one container key.
+      let stream: Element | null = null;
+      for (let p = node.parentElement?.closest('[role="feed"], [role="log"]') ?? null; p !== null; p = p.parentElement?.closest('[role="feed"], [role="log"]') ?? null) {
+        stream = p;
+      }
+      if (stream !== null) {
+        const sRole = attrOf(stream, "role").trim().split(/\s+/)[0]?.toLowerCase() ?? "feed";
+        const [sName] = nameOf(stream, sRole);
+        return { role: sRole, name: sName !== "" ? sName : sRole };
+      }
+      const c = node.closest('[role="article"], article, [role="listbox"], [role="grid"], [role="region"], [role="combobox"], [role="menu"], [role="list"], ul, ol, table, tbody');
       if (c !== null && c !== node) {
-        const cRole = roleOf(c) || c.localName;
+        const cRole = roleOf(c) || (c.localName === "article" ? "article" : c.localName);
         const [cName] = nameOf(c, cRole);
-        if (["listbox", "grid", "region", "combobox", "menu", "list", "table", "rowgroup"].includes(cRole)) {
+        if (["article", "listbox", "grid", "region", "combobox", "menu", "list", "table", "rowgroup"].includes(cRole)) {
           return { role: cRole, name: cName !== "" ? cName : cRole };
         }
       }
