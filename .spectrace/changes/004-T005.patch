@@ -1,0 +1,41 @@
+diff --git a/src/browser/test/standalone-runner.test.ts b/src/browser/test/standalone-runner.test.ts
+index 174ed66..3bf5f9f 100644
+--- a/src/browser/test/standalone-runner.test.ts
++++ b/src/browser/test/standalone-runner.test.ts
+@@ -108,3 +108,36 @@ test("launchStandaloneApp initializes isolated profile and spawns runtime withou
+     await rm(tempDir, { recursive: true, force: true });
+   }
+ });
++
++test("BiDi connection attaches cleanly to the standalone LinkedIn instance endpoint", async () => {
++  const { startFakeBidiServer } = await import("../../bidi/fake-server.js");
++  const { withTopLevelContext } = await import("../../bidi/session.js");
++
++  const server = await startFakeBidiServer({
++    "browsingContext.getTree": () => ({
++      contexts: [
++        {
++          context: "ctx-linkedin",
++          url: "https://www.linkedin.com/feed/",
++          children: [],
++          parent: null,
++        },
++      ],
++    }),
++  });
++
++  try {
++    const contextId = await withTopLevelContext(
++      server.url,
++      async (_client, id) => {
++        assert.equal(id, "ctx-linkedin");
++        return id;
++      },
++    );
++    assert.equal(contextId, "ctx-linkedin");
++    assert.equal(server.sessionActive, false);
++  } finally {
++    await server.close();
++  }
++});
++
