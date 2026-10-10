@@ -18,7 +18,7 @@ Local-only CLI + MCP adapter driving standalone Firefox PWA instances over W3C W
 | Identity | Standalone Firefox PWA profile under `.agent/apps/<appSlug>/profile`; user performs logins | Lawful: agent never handles credentials |
 | Write safety | Dry-run unless `--armed`; kill-switch file; origin allow-list; file upload safe path boundary | Multi-layer safety gate limits prompt-injection blast radius |
 | Visual QA & Evidence | BiDi `captureScreenshot` saved directly to disk (`.agent/screenshot.png`, `.agent/evidence/`); zero base64 in LLM context | Strict context economy while capturing deterministic visual test evidence |
-| CI | `pnpm lint && pnpm build && pnpm test && pnpm smoke` (plus opt-in real Firefox E2E) | Minimal gate, 328+ automated tests |
+| CI | `pnpm lint && pnpm build && pnpm test && pnpm smoke` (plus opt-in real Firefox E2E) | Minimal gate, 383+ automated tests |
 | Secrets | `.env`, never committed | Standard |
 | Observability | `.spectrace/logs` + per-run evidence files | Audit trail |
 
@@ -40,7 +40,7 @@ All source files are partitioned strictly by responsibility under `src/`:
 | Operations | `src/ops/` | High-level CLI/MCP operations (`perform*`), user journeys engine (`journey.ts`), QA verification engine with visual evidence (`qa.ts`) | `core`, `screens`, `backend` |
 | CLI Adapter | `src/cli/` | CLI options, screen map subcommands, upload/screenshot commands, command integration tests | `core`, `screens`, `ops` |
 | MCP Adapter | `src/mcp/` | Stdio MCP server, tools, dynamic flow and journey tool generators, MCP stdio tests | `core`, `screens`, `ops` |
-| Root Binaries | `src/` | Binary entrypoints: `cli.ts` (CLI), `mcp.ts` (MCP), `smoke.ts` (smoke test), `index.ts` (exports), `e2e.test.ts` (Firefox E2E) | Layer modules |
+| Root Binaries | `src/` | Binary entrypoints: `cli.ts` (CLI), `mcp.ts` (MCP), `index.ts` (library exports), `test/e2e.test.ts` (Firefox E2E). Auxiliary script: `scripts/smoke.ts` | Layer modules |
 
 Tests live colocated beside their corresponding unit (e.g. `src/core/gate.test.ts`, `src/browser/actions.test.ts`).
 

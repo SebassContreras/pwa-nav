@@ -438,7 +438,7 @@ Run the full CI verification chain:
 ```bash
 pnpm lint && pnpm build && pnpm test && pnpm smoke
 ```
-- **358 Automated Tests** across dedicated module test suites (`src/*/test/`) covering WebDriver BiDi serialization, DOM collectors, semantic target resolution, screen maps, multi-screen journeys, the unified tools service layer (`src/tools/`), and MCP server conformance.
+- **383 Automated Tests** across dedicated module test suites (`src/*/test/`) covering WebDriver BiDi serialization, DOM collectors, semantic target resolution, screen maps, multi-screen journeys, the unified tools service layer (`src/tools/`), and MCP server conformance.
 
 ---
 

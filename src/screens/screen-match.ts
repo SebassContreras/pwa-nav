@@ -306,5 +306,3 @@ export function selectMap(
   }
   return only.map;
 }
-
-export const selectMapForOrigin = selectMap;

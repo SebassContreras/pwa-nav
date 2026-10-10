@@ -8,9 +8,11 @@ import type { RawElement } from "../browser/collector.js";
 import { load as loadSnapshot, resolve as resolveRef, save as saveSnapshot } from "../core/refs.js";
 import { resolveAgentDir } from "../core/storage.js";
 
+import { DEFAULT_AGENT_DIR } from "../core/gate.js";
+
 export const DEFAULT_PORT = 9222;
 export const DEFAULT_HOST = "127.0.0.1";
-export const DEFAULT_AGENT_DIR = ".agent";
+export { DEFAULT_AGENT_DIR };
 
 export interface Session {
   url: string;
