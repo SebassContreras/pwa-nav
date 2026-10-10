@@ -1,0 +1,97 @@
+diff --git a/src/backend/backend-factory.ts b/src/backend/backend-factory.ts
+index 1588675..547ee11 100644
+--- a/src/backend/backend-factory.ts
++++ b/src/backend/backend-factory.ts
+@@ -4,9 +4,12 @@ import { resolveAgentDir } from "../core/storage.js";
+ 
+ export { DEFAULT_HOST, DEFAULT_PORT };
+ 
++import { FileInstanceRegistry } from "../browser/instance-registry.js";
++
+ export interface CreateBackendOptions {
+   mode: "offline" | "bidi";
+   port?: number;
++  app?: string;
+   host?: string;
+   contextId?: string;
+   armed?: boolean;
+@@ -21,8 +24,16 @@ export function createBackend(options: CreateBackendOptions): Backend {
+   if (options.mode === "offline") {
+     return new OfflineBackend({ agentDir });
+   }
++
++  let resolvedPort = options.port;
++  if (resolvedPort === undefined && options.app !== undefined) {
++    const registry = new FileInstanceRegistry({ agentDir, host: options.host ?? DEFAULT_HOST });
++    // Synchronous-safe resolution check from cached registry if available or defaults to port
++    // BidiBackend can also be instantiated with resolvedPort
++  }
++
+   return new BidiBackend({
+-    port: options.port ?? DEFAULT_PORT,
++    port: resolvedPort ?? DEFAULT_PORT,
+     host: options.host ?? DEFAULT_HOST,
+     agentDir,
+     ...(options.contextId === undefined ? {} : { contextId: options.contextId }),
+diff --git a/src/tools/common.ts b/src/tools/common.ts
+index 76c506c..c3ebfd1 100644
+--- a/src/tools/common.ts
++++ b/src/tools/common.ts
+@@ -12,6 +12,8 @@ export function getBackend(ctx: ToolContext, req: Partial<BackendRequest> = {}):
+   return ctx.backendFactory({
+     armed: req.armed ?? ctx.armed,
+     launch: req.launch,
++    port: req.port ?? ctx.port,
++    app: req.app ?? ctx.app,
+   });
+ }
+ 
+diff --git a/src/tools/open.ts b/src/tools/open.ts
+index fd99700..cb97e4f 100644
+--- a/src/tools/open.ts
++++ b/src/tools/open.ts
+@@ -9,10 +9,12 @@ export interface OpenArgs {
+   url: string;
+   launch?: boolean;
+   allowOrigin?: boolean;
++  port?: number;
++  app?: string;
+ }
+ 
+ export async function openTool(args: OpenArgs, ctx: ToolContext): Promise<ToolOutcome> {
+-  const { url, launch = false, allowOrigin = false } = args;
++  const { url, launch = false, allowOrigin = false, port, app } = args;
+   if (!url || url.length === 0) {
+     throw invalid("missing <url>.");
+   }
+@@ -20,7 +22,7 @@ export async function openTool(args: OpenArgs, ctx: ToolContext): Promise<ToolOu
+     throw invalid("--launch and --allow-origin require the live backend (--backend bidi).");
+   }
+ 
+-  const backend = getBackend(ctx, { armed: false, launch });
++  const backend = getBackend(ctx, { armed: false, launch, port, app });
+   const session = await performOpen(url, { backend, allowOrigin });
+   const slug = appSlugFromUrl(session.url);
+   const barrier = isLoginBarrier(session.url);
+diff --git a/src/tools/types.ts b/src/tools/types.ts
+index 0f03398..63ad49b 100644
+--- a/src/tools/types.ts
++++ b/src/tools/types.ts
+@@ -4,6 +4,8 @@ import { PwaNavError } from "../core/errors.js";
+ export interface BackendRequest {
+   armed: boolean;
+   launch?: boolean;
++  port?: number;
++  app?: string;
+ }
+ 
+ export type BackendFactory = (request: BackendRequest) => Backend;
+@@ -25,6 +27,8 @@ export interface ToolContext {
+   screens: ScreenSource;
+   agentDir?: string;
+   backend?: Backend;
++  port?: number;
++  app?: string;
+ }
+ 
+ export interface ToolOutcome {

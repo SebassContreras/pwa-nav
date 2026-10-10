@@ -1,0 +1,99 @@
+diff --git a/src/browser/standalone-runner.ts b/src/browser/standalone-runner.ts
+index a7ae4e9..9797a83 100644
+--- a/src/browser/standalone-runner.ts
++++ b/src/browser/standalone-runner.ts
+@@ -12,10 +12,14 @@ import {
+ } from "./pwa-runtime.js";
+ import { ensureStandaloneProfile } from "./standalone-profile.js";
+ 
++import type { PwaInstanceRegistry } from "./port-allocator.js";
++import { allocatePort } from "./port-allocator.js";
++import { FileInstanceRegistry } from "./instance-registry.js";
++
+ export interface StandaloneLaunchOptions {
+   url: string;
+   appSlug: string;
+-  port: number;
++  port?: number;
+   headless?: boolean;
+   host?: string;
+   timeoutMs?: number;
+@@ -23,6 +27,7 @@ export interface StandaloneLaunchOptions {
+   env?: NodeJS.ProcessEnv;
+   cacheDir?: string;
+   probe?: PortProbe;
++  registry?: PwaInstanceRegistry;
+   intervalMs?: number;
+   spawnFn?: (binary: string, args: string[]) => ChildProcess;
+ }
+@@ -140,7 +145,17 @@ export async function launchStandaloneApp(options: StandaloneLaunchOptions): Pro
+   const probe = options.probe ?? tcpProbe;
+   const url = options.url;
+   const appSlug = options.appSlug;
+-  validatePort(options.port);
++
++  const registry = options.registry ?? new FileInstanceRegistry({ cacheDir: options.cacheDir, probe, host });
++  const activeInstances = await registry.prune();
++  const reservedPorts = activeInstances.map((i) => i.port);
++
++  let port = options.port;
++  if (port === undefined) {
++    port = await allocatePort(reservedPorts, { host, probe });
++  } else {
++    validatePort(port);
++  }
+ 
+   const dir = firefoxPwaDir(platform, env);
+   const binary = runtimePath(dir, platform);
+@@ -149,16 +164,16 @@ export async function launchStandaloneApp(options: StandaloneLaunchOptions): Pro
+   const args = buildStandaloneLaunchArgs({
+     profileDir,
+     appSlug,
+-    port: options.port,
++    port,
+     url,
+     ...(options.headless === undefined ? {} : { headless: options.headless }),
+   });
+   const command = launchCommandHint(binary, args, platform);
+ 
+-  if (await probe(host, options.port)) {
++  if (await probe(host, port)) {
+     throw new PwaNavError(
+       "invalid_args",
+-      `port ${String(options.port)} is already listening: already running, attach instead`,
++      `port ${String(port)} is already listening: already running, attach instead`,
+     );
+   }
+ 
+@@ -166,17 +181,28 @@ export async function launchStandaloneApp(options: StandaloneLaunchOptions): Pro
+   child.on("error", () => undefined);
+   child.unref();
+ 
+-  await waitForPort(host, options.port, options.timeoutMs ?? DEFAULT_LAUNCH_TIMEOUT_MS, probe, {
++  await waitForPort(host, port, options.timeoutMs ?? DEFAULT_LAUNCH_TIMEOUT_MS, probe, {
+     launchHint: command,
+     ...(options.intervalMs === undefined ? {} : { intervalMs: options.intervalMs }),
+   });
+ 
+-  return {
++  const result: StandaloneLaunchResult = {
+     appSlug,
+     url,
+-    port: options.port,
++    port,
+     profileDir,
+     command,
+     pid: child.pid,
+   };
++
++  await registry.register({
++    appSlug,
++    url,
++    port,
++    pid: child.pid,
++    profileDir,
++    startedAt: new Date().toISOString(),
++  });
++
++  return result;
+ }

@@ -233,6 +233,7 @@ function printHelpAndExit(help: boolean | undefined): void {
 const LIVE_OPTIONS = {
   backend: { type: "string" },
   port: { type: "string" },
+  app: { type: "string" },
   context: { type: "string" },
   "cache-dir": { type: "string" },
   help: { type: "boolean", short: "h" },
@@ -260,6 +261,7 @@ const SCREENSHOT_OPTIONS = {
 interface LiveConfig {
   mode: "offline" | "bidi";
   port: number;
+  app?: string;
   contextId?: string;
   agentDir: string;
 }
@@ -267,6 +269,7 @@ interface LiveConfig {
 function resolveLive(values: {
   backend?: string;
   port?: string;
+  app?: string;
   context?: string;
   "cache-dir"?: string;
 }): LiveConfig {
@@ -282,10 +285,11 @@ function resolveLive(values: {
       throw invalid(`invalid port: ${rawPort} (expected an integer 1024-65535).`);
     }
   }
+  const app = requireNonEmpty("--app", values.app);
   const contextId = requireNonEmpty("--context", values.context);
   const rawCache = requireNonEmpty("--cache-dir", values["cache-dir"]) ?? process.env["PWA_NAV_CACHE_DIR"];
   const agentDir = resolveAgentDir({ cacheDir: rawCache });
-  return { mode: rawBackend, port, agentDir, ...(contextId === undefined ? {} : { contextId }) };
+  return { mode: rawBackend, port, agentDir, ...(app === undefined ? {} : { app }), ...(contextId === undefined ? {} : { contextId }) };
 }
 
 function makeBackend(
@@ -295,6 +299,7 @@ function makeBackend(
   return createBackend({
     mode: live.mode,
     port: live.port,
+    ...(live.app === undefined ? {} : { app: live.app }),
     cacheDir: live.agentDir,
     ...(live.contextId === undefined ? {} : { contextId: live.contextId }),
     ...(extra.armed === undefined ? {} : { armed: extra.armed }),

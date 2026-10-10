@@ -1,0 +1,61 @@
+import { DEFAULT_PORT } from "../backend/backend.js";
+import { tcpProbe, validatePort, type PortProbe } from "./pwa-runtime.js";
+
+export interface PwaInstance {
+  appSlug: string;
+  url: string;
+  port: number;
+  pid?: number;
+  profileDir: string;
+  startedAt: string;
+}
+
+export interface PwaInstanceRegistry {
+  register(instance: PwaInstance): Promise<void>;
+  unregister(appSlug: string): Promise<void>;
+  findByApp(appSlug: string): Promise<PwaInstance | null>;
+  findByPort(port: number): Promise<PwaInstance | null>;
+  listActive(): Promise<PwaInstance[]>;
+  prune(): Promise<PwaInstance[]>;
+}
+
+export interface PortAllocatorOptions {
+  startPort?: number;
+  maxAttempts?: number;
+  host?: string;
+  probe?: PortProbe;
+}
+
+/**
+ * Finds the next available TCP port that is neither active in the registry
+ * nor currently open on the local network.
+ */
+export async function allocatePort(
+  reservedPorts: Iterable<number> = [],
+  options: PortAllocatorOptions = {},
+): Promise<number> {
+  const startPort = options.startPort ?? DEFAULT_PORT;
+  const maxAttempts = options.maxAttempts ?? 100;
+  const host = options.host ?? "127.0.0.1";
+  const probe = options.probe ?? tcpProbe;
+
+  const reservedSet = new Set(reservedPorts);
+
+  for (let offset = 0; offset < maxAttempts; offset++) {
+    const candidate = startPort + offset;
+    validatePort(candidate);
+
+    if (reservedSet.has(candidate)) {
+      continue;
+    }
+
+    const isOpen = await probe(host, candidate);
+    if (!isOpen) {
+      return candidate;
+    }
+  }
+
+  throw new Error(
+    `could not allocate an available debugging port between ${String(startPort)} and ${String(startPort + maxAttempts - 1)}`,
+  );
+}

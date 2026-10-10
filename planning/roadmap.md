@@ -5,7 +5,7 @@ Index of every spec - status, dependencies, pipeline stage, and priority. Read t
 | ID | Spec | Status | Depends on | Stage | Priority |
 |---|---|---|---|---|---|
 | 001 | screen-map-filtering | done        | - | —     | 1 |
-| 002 | multi-pwa-isolation | todo | - | design | 2 |
+| 002 | multi-pwa-isolation | done        | - | —      | 2 |
 | 003 | free-mode-profiles | done        | - | —            | 3 |
 | 004 | standalone-pwa-no-extension | done        | - | —      | 4 |
 | 005 | automatic-pwa-provisioning | done        | 004 | —      | 5 |

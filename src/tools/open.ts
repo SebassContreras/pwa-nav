@@ -9,10 +9,12 @@ export interface OpenArgs {
   url: string;
   launch?: boolean;
   allowOrigin?: boolean;
+  port?: number;
+  app?: string;
 }
 
 export async function openTool(args: OpenArgs, ctx: ToolContext): Promise<ToolOutcome> {
-  const { url, launch = false, allowOrigin = false } = args;
+  const { url, launch = false, allowOrigin = false, port, app } = args;
   if (!url || url.length === 0) {
     throw invalid("missing <url>.");
   }
@@ -20,7 +22,7 @@ export async function openTool(args: OpenArgs, ctx: ToolContext): Promise<ToolOu
     throw invalid("--launch and --allow-origin require the live backend (--backend bidi).");
   }
 
-  const backend = getBackend(ctx, { armed: false, launch });
+  const backend = getBackend(ctx, { armed: false, launch, port, app });
   const session = await performOpen(url, { backend, allowOrigin });
   const slug = appSlugFromUrl(session.url);
   const barrier = isLoginBarrier(session.url);

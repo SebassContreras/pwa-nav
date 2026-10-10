@@ -12,6 +12,8 @@ export function getBackend(ctx: ToolContext, req: Partial<BackendRequest> = {}):
   return ctx.backendFactory({
     armed: req.armed ?? ctx.armed,
     launch: req.launch,
+    port: req.port ?? ctx.port,
+    app: req.app ?? ctx.app,
   });
 }
 

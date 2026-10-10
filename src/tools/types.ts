@@ -4,6 +4,8 @@ import { PwaNavError } from "../core/errors.js";
 export interface BackendRequest {
   armed: boolean;
   launch?: boolean;
+  port?: number;
+  app?: string;
 }
 
 export type BackendFactory = (request: BackendRequest) => Backend;
@@ -25,6 +27,8 @@ export interface ToolContext {
   screens: ScreenSource;
   agentDir?: string;
   backend?: Backend;
+  port?: number;
+  app?: string;
 }
 
 export interface ToolOutcome {

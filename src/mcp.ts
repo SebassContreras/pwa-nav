@@ -33,6 +33,7 @@ function parseOptions(argv: string[]) {
       args: argv,
       options: {
         port: { type: "string" },
+        app: { type: "string" },
         armed: { type: "boolean" },
         "dry-run": { type: "boolean" },
         "screens-dir": { type: "string" },
@@ -66,6 +67,7 @@ function parseOptions(argv: string[]) {
 
   return {
     backend,
+    app: values.app,
     port,
     armed,
     screensDir: effectiveScreensDir,
@@ -91,10 +93,11 @@ async function main(): Promise<void> {
     cacheDir: opts.cacheDir,
     screensDir: opts.screensDir,
     ...(opts.screenMap === undefined ? {} : { screenMap: opts.screenMap }),
-    backendFactory: ({ armed, launch }) =>
+    backendFactory: ({ armed, launch, port, app }) =>
       createBackend({
         mode: opts.backend,
-        port: opts.port,
+        port: port ?? opts.port,
+        app: app ?? opts.app,
         armed,
         cacheDir: opts.cacheDir,
         ...(launch === true ? { launch: true } : {}),

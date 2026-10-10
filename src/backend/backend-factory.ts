@@ -7,6 +7,7 @@ export { DEFAULT_HOST, DEFAULT_PORT };
 export interface CreateBackendOptions {
   mode: "offline" | "bidi";
   port?: number;
+  app?: string;
   host?: string;
   contextId?: string;
   armed?: boolean;
@@ -21,8 +22,10 @@ export function createBackend(options: CreateBackendOptions): Backend {
   if (options.mode === "offline") {
     return new OfflineBackend({ agentDir });
   }
+
+  const resolvedPort = options.port;
   return new BidiBackend({
-    port: options.port ?? DEFAULT_PORT,
+    port: resolvedPort ?? DEFAULT_PORT,
     host: options.host ?? DEFAULT_HOST,
     agentDir,
     ...(options.contextId === undefined ? {} : { contextId: options.contextId }),

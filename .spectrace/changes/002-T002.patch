@@ -1,0 +1,70 @@
+diff --git a/src/browser/test/port-allocator.test.ts b/src/browser/test/port-allocator.test.ts
+new file mode 100644
+index 0000000..3a007ce
+--- /dev/null
++++ b/src/browser/test/port-allocator.test.ts
+@@ -0,0 +1,37 @@
++import test from "node:test";
++import assert from "node:assert/strict";
++import { allocatePort } from "../port-allocator.js";
++
++test("allocatePort returns startPort if not in reservedPorts and probe is free", async () => {
++  const mockProbe = async (_host: string, _port: number) => false;
++  const port = await allocatePort([], { startPort: 9222, probe: mockProbe });
++  assert.equal(port, 9222);
++});
++
++test("allocatePort skips reserved ports", async () => {
++  const mockProbe = async (_host: string, _port: number) => false;
++  const port = await allocatePort([9222, 9223], { startPort: 9222, probe: mockProbe });
++  assert.equal(port, 9224);
++});
++
++test("allocatePort skips open ports reported by probe", async () => {
++  const mockProbe = async (_host: string, port: number) => port === 9222;
++  const port = await allocatePort([], { startPort: 9222, probe: mockProbe });
++  assert.equal(port, 9223);
++});
++
++test("allocatePort skips both reserved and probe open ports", async () => {
++  const mockProbe = async (_host: string, port: number) => port === 9223;
++  const port = await allocatePort([9222], { startPort: 9222, probe: mockProbe });
++  assert.equal(port, 9224);
++});
++
++test("allocatePort throws when maxAttempts exceeded", async () => {
++  const mockProbe = async (_host: string, _port: number) => true;
++  await assert.rejects(
++    async () => {
++      await allocatePort([], { startPort: 9222, maxAttempts: 3, probe: mockProbe });
++    },
++    /could not allocate an available debugging port between 9222 and 9224/,
++  );
++});
+diff --git a/test-cache/apps/example-com/profile/chrome/userChrome.css b/test-cache/apps/example-com/profile/chrome/userChrome.css
+new file mode 100644
+index 0000000..18d615c
+--- /dev/null
++++ b/test-cache/apps/example-com/profile/chrome/userChrome.css
+@@ -0,0 +1,7 @@
++/* Hide Firefox tabs toolbar and navigation/URL bar for clean standalone app window */
++#TabsToolbar {
++  visibility: collapse !important;
++}
++#nav-bar {
++  visibility: collapse !important;
++}
+diff --git a/test-cache/apps/example-com/profile/user.js b/test-cache/apps/example-com/profile/user.js
+new file mode 100644
+index 0000000..8515827
+--- /dev/null
++++ b/test-cache/apps/example-com/profile/user.js
+@@ -0,0 +1,8 @@
++user_pref("remote.active-protocols", 1);
++user_pref("remote.experimental-modules", 1);
++user_pref("browser.shell.checkDefaultBrowser", false);
++user_pref("datareporting.policy.dataSubmissionEnabled", false);
++user_pref("datareporting.healthreport.uploadEnabled", false);
++user_pref("toolkit.telemetry.unified", false);
++user_pref("toolkit.telemetry.enabled", false);
++user_pref("toolkit.legacyUserProfileCustomizations.stylesheets", true);
