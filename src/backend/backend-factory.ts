@@ -11,7 +11,6 @@ export interface CreateBackendOptions {
   contextId?: string;
   armed?: boolean;
   launch?: boolean;
-  siteId?: string;
   /** `--cache-dir` (env PWA_NAV_CACHE_DIR). */
   cacheDir?: string;
   env?: NodeJS.ProcessEnv;
@@ -29,7 +28,6 @@ export function createBackend(options: CreateBackendOptions): Backend {
     ...(options.contextId === undefined ? {} : { contextId: options.contextId }),
     ...(options.armed === undefined ? {} : { armed: options.armed }),
     ...(options.launch === undefined ? {} : { launch: options.launch }),
-    ...(options.siteId === undefined ? {} : { siteId: options.siteId }),
     ...(options.env === undefined ? {} : { env: options.env }),
   });
 }

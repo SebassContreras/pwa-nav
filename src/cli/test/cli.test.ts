@@ -164,7 +164,6 @@ test("help lists the new flags, env names and the exit-code table", async () => 
       "--context",
       "--armed",
       "--launch",
-      "--site",
       "--allow-origin",
       "--all",
       "PWA_NAV_BACKEND",

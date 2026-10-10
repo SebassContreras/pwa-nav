@@ -4,7 +4,6 @@ import { PwaNavError } from "../core/errors.js";
 export interface BackendRequest {
   armed: boolean;
   launch?: boolean;
-  siteId?: string;
 }
 
 export type BackendFactory = (request: BackendRequest) => Backend;

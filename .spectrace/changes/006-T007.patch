@@ -1,0 +1,39 @@
+diff --git a/README.md b/README.md
+index c118c89..e379121 100644
+--- a/README.md
++++ b/README.md
+@@ -354,7 +354,7 @@ If any intermediate step fails or the destination URL does not match `expectScre
+ 
+ | Command | Description |
+ |---|---|
+-| `pwa-nav open <url\|app> [--launch] [--site <ULID>] [--allow-origin]` | Open an installed PWA or navigate to a URL. Auto-whitelists installed apps. |
++| `pwa-nav open <url|app> [--launch] [--allow-origin]` | Open an installed PWA or navigate to a URL. Auto-whitelists installed apps. |
+ | `pwa-nav auth [<app\|url>] [--clean] [--debug] [--port <n>]` | Assisted login workflow for Google accounts and bot-walled login screens. |
+ | `pwa-nav snapshot [-i \| --all] [--query <str>] [--role <str>] [--json] [--out <path>]` | Capture live accessibility DOM snapshot. Highlights active modal/dialogs. |
+ | `pwa-nav snapshot --screen [--screen-map <f>] [--screens-dir <dir>]` | Print compact view of mapped screen matching current URL (no DOM dump). |
+diff --git a/docs/firefox-pwa.md b/docs/firefox-pwa.md
+index 1d9cb91..4729c06 100644
+--- a/docs/firefox-pwa.md
++++ b/docs/firefox-pwa.md
+@@ -74,7 +74,7 @@ Each runtime needs its own port; select with `--port <n>` (or `PWA_NAV_PORT`), d
+ | App A | 9222 | `pwa-nav open <url-a> --allow-origin` (first time; later without) |
+ | App B | 9223 | `pwa-nav open <url-b> --port 9223 --allow-origin` (first time) |
+ 
+-Several top-level contexts in one runtime: pass `--context <id>`. Several sites sharing an origin: `--site <ULID>`.
++Several top-level contexts in one runtime: pass `--context <id>`. Isolating multiple apps: run with different profiles or ports (`--port <n>`).
+ 
+ ## Safety gate
+ 
+diff --git a/src/cli.ts b/src/cli.ts
+index adc3806..108e35f 100644
+--- a/src/cli.ts
++++ b/src/cli.ts
+@@ -2,7 +2,7 @@
+ // CLI surface for specs 001 (nav-snapshot), 003 (qa-loop) and 004 (firefox-bidi-backend, T011).
+ // Commands: `open <url>`, `snapshot`, `click`, `fill`, `extract`, `act`, `qa run <check-file>`.
+ // Verb surface stays at the 5 verbs + act/qa; live capability is flags (--backend, --port,
+-// --context, --armed, open --launch/--site/--allow-origin, snapshot --all).
++// --context, --armed, open --launch/--allow-origin, snapshot --all).
+ // Backend: live (`bidi`) is the default; `snapshot --input`/piped stdin and `qa run` stay offline.
+ // Action behavior lives in src/ops.ts (shared with the qa runner).
+ // Option parsing: node:util parseArgs (strict, per-command tables); every usage error

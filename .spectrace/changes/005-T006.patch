@@ -1,0 +1,80 @@
+diff --git a/src/browser/test/bidi-backend.test.ts b/src/browser/test/bidi-backend.test.ts
+index 62c7d25..eed9b4b 100644
+--- a/src/browser/test/bidi-backend.test.ts
++++ b/src/browser/test/bidi-backend.test.ts
+@@ -233,6 +233,48 @@ test("open --launch: launches only when the port is closed, then navigates", asy
+   );
+ });
+ 
++test("open --launch: provisions and launches standalone PWA when target origin is uninstalled", async () => {
++  const provisioned: string[] = [];
++  const mockProvisioner = {
++    resolveSlug: (url: string) => "arbitrary-test",
++    provision: async (url: string) => ({
++      url,
++      appSlug: "arbitrary-test",
++      profileDir: "/fake/profile",
++    }),
++    provisionAndLaunch: async (url: string, opts: any) => {
++      provisioned.push(`${url} port=${opts.port}`);
++      return {
++        url,
++        appSlug: "arbitrary-test",
++        profileDir: "/fake/profile",
++        launchResult: {
++          appSlug: "arbitrary-test",
++          url,
++          port: opts.port,
++          profileDir: "/fake/profile",
++          command: "mock-cmd",
++          pid: 4321,
++        },
++      };
++    },
++  };
++
++  await withEnv(
++    async (e) => {
++      const session = await e.backend.open("https://arbitrary.test/dashboard", { allowOrigin: true });
++      assert.equal(session.url, "https://arbitrary.test/dashboard");
++      assert.deepEqual(provisioned, [`https://arbitrary.test/dashboard port=${e.server.port}`]);
++    },
++    {
++      launch: true,
++      launchFn: () => Promise.reject(new Error("site not installed")),
++      provisioner: mockProvisioner,
++      probe: () => Promise.resolve(false),
++    },
++  );
++});
++
+ test("open: blocked without allow-list or flag, before any BiDi frame; allow.json and flag permit", async () => {
+   await withEnv(async (e) => {
+     const error = await expectError(e.backend.open("https://app.test/home"), "origin_blocked");
+diff --git a/test-cache/apps/example-com/profile/chrome/userChrome.css b/test-cache/apps/example-com/profile/chrome/userChrome.css
+deleted file mode 100644
+index 18d615c..0000000
+--- a/test-cache/apps/example-com/profile/chrome/userChrome.css
++++ /dev/null
+@@ -1,7 +0,0 @@
+-/* Hide Firefox tabs toolbar and navigation/URL bar for clean standalone app window */
+-#TabsToolbar {
+-  visibility: collapse !important;
+-}
+-#nav-bar {
+-  visibility: collapse !important;
+-}
+diff --git a/test-cache/apps/example-com/profile/user.js b/test-cache/apps/example-com/profile/user.js
+deleted file mode 100644
+index 8515827..0000000
+--- a/test-cache/apps/example-com/profile/user.js
++++ /dev/null
+@@ -1,8 +0,0 @@
+-user_pref("remote.active-protocols", 1);
+-user_pref("remote.experimental-modules", 1);
+-user_pref("browser.shell.checkDefaultBrowser", false);
+-user_pref("datareporting.policy.dataSubmissionEnabled", false);
+-user_pref("datareporting.healthreport.uploadEnabled", false);
+-user_pref("toolkit.telemetry.unified", false);
+-user_pref("toolkit.telemetry.enabled", false);
+-user_pref("toolkit.legacyUserProfileCustomizations.stylesheets", true);

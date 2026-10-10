@@ -1,0 +1,347 @@
+diff --git a/src/backend/backend-factory.ts b/src/backend/backend-factory.ts
+index 56fe71d..1588675 100644
+--- a/src/backend/backend-factory.ts
++++ b/src/backend/backend-factory.ts
+@@ -11,7 +11,6 @@ export interface CreateBackendOptions {
+   contextId?: string;
+   armed?: boolean;
+   launch?: boolean;
+-  siteId?: string;
+   /** `--cache-dir` (env PWA_NAV_CACHE_DIR). */
+   cacheDir?: string;
+   env?: NodeJS.ProcessEnv;
+@@ -29,7 +28,6 @@ export function createBackend(options: CreateBackendOptions): Backend {
+     ...(options.contextId === undefined ? {} : { contextId: options.contextId }),
+     ...(options.armed === undefined ? {} : { armed: options.armed }),
+     ...(options.launch === undefined ? {} : { launch: options.launch }),
+-    ...(options.siteId === undefined ? {} : { siteId: options.siteId }),
+     ...(options.env === undefined ? {} : { env: options.env }),
+   });
+ }
+diff --git a/src/browser/bidi-backend.ts b/src/browser/bidi-backend.ts
+index 9edcb4a..2839e16 100644
+--- a/src/browser/bidi-backend.ts
++++ b/src/browser/bidi-backend.ts
+@@ -1,7 +1,7 @@
+ // BidiBackend (spec 004, T010): the Backend port over WebDriver BiDi.
+ // Every operation is ONE withTopLevelContext session (connect -> work -> session.end);
+ // a session is never reused (Firefox allows a single active session).
+-import { dirname } from "node:path";
++import { dirname, join } from "node:path";
+ import { addAllowedOrigin, assertArmedAllowed, assertFileUploadAllowed, assertNavigationAllowed } from "../core/gate.js";
+ import { resolveAgentDir } from "../core/storage.js";
+ import { withTopLevelContext, type TopLevelContextOptions } from "../bidi/session.js";
+@@ -30,18 +30,14 @@ import type { RawElement } from "./collector.js";
+ import { buildLiveSnapshot, type LiveExtras } from "./live-snapshot.js";
+ import { assertFresh } from "./locate.js";
+ import {
+-  buildLaunchArgs,
+-  findSite,
+   firefoxPwaDir,
+   launchCommandHint,
+-  launchPwa,
+-  listInstalledSites,
+-  profileDirOf,
+-  readConfig,
+   runtimePath,
+   tcpProbe,
+   type PortProbe,
+ } from "./pwa-runtime.js";
++import { appSlugFromUrl } from "../backend/backend.js";
++import { buildStandaloneLaunchArgs } from "./standalone-runner.js";
+ import { DefaultPwaProvisioner, type PwaProvisioner } from "./provisioner.js";
+ 
+ export function endpointFor(port: number, host: string = DEFAULT_HOST): string {
+@@ -59,13 +55,10 @@ export interface BidiBackendOptions {
+   env?: NodeJS.ProcessEnv;
+   /** `open` starts the PWA runtime first (never writes to the profile). */
+   launch?: boolean;
+-  /** Disambiguates several firefoxpwa sites on one origin (launch and hints). */
+-  siteId?: string;
+   platform?: string;
+   /** Transport/signal options passed to every session. */
+   session?: TopLevelContextOptions;
+   probe?: PortProbe;
+-  launchFn?: typeof launchPwa;
+   provisioner?: PwaProvisioner;
+   /** Test hook: runs after each completed armed op of a batch (index is zero-based). */
+   onOpDone?: (index: number) => void | Promise<void>;
+@@ -154,8 +147,9 @@ export class BidiBackend implements Backend {
+     try {
+       if (originUrl === undefined) throw new Error("no origin");
+       const dir = firefoxPwaDir(this.platform, this.env);
+-      const site = findSite(await readConfig(dir), new URL(originUrl).origin, this.options.siteId);
+-      const args = buildLaunchArgs({ profileDir: profileDirOf(dir, site), siteId: site.ulid, port: this.port });
++      const appSlug = appSlugFromUrl(originUrl);
++      const profileDir = join(this.agentDir, "apps", appSlug, "profile");
++      const args = buildStandaloneLaunchArgs({ profileDir, appSlug, port: this.port, url: originUrl });
+       hint = `launch the PWA: ${launchCommandHint(runtimePath(dir, this.platform), args, this.platform)}`;
+     } catch {
+       // keep the generic hint
+@@ -167,19 +161,9 @@ export class BidiBackend implements Backend {
+     return (await loadSession(agentPath(this.agentDir, "session.json")))?.url;
+   }
+ 
+-  private async getInstalledOrigins(): Promise<string[]> {
+-    try {
+-      const sites = await listInstalledSites(this.platform, this.env);
+-      return sites.map((s) => s.origin);
+-    } catch {
+-      return [];
+-    }
+-  }
+-
+   private async assertGate(armed: boolean, ...urls: string[]): Promise<void> {
+-    const extraOrigins = await this.getInstalledOrigins();
+     for (const origin of urls) {
+-      const decision = await assertArmedAllowed({ armed, origin, agentDir: this.agentDir, env: this.env, extraOrigins });
++      const decision = await assertArmedAllowed({ armed, origin, agentDir: this.agentDir, env: this.env });
+       if (decision.kind === "blocked") throw decision.error;
+     }
+   }
+@@ -187,24 +171,7 @@ export class BidiBackend implements Backend {
+   // --- Backend ---
+ 
+   async open(url: string, opts: OpenOptions = {}): Promise<Session> {
+-    let target = url;
+-    const installedOrigins = await this.getInstalledOrigins();
+-    if (!isHttpUrl(target)) {
+-      try {
+-        const sites = await listInstalledSites(this.platform, this.env);
+-        const match = sites.find(
+-          (s) =>
+-            s.name?.toLowerCase().includes(target.toLowerCase()) ||
+-            s.origin.toLowerCase().includes(target.toLowerCase()) ||
+-            s.ulid === target,
+-        );
+-        if (match !== undefined) {
+-          target = match.documentUrl;
+-        }
+-      } catch {
+-        // keep target as is
+-      }
+-    }
++    const target = url;
+     if (target.length === 0 || !isHttpUrl(target)) {
+       throw new PwaNavError("invalid_args", `invalid URL (expected http/https): ${url}`);
+     }
+@@ -214,35 +181,20 @@ export class BidiBackend implements Backend {
+       allowOrigin: opts.allowOrigin === true,
+       agentDir: this.agentDir,
+       env: this.env,
+-      extraOrigins: installedOrigins,
+     });
+     const probe = this.options.probe ?? tcpProbe;
+     const portOpen = await probe(this.host, this.port);
+     if (!portOpen && this.options.launch === true) {
+-      // Auto-launch if launch: true was passed
+-      try {
+-        await (this.options.launchFn ?? launchPwa)({
+-          origin: new URL(target).origin,
+-          port: this.port,
++      await this.provisioner.provisionAndLaunch(target, {
++        port: this.port,
++        cacheDir: this.agentDir,
++        launchOptions: {
+           host: this.host,
+           env: this.env,
+           platform: this.platform,
+-          ...(this.options.siteId === undefined ? {} : { siteId: this.options.siteId }),
+-          ...(this.options.probe === undefined ? {} : { probe: this.options.probe }),
+-        });
+-      } catch {
+-        // Fallback to on-the-fly standalone PWA provisioning (Spec 005)
+-        await this.provisioner.provisionAndLaunch(target, {
+-          port: this.port,
+-          cacheDir: this.agentDir,
+-          launchOptions: {
+-            host: this.host,
+-            env: this.env,
+-            platform: this.platform,
+-            probe,
+-          },
+-        });
+-      }
++          probe,
++        },
++      });
+     }
+     const navigated = await this.run(target, (client, context) => client.navigate(context, target, "complete"));
+     if (opts.allowOrigin === true) {
+diff --git a/src/browser/standalone-runner.ts b/src/browser/standalone-runner.ts
+index 8f1d62d..a7ae4e9 100644
+--- a/src/browser/standalone-runner.ts
++++ b/src/browser/standalone-runner.ts
+@@ -59,6 +59,76 @@ export function buildStandaloneLaunchArgs(options: {
+   return args;
+ }
+ 
++export function buildCleanStandaloneLaunchArgs(options: {
++  profileDir: string;
++  appSlug: string;
++  url: string;
++  headless?: boolean;
++}): string[] {
++  const args = [
++    "--profile",
++    options.profileDir,
++    "--pwa",
++    options.appSlug,
++  ];
++  if (options.headless === true) {
++    args.push("--headless");
++  }
++  args.push(options.url);
++  return args;
++}
++
++export interface CleanStandaloneLaunchOptions {
++  url: string;
++  appSlug: string;
++  headless?: boolean;
++  platform?: string;
++  env?: NodeJS.ProcessEnv;
++  cacheDir?: string;
++  spawnFn?: (binary: string, args: string[]) => ChildProcess;
++}
++
++export interface CleanStandaloneLaunchResult {
++  appSlug: string;
++  url: string;
++  profileDir: string;
++  command: string;
++  pid: number | undefined;
++}
++
++export async function launchStandaloneAppClean(
++  options: CleanStandaloneLaunchOptions,
++): Promise<CleanStandaloneLaunchResult> {
++  const platform = options.platform ?? process.platform;
++  const env = options.env ?? process.env;
++  const url = options.url;
++  const appSlug = options.appSlug;
++
++  const dir = firefoxPwaDir(platform, env);
++  const binary = runtimePath(dir, platform);
++  const profileDir = await ensureStandaloneProfile(appSlug, { cacheDir: options.cacheDir });
++
++  const args = buildCleanStandaloneLaunchArgs({
++    profileDir,
++    appSlug,
++    url,
++    ...(options.headless === undefined ? {} : { headless: options.headless }),
++  });
++  const command = launchCommandHint(binary, args, platform);
++
++  const child = (options.spawnFn ?? defaultSpawn)(binary, args);
++  child.on("error", () => undefined);
++  child.unref();
++
++  return {
++    appSlug,
++    url,
++    profileDir,
++    command,
++    pid: child.pid,
++  };
++}
++
+ function defaultSpawn(binary: string, args: string[]): ChildProcess {
+   return spawn(binary, args, { detached: true, stdio: "ignore" });
+ }
+diff --git a/src/mcp.ts b/src/mcp.ts
+index 01f7783..843a2db 100644
+--- a/src/mcp.ts
++++ b/src/mcp.ts
+@@ -9,7 +9,6 @@ import { createBackend, DEFAULT_PORT } from "./backend/backend-factory.js";
+ import { exitCodeOf, PwaNavError } from "./core/errors.js";
+ import { loadFlowSource } from "./mcp/mcp-flows.js";
+ import { createMcpServer } from "./mcp/mcp-server.js";
+-import { cleanDebuggingPortConfigured } from "./browser/pwa-runtime.js";
+ 
+ import { resolveAgentDir, resolveScreensDir } from "./core/storage.js";
+ 
+@@ -77,9 +76,6 @@ function parseOptions(argv: string[]) {
+ 
+ async function main(): Promise<void> {
+   const opts = parseOptions(process.argv.slice(2));
+-  if (opts.backend === "bidi") {
+-    void cleanDebuggingPortConfigured().catch(() => false);
+-  }
+   const flowSource = await loadFlowSource(
+     {
+       screensDir: opts.screensDir,
+diff --git a/src/ops/ops.ts b/src/ops/ops.ts
+index c9b0cb8..3c02b16 100644
+--- a/src/ops/ops.ts
++++ b/src/ops/ops.ts
+@@ -41,14 +41,11 @@ import { learnScreen, slugify } from "../screens/screen-learn.js";
+ import { learnIntoFile } from "../screens/screen-store.js";
+ import { collectAllTargets } from "../screens/screen-resolve.js";
+ import { PwaNavError } from "../core/errors.js";
++import { appSlugFromUrl } from "../backend/backend.js";
+ import {
+-  cleanDebuggingPortConfigured,
+-  findSite,
+-  firefoxPwaDir,
+-  launchPwa,
+-  launchPwaClean,
+-  readConfig,
+-} from "../browser/pwa-runtime.js";
++  launchStandaloneApp,
++  launchStandaloneAppClean,
++} from "../browser/standalone-runner.js";
+ 
+ // Re-exported so existing callers keep their imports.
+ export { ensureParentDir, isHttpUrl, loadSession, parseSession };
+@@ -783,18 +780,13 @@ export interface AuthRelayResult {
+ }
+ 
+ export async function performAuthRelay(options: AuthRelayOptions): Promise<AuthRelayResult> {
+-  const pwaDir = firefoxPwaDir(process.platform, process.env);
+-  const cfg = await readConfig(pwaDir);
+-  const target = options.appOrUrl ?? (cfg.sites[0]?.name || cfg.sites[0]?.origin);
+-  if (!target) {
+-    throw new PwaNavError("no_browser", "no installed Firefox PWA found to authenticate");
+-  }
+-  const site = findSite(cfg, target);
++  const target = options.appOrUrl ?? "https://accounts.google.com";
++  const appSlug = appSlugFromUrl(target);
++  const url = isHttpUrl(target) ? target : `https://${target}`;
+ 
+   if (options.action === "clean") {
+-    await cleanDebuggingPortConfigured();
+-    const res = await launchPwaClean({ origin: site.origin, siteId: site.ulid });
+-    const msg = `PWA '${site.name ?? site.origin}' launched in clean mode (no debugging port). Please sign in manually in the browser window. When finished, re-run with '--debug' or call pwa_auth({ action: 'debug' }) to resume automation.`;
++    const res = await launchStandaloneAppClean({ url, appSlug });
++    const msg = `PWA '${appSlug}' launched in clean mode (no debugging port). Please sign in manually in the browser window. When finished, re-run with '--debug' or call pwa_auth({ action: 'debug' }) to resume automation.`;
+     if (options.quiet !== true) {
+       console.log(msg);
+     }
+@@ -802,14 +794,14 @@ export async function performAuthRelay(options: AuthRelayOptions): Promise<AuthR
+       status: "clean_started",
+       message: msg,
+       command: res.command,
+-      siteId: site.ulid,
++      siteId: appSlug,
+     };
+   }
+ 
+   // action === "debug"
+   const port = options.port ?? 9222;
+-  const res = await launchPwa({ origin: site.origin, siteId: site.ulid, port });
+-  const msg = `PWA '${site.name ?? site.origin}' restarted in debug mode on port ${String(res.port)}. Session preserved from clean login. Ready for automation.`;
++  const res = await launchStandaloneApp({ url, appSlug, port });
++  const msg = `PWA '${appSlug}' restarted in debug mode on port ${String(res.port)}. Session preserved from clean login. Ready for automation.`;
+   if (options.quiet !== true) {
+     console.log(msg);
+   }
+@@ -817,7 +809,7 @@ export async function performAuthRelay(options: AuthRelayOptions): Promise<AuthR
+     status: "debug_resumed",
+     message: msg,
+     command: res.command,
+-    siteId: site.ulid,
++    siteId: appSlug,
+   };
+ }
+ 

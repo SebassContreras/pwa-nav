@@ -4,7 +4,7 @@
 
 A stable CLI + MCP bridge for fluid QA of web applications and assisted, lawful browsing automation on login-walled sites where classic bots (Playwright, Puppeteer, Selenium) are blocked by Cloudflare, CAPTCHAs, or anti-bot defenses, including LLM notebooks (NotebookLM) and enterprise PWAs.
 
-The browser is the user's own logged-in Firefox PWA (PWAsForFirefox runtime) driven directly over standard W3C WebDriver BiDi loopback (`--remote-debugging-port 9222`).
+The browser is the user's standalone Firefox PWA instance driven directly over standard W3C WebDriver BiDi loopback (`--remote-debugging-port 9222`).
 
 Key capabilities:
 - **Dual Navigation Layers**:

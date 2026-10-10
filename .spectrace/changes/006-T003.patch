@@ -1,0 +1,93 @@
+diff --git a/src/cli.ts b/src/cli.ts
+index f78c9c7..adc3806 100644
+--- a/src/cli.ts
++++ b/src/cli.ts
+@@ -49,14 +49,12 @@ import {
+ import { isSemanticToken, parseFlowInputs } from "./screens/screen-resolve.js";
+ import { performJourney } from "./ops/journey.js";
+ 
+-const SITE_ULID = /^[0-9A-HJKMNP-TV-Z]{26}$/i;
+-
+ function usage(): string {
+   return [
+     "pwa-nav — fluid QA CLI (specs 001-nav-snapshot, 004-firefox-bidi-backend)",
+     "",
+     "Usage:",
+-    "  pwa-nav open <url> [--launch] [--site <ULID>] [--allow-origin]",
++    "  pwa-nav open <url> [--launch] [--allow-origin]",
+     "  pwa-nav snapshot [-i | --all] [--json] [--input <file>] [--url <url>] [--title <title>] [--out <path>]",
+     "  pwa-nav snapshot --screen [--screen-map <file>] [--screens-dir <dir>]",
+     "  pwa-nav snapshot --learn [--prune] [--locale <bcp47>] [--access public|authenticated|unknown]",
+@@ -102,7 +100,6 @@ function usage(): string {
+     "",
+     "Open options:",
+     "  --launch        Start the PWA runtime with the debugging port if nothing listens (never edits the profile).",
+-    "  --site <ULID>   Pick the firefoxpwa site when several share the origin (bidi only).",
+     "  --allow-origin  Consent to navigate to this origin: required unless it is already in .agent/allow.json.",
+     "                  Added to the allow-list only after a successful navigation. Without it: origin_blocked (6),",
+     "                  checked before any browser connection. An active kill-switch also blocks open (7).",
+@@ -182,7 +179,6 @@ const VALUE_HINT: Readonly<Record<string, string>> = {
+   "--port": "<n>",
+   "--context": "<id>",
+   "--backend": "offline|bidi",
+-  "--site": "<ULID>",
+   "--screen-map": "<file>",
+   "--screens-dir": "<dir>",
+   "--cache-dir": "<dir>",
+@@ -294,7 +290,7 @@ function resolveLive(values: {
+ 
+ function makeBackend(
+   live: LiveConfig,
+-  extra: { armed?: boolean; launch?: boolean; siteId?: string } = {},
++  extra: { armed?: boolean; launch?: boolean } = {},
+ ): Backend {
+   return createBackend({
+     mode: live.mode,
+@@ -303,7 +299,6 @@ function makeBackend(
+     ...(live.contextId === undefined ? {} : { contextId: live.contextId }),
+     ...(extra.armed === undefined ? {} : { armed: extra.armed }),
+     ...(extra.launch === undefined ? {} : { launch: extra.launch }),
+-    ...(extra.siteId === undefined ? {} : { siteId: extra.siteId }),
+   });
+ }
+ 
+@@ -329,7 +324,6 @@ async function cmdOpen(rest: string[]): Promise<void> {
+   const { values, positionals } = strictParse("open", rest, {
+     ...LIVE_OPTIONS,
+     launch: { type: "boolean" },
+-    site: { type: "string" },
+     "allow-origin": { type: "boolean" },
+   });
+   printHelpAndExit(values.help);
+@@ -341,16 +335,11 @@ async function cmdOpen(rest: string[]): Promise<void> {
+     throw invalid(`unexpected open argument: ${positionals[1] ?? ""}`);
+   }
+   const live = resolveLive(values);
+-  const siteId = requireNonEmpty("--site", values.site);
+-  if (siteId !== undefined && !SITE_ULID.test(siteId)) {
+-    throw invalid(`invalid --site: ${siteId} (expected a 26-char ULID).`);
+-  }
+-  if (live.mode === "offline" && (values.launch === true || siteId !== undefined || values["allow-origin"] === true)) {
+-    throw invalid("--launch, --site and --allow-origin require --backend bidi.");
++  if (live.mode === "offline" && (values.launch === true || values["allow-origin"] === true)) {
++    throw invalid("--launch and --allow-origin require --backend bidi.");
+   }
+   const backend = makeBackend(live, {
+     ...(values.launch === true ? { launch: true } : {}),
+-    ...(siteId === undefined ? {} : { siteId }),
+   });
+   await performOpen(url, { backend, allowOrigin: values["allow-origin"] === true });
+ }
+diff --git a/src/mcp/mcp-server.ts b/src/mcp/mcp-server.ts
+index 90016b5..4aabe7c 100644
+--- a/src/mcp/mcp-server.ts
++++ b/src/mcp/mcp-server.ts
+@@ -77,7 +77,7 @@ const BASE_INSTRUCTIONS =
+   "NEVER run shell commands or file reads (Select-String, Get-Content, Get-ChildItem, cat, grep, Read) on .agent/snapshot.json. " +
+   "When a popup/modal appears, use pwa_find({ inDialog: true }) to find elements inside the dialog. " +
+   "9. STRICT PROHIBITION: ZERO SHELL, PROCESS, OR PORT INSPECTION LOOPS (WAIT FOR APP TO OPEN): " +
+-  "NEVER run shell, Bash, or PowerShell commands (such as Get-Process, Get-NetTCPConnection, Get-CimInstance, firefoxpwa, netstat, ps, kill, taskkill) to check if the browser is running, what process owns port 9222, what flags were passed, or what sites are registered. " +
++  "NEVER run shell, Bash, or PowerShell commands (such as Get-Process, Get-NetTCPConnection, Get-CimInstance, netstat, ps, kill, taskkill) to check if the browser is running, what process owns port 9222, what flags were passed, or what sites are registered. " +
+   "When you open an app with pwa_open, simply WAIT for the window to load and for pwa_snapshot or pwa_wait to connect. pwa-nav handles process spawning, port waiting, and connection retries automatically.";
+ 
+ /** Tool error: code + message + hint only. Never tool argument values. */

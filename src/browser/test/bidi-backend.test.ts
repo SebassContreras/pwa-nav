@@ -22,6 +22,7 @@ import {
 import { latestSnapshotId, loadLocators, load, StaleRefError } from "../../core/refs.js";
 import type { RawElement } from "../collector.js";
 import { BidiBackend, endpointFor, type BidiBackendOptions } from "../bidi-backend.js";
+import type { PwaProvisioner, ProvisionOptions } from "../provisioner.js";
 
 const URL_A = "https://app.test/login";
 const SECRET = "hunter2-SECRET";
@@ -170,41 +171,24 @@ test("open: --allow-origin round trip and invalid URL", async () => {
   });
 });
 
-test("open: no_browser carries a launch hint when the site is in the firefoxpwa config", async () => {
+test("open: no_browser carries a launch hint with standalone args", async () => {
   const dir = await mkdtemp(join(tmpdir(), "pwa-nav-nobrowser-"));
   const probe = await startFakeBidiServer();
   const { port } = probe;
   await probe.close();
   try {
-    await writeFile(
-      join(dir, "config.json"),
-      JSON.stringify({
-        sites: { SITEULID1: { profile: "PROF1", config: { document_url: "https://app.test/login" } } },
-      }),
-    );
-    const env = { PWA_NAV_FIREFOXPWA_DIR: dir };
-    const withConfig = new BidiBackend({
+    const env = { PWA_NAV_RUNTIME_DIR: dir };
+    const backend = new BidiBackend({
       port,
       agentDir: dir,
       env,
       platform: "linux",
       session: { transport: { connectTimeoutMs: 1000 } },
     });
-    const error = await expectError(withConfig.open("https://app.test/home", { allowOrigin: true }), "no_browser");
-    assert.match(error.hint ?? "", /SITEULID1/);
+    const error = await expectError(backend.open("https://app.test/home", { allowOrigin: true }), "no_browser");
+    assert.match(error.hint ?? "", /app-test/);
     assert.match(error.hint ?? "", new RegExp(`--remote-debugging-port.+${String(port)}`));
-
-    const generic = new BidiBackend({
-      port,
-      agentDir: dir,
-      env,
-      platform: "linux",
-      session: { transport: { connectTimeoutMs: 1000 } },
-    });
-    const other = await expectError(generic.open("https://other.test/", { allowOrigin: true }), "no_browser");
-    assert.match(other.hint ?? "", /--remote-debugging-port/);
-    assert.doesNotMatch(other.hint ?? "", /SITEULID1/);
-    assert.match(other.hint ?? "", /--launch/);
+    assert.match(error.hint ?? "", /--profile/);
   } finally {
     await rm(dir, { recursive: true, force: true });
   }
@@ -212,16 +196,24 @@ test("open: no_browser carries a launch hint when the site is in the firefoxpwa 
 
 test("open --launch: launches only when the port is closed, then navigates", async () => {
   const launched: string[] = [];
-  const launchFn: NonNullable<BidiBackendOptions["launchFn"]> = (options) => {
-    launched.push(`${options.origin} ${String(options.port)}`);
-    return Promise.resolve({ siteId: "S", port: options.port, command: "cmd", pid: undefined });
+  const mockProvisioner: PwaProvisioner = {
+    resolveSlug: () => "app-test",
+    provision: (url) => Promise.resolve({ url, appSlug: "app-test", profileDir: "/p" }),
+    provisionAndLaunch: (url, opts) => {
+      launched.push(`${url} ${String(opts.port)}`);
+      return Promise.resolve({
+        url,
+        appSlug: "app-test",
+        profileDir: "/p",
+      });
+    },
   };
   await withEnv(
     async (e) => {
       await e.backend.open("https://app.test/home", { allowOrigin: true });
-      assert.deepEqual(launched, [`https://app.test ${String(e.server.port)}`]);
+      assert.deepEqual(launched, [`https://app.test/home ${String(e.server.port)}`]);
     },
-    { launch: true, launchFn, probe: () => Promise.resolve(false) },
+    { launch: true, provisioner: mockProvisioner, probe: () => Promise.resolve(false) },
   );
   launched.length = 0;
   await withEnv(
@@ -229,7 +221,50 @@ test("open --launch: launches only when the port is closed, then navigates", asy
       await e.backend.open("https://app.test/home", { allowOrigin: true });
       assert.deepEqual(launched, []);
     },
-    { launch: true, launchFn, probe: () => Promise.resolve(true) },
+    { launch: true, provisioner: mockProvisioner, probe: () => Promise.resolve(true) },
+  );
+});
+
+test("open --launch: provisions and launches standalone PWA when target origin is uninstalled", async () => {
+  const provisioned: string[] = [];
+  const mockProvisioner: PwaProvisioner = {
+    resolveSlug: () => "arbitrary-test",
+    provision: (url: string) =>
+      Promise.resolve({
+        url,
+        appSlug: "arbitrary-test",
+        profileDir: "/fake/profile",
+      }),
+    provisionAndLaunch: (url: string, opts: ProvisionOptions & { port: number }) => {
+      provisioned.push(`${url} port=${String(opts.port)}`);
+      return Promise.resolve({
+        url,
+        appSlug: "arbitrary-test",
+        profileDir: "/fake/profile",
+        launchResult: {
+          appSlug: "arbitrary-test",
+          url,
+          port: opts.port,
+          profileDir: "/fake/profile",
+          command: "mock-cmd",
+          pid: 4321,
+        },
+      });
+    },
+  };
+
+  await withEnv(
+    async (e) => {
+      const session = await e.backend.open("https://arbitrary.test/dashboard", { allowOrigin: true });
+      assert.equal(session.url, "https://arbitrary.test/dashboard");
+      assert.deepEqual(provisioned, [`https://arbitrary.test/dashboard port=${String(e.server.port)}`]);
+    },
+    {
+      launch: true,
+      launchFn: () => Promise.reject(new Error("site not installed")),
+      provisioner: mockProvisioner,
+      probe: () => Promise.resolve(false),
+    },
   );
 });
 

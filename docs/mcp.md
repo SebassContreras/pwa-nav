@@ -5,8 +5,8 @@ Stdio MCP server (spec 006, 012) exposing the same operations as the CLI (`open`
 ## Why not `@playwright/mcp`
 
 - It drives its own Chromium/Firefox profile.
-- It cannot attach to a PWAsForFirefox profile, so it never sees your logged-in session.
-- `pwa-nav-mcp` attaches to the PWA you already launched with `--remote-debugging-port` (see [`firefox-pwa.md`](firefox-pwa.md)).
+- It cannot attach to an authentic, standalone Firefox PWA profile, so it never sees your logged-in session.
+- `pwa-nav-mcp` attaches to the PWA you launched or connects via on-demand provisioning (see [`firefox-pwa.md`](firefox-pwa.md)).
 
 ## Build and run
 
@@ -50,7 +50,7 @@ Relative paths resolve from the working directory: the client must start the ser
 }
 ```
 
-- `--port 9222` is optional and assumed by default. The PWA runtime is spawned with `--remote-debugging-port 9222` on demand, keeping FirefoxPWA's `config.json` clean so manual browsing and logins (like Google Accounts) remain unblocked.
+- `--port 9222` is optional and assumed by default. The PWA runtime is spawned with `--remote-debugging-port 9222` on demand, keeping sessions isolated under `.agent/apps/<appSlug>/profile`.
 - `--armed` is never in the shipped file. Arming is an operator decision (see below).
 - Clients that read `mcpServers` JSON can use it as is, or copy it to their own config. Where the file must live: check your client's docs.
 

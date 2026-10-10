@@ -1,0 +1,10 @@
+{
+  "$schema": "https://opencode.ai/config.json",
+  "mcp": {
+    "pwa-nav": {
+      "type": "local",
+      "command": ["node", "C:\\Users\\sebac\\Documents\\GitHub\\pwa-nav\\dist\\mcp.js", "--port", "9222"],
+      "enabled": true
+    }
+  }
+}

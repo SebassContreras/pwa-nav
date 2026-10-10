@@ -49,7 +49,7 @@ test("authTool handles relay errors", async () => {
   const ctx = makeOfflineContext();
   await assert.rejects(
     async () => authTool({ action: "clean", app: "nonexistent-app-xyz" }, ctx),
-    /no installed PWA|cannot locate standard Firefox/
+    /requires the live backend/,
   );
 });
 

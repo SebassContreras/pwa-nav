@@ -7,8 +7,6 @@ import { join } from "node:path";
 import { test } from "node:test";
 import { PwaNavError } from "../../core/errors.js";
 import {
-  LINKEDIN_SLUG,
-  LINKEDIN_URL,
   buildStandaloneLaunchArgs,
   launchStandaloneApp,
 } from "../standalone-runner.js";
@@ -45,6 +43,8 @@ test("launchStandaloneApp rejects if port is already listening", async () => {
   await assert.rejects(
     async () => {
       await launchStandaloneApp({
+        url: "https://example.com",
+        appSlug: "example-com",
         port: 9222,
         probe: () => Promise.resolve(true),
       });
@@ -84,6 +84,8 @@ test("launchStandaloneApp initializes isolated profile and spawns runtime withou
 
   try {
     const result = await launchStandaloneApp({
+      url: "https://www.linkedin.com",
+      appSlug: "linkedin",
       port: 9222,
       platform: process.platform,
       env: { PWA_NAV_FIREFOXPWA_DIR: fakePwaDir },
@@ -94,8 +96,8 @@ test("launchStandaloneApp initializes isolated profile and spawns runtime withou
       spawnFn,
     });
 
-    assert.equal(result.appSlug, LINKEDIN_SLUG);
-    assert.equal(result.url, LINKEDIN_URL);
+    assert.equal(result.appSlug, "linkedin");
+    assert.equal(result.url, "https://www.linkedin.com");
     assert.equal(result.port, 9222);
     assert.equal(result.pid, 4242);
     assert.equal(spawnedBinary, dummyExe);

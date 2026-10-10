@@ -1,0 +1,26 @@
+diff --git a/src/browser/provisioner.ts b/src/browser/provisioner.ts
+index b9ad0c1..98166d3 100644
+--- a/src/browser/provisioner.ts
++++ b/src/browser/provisioner.ts
+@@ -57,6 +57,12 @@ export interface PwaProvisioner {
+  * Uses appSlugFromUrl, ensureStandaloneProfile, and launchStandaloneApp by composition.
+  */
+ export class DefaultPwaProvisioner implements PwaProvisioner {
++  private readonly launchFn: typeof launchStandaloneApp;
++
++  constructor(options: { launchFn?: typeof launchStandaloneApp } = {}) {
++    this.launchFn = options.launchFn ?? launchStandaloneApp;
++  }
++
+   resolveSlug(url: string): string {
+     return appSlugFromUrl(url);
+   }
+@@ -76,7 +82,7 @@ export class DefaultPwaProvisioner implements PwaProvisioner {
+     options: ProvisionOptions & { port: number },
+   ): Promise<ProvisionResult> {
+     const provisioned = await this.provision(url, options);
+-    const launchResult = await launchStandaloneApp({
++    const launchResult = await this.launchFn({
+       url,
+       appSlug: provisioned.appSlug,
+       port: options.port,

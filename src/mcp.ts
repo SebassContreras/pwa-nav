@@ -9,7 +9,6 @@ import { createBackend, DEFAULT_PORT } from "./backend/backend-factory.js";
 import { exitCodeOf, PwaNavError } from "./core/errors.js";
 import { loadFlowSource } from "./mcp/mcp-flows.js";
 import { createMcpServer } from "./mcp/mcp-server.js";
-import { cleanDebuggingPortConfigured } from "./browser/pwa-runtime.js";
 
 import { resolveAgentDir, resolveScreensDir } from "./core/storage.js";
 
@@ -77,9 +76,6 @@ function parseOptions(argv: string[]) {
 
 async function main(): Promise<void> {
   const opts = parseOptions(process.argv.slice(2));
-  if (opts.backend === "bidi") {
-    void cleanDebuggingPortConfigured().catch(() => false);
-  }
   const flowSource = await loadFlowSource(
     {
       screensDir: opts.screensDir,

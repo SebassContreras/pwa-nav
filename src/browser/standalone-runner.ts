@@ -12,12 +12,9 @@ import {
 } from "./pwa-runtime.js";
 import { ensureStandaloneProfile } from "./standalone-profile.js";
 
-export const LINKEDIN_URL = "https://www.linkedin.com";
-export const LINKEDIN_SLUG = "linkedin";
-
 export interface StandaloneLaunchOptions {
-  url?: string;
-  appSlug?: string;
+  url: string;
+  appSlug: string;
   port: number;
   headless?: boolean;
   host?: string;
@@ -62,6 +59,76 @@ export function buildStandaloneLaunchArgs(options: {
   return args;
 }
 
+export function buildCleanStandaloneLaunchArgs(options: {
+  profileDir: string;
+  appSlug: string;
+  url: string;
+  headless?: boolean;
+}): string[] {
+  const args = [
+    "--profile",
+    options.profileDir,
+    "--pwa",
+    options.appSlug,
+  ];
+  if (options.headless === true) {
+    args.push("--headless");
+  }
+  args.push(options.url);
+  return args;
+}
+
+export interface CleanStandaloneLaunchOptions {
+  url: string;
+  appSlug: string;
+  headless?: boolean;
+  platform?: string;
+  env?: NodeJS.ProcessEnv;
+  cacheDir?: string;
+  spawnFn?: (binary: string, args: string[]) => ChildProcess;
+}
+
+export interface CleanStandaloneLaunchResult {
+  appSlug: string;
+  url: string;
+  profileDir: string;
+  command: string;
+  pid: number | undefined;
+}
+
+export async function launchStandaloneAppClean(
+  options: CleanStandaloneLaunchOptions,
+): Promise<CleanStandaloneLaunchResult> {
+  const platform = options.platform ?? process.platform;
+  const env = options.env ?? process.env;
+  const url = options.url;
+  const appSlug = options.appSlug;
+
+  const dir = firefoxPwaDir(platform, env);
+  const binary = runtimePath(dir, platform);
+  const profileDir = await ensureStandaloneProfile(appSlug, { cacheDir: options.cacheDir });
+
+  const args = buildCleanStandaloneLaunchArgs({
+    profileDir,
+    appSlug,
+    url,
+    ...(options.headless === undefined ? {} : { headless: options.headless }),
+  });
+  const command = launchCommandHint(binary, args, platform);
+
+  const child = (options.spawnFn ?? defaultSpawn)(binary, args);
+  child.on("error", () => undefined);
+  child.unref();
+
+  return {
+    appSlug,
+    url,
+    profileDir,
+    command,
+    pid: child.pid,
+  };
+}
+
 function defaultSpawn(binary: string, args: string[]): ChildProcess {
   return spawn(binary, args, { detached: true, stdio: "ignore" });
 }
@@ -71,8 +138,8 @@ export async function launchStandaloneApp(options: StandaloneLaunchOptions): Pro
   const env = options.env ?? process.env;
   const host = options.host ?? "127.0.0.1";
   const probe = options.probe ?? tcpProbe;
-  const url = options.url ?? LINKEDIN_URL;
-  const appSlug = options.appSlug ?? LINKEDIN_SLUG;
+  const url = options.url;
+  const appSlug = options.appSlug;
   validatePort(options.port);
 
   const dir = firefoxPwaDir(platform, env);

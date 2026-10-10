@@ -8,5 +8,5 @@ Index of every spec - status, dependencies, pipeline stage, and priority. Read t
 | 002 | multi-pwa-isolation | todo | - | design | 2 |
 | 003 | free-mode-profiles | done        | - | —            | 3 |
 | 004 | standalone-pwa-no-extension | done        | - | —      | 4 |
-| 005 | automatic-pwa-provisioning | todo | 004 | design | 5 |
-| 006 | retire-pwasforfirefox | todo | 004, 005 | design | 6 |
+| 005 | automatic-pwa-provisioning | done        | 004 | —      | 5 |
+| 006 | retire-pwasforfirefox | done        | 004, 005 | —      | 6 |

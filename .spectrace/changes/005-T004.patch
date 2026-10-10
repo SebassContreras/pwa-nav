@@ -1,0 +1,100 @@
+diff --git a/src/browser/bidi-backend.ts b/src/browser/bidi-backend.ts
+index 8d87682..9edcb4a 100644
+--- a/src/browser/bidi-backend.ts
++++ b/src/browser/bidi-backend.ts
+@@ -218,8 +218,8 @@ export class BidiBackend implements Backend {
+     });
+     const probe = this.options.probe ?? tcpProbe;
+     const portOpen = await probe(this.host, this.port);
+-    if (!portOpen) {
+-      // Auto-launch if launch: true was passed OR if this is an installed PWA
++    if (!portOpen && this.options.launch === true) {
++      // Auto-launch if launch: true was passed
+       try {
+         await (this.options.launchFn ?? launchPwa)({
+           origin: new URL(target).origin,
+@@ -230,23 +230,18 @@ export class BidiBackend implements Backend {
+           ...(this.options.siteId === undefined ? {} : { siteId: this.options.siteId }),
+           ...(this.options.probe === undefined ? {} : { probe: this.options.probe }),
+         });
+-      } catch (err) {
++      } catch {
+         // Fallback to on-the-fly standalone PWA provisioning (Spec 005)
+-        try {
+-          await this.provisioner.provisionAndLaunch(target, {
+-            port: this.port,
+-            cacheDir: this.agentDir,
+-            launchOptions: {
+-              host: this.host,
+-              env: this.env,
+-              platform: this.platform,
+-              probe,
+-            },
+-          });
+-        } catch {
+-          if (this.options.launch === true) throw err;
+-          // Non-fatal if launch was not explicitly requested; run() will throw standard no_browser hint
+-        }
++        await this.provisioner.provisionAndLaunch(target, {
++          port: this.port,
++          cacheDir: this.agentDir,
++          launchOptions: {
++            host: this.host,
++            env: this.env,
++            platform: this.platform,
++            probe,
++          },
++        });
+       }
+     }
+     const navigated = await this.run(target, (client, context) => client.navigate(context, target, "complete"));
+diff --git a/src/browser/test/provisioner.test.ts b/src/browser/test/provisioner.test.ts
+new file mode 100644
+index 0000000..06d3852
+--- /dev/null
++++ b/src/browser/test/provisioner.test.ts
+@@ -0,0 +1,44 @@
++import { describe, it } from "node:test";
++import assert from "node:assert/strict";
++import { mkdtemp, readFile, rm } from "node:fs/promises";
++import { tmpdir } from "node:os";
++import { join } from "node:path";
++import { existsSync } from "node:fs";
++import { DefaultPwaProvisioner } from "../provisioner.js";
++
++describe("DefaultPwaProvisioner - profile and slug", () => {
++  it("resolves slug deterministically from arbitrary URLs", () => {
++    const provisioner = new DefaultPwaProvisioner();
++    assert.equal(provisioner.resolveSlug("https://github.com/trending"), "github-com");
++    assert.equal(provisioner.resolveSlug("https://news.ycombinator.com/item?id=1"), "news-ycombinator-com");
++    assert.equal(provisioner.resolveSlug("http://127.0.0.1:8080/dashboard"), "127-0-0-1");
++  });
++
++  it("creates dedicated profile directory with BiDi user.js and custom styles", async () => {
++    const dir = await mkdtemp(join(tmpdir(), "pwa-provision-test-"));
++    try {
++      const provisioner = new DefaultPwaProvisioner();
++      const targetUrl = "https://app.slack.com/client";
++      const result = await provisioner.provision(targetUrl, { cacheDir: dir });
++
++      assert.equal(result.url, targetUrl);
++      assert.equal(result.appSlug, "app-slack-com");
++      assert.equal(result.profileDir, join(dir, "apps", "app-slack-com", "profile"));
++      assert.ok(existsSync(result.profileDir));
++
++      const userJsPath = join(result.profileDir, "user.js");
++      assert.ok(existsSync(userJsPath));
++      const userJs = await readFile(userJsPath, "utf8");
++      assert.match(userJs, /remote\.active-protocols/);
++      assert.match(userJs, /toolkit\.legacyUserProfileCustomizations\.stylesheets/);
++
++      const userChromePath = join(result.profileDir, "chrome", "userChrome.css");
++      assert.ok(existsSync(userChromePath));
++      const userChrome = await readFile(userChromePath, "utf8");
++      assert.match(userChrome, /#TabsToolbar/);
++      assert.match(userChrome, /#nav-bar/);
++    } finally {
++      await rm(dir, { recursive: true, force: true });
++    }
++  });
++});

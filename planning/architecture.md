@@ -2,7 +2,7 @@
 
 ## Container
 
-Local-only CLI + MCP adapter driving the user's own logged-in Firefox PWA (PWAsForFirefox runtime) over W3C WebDriver BiDi. No prod deploy in MVP.
+Local-only CLI + MCP adapter driving standalone Firefox PWA instances over W3C WebDriver BiDi. No prod deploy in MVP.
 
 ## Stack
 
@@ -15,7 +15,7 @@ Local-only CLI + MCP adapter driving the user's own logged-in Firefox PWA (PWAsF
 | Screen map | `screens/<app>.screens.json`, validated by `schemas/screen-map.schema.json` (JSON Schema 2020-12); routes as URL Pattern strings; flows and multi-screen user journeys across route transitions with settle assertion (`expectScreen`) | Known screens need no snapshot: agent reads a few hundred tokens of capabilities and targets stable `@id`s |
 | Interface | CLI (`open`, `snapshot`, `click`, `fill`, `upload`, `act`, `journey`, `screenshot`, `extract`, `qa`) + MCP stdio adapter (`pwa_open`, `pwa_snapshot`, `pwa_click`, `pwa_fill`, `pwa_upload`, `pwa_screenshot`, `pwa_extract`, `pwa_act`, `pwa_learn`, dynamic flows, dynamic journeys) + SKILL.md | CLI-first is token-efficient; MCP reuses same backend |
 | Datastore | Local filesystem JSON | No DB needed for MVP |
-| Identity | Firefox PWA profile across Windows (`%APPDATA%\FirefoxPWA`), Linux (`~/.local/share/firefoxpwa`, Flatpak), and macOS (`~/Library/Application Support/firefoxpwa`); user performs logins | Lawful: agent never handles credentials |
+| Identity | Standalone Firefox PWA profile under `.agent/apps/<appSlug>/profile`; user performs logins | Lawful: agent never handles credentials |
 | Write safety | Dry-run unless `--armed`; kill-switch file; origin allow-list; file upload safe path boundary | Multi-layer safety gate limits prompt-injection blast radius |
 | Visual QA & Evidence | BiDi `captureScreenshot` saved directly to disk (`.agent/screenshot.png`, `.agent/evidence/`); zero base64 in LLM context | Strict context economy while capturing deterministic visual test evidence |
 | CI | `pnpm lint && pnpm build && pnpm test && pnpm smoke` (plus opt-in real Firefox E2E) | Minimal gate, 328+ automated tests |

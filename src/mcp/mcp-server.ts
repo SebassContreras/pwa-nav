@@ -77,7 +77,7 @@ const BASE_INSTRUCTIONS =
   "NEVER run shell commands or file reads (Select-String, Get-Content, Get-ChildItem, cat, grep, Read) on .agent/snapshot.json. " +
   "When a popup/modal appears, use pwa_find({ inDialog: true }) to find elements inside the dialog. " +
   "9. STRICT PROHIBITION: ZERO SHELL, PROCESS, OR PORT INSPECTION LOOPS (WAIT FOR APP TO OPEN): " +
-  "NEVER run shell, Bash, or PowerShell commands (such as Get-Process, Get-NetTCPConnection, Get-CimInstance, firefoxpwa, netstat, ps, kill, taskkill) to check if the browser is running, what process owns port 9222, what flags were passed, or what sites are registered. " +
+  "NEVER run shell, Bash, or PowerShell commands (such as Get-Process, Get-NetTCPConnection, Get-CimInstance, netstat, ps, kill, taskkill) to check if the browser is running, what process owns port 9222, what flags were passed, or what sites are registered. " +
   "When you open an app with pwa_open, simply WAIT for the window to load and for pwa_snapshot or pwa_wait to connect. pwa-nav handles process spawning, port waiting, and connection retries automatically.";
 
 /** Tool error: code + message + hint only. Never tool argument values. */

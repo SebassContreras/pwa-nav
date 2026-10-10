@@ -26,11 +26,11 @@ pnpm smoke
 pnpm link --global
 ```
 
-Now launch any web app you have installed in **PWAsForFirefox** (e.g. NotebookLM, Mercadona, or your SaaS portal) and inspect it:
+Now launch any web app (e.g. NotebookLM, Mercadona, LinkedIn, or your SaaS portal) and inspect it:
 
 ```powershell
-# Open installed PWA and attach via WebDriver BiDi (port 9222)
-pwa-nav open "Google NotebookLM"
+# Open URL or web app and attach via WebDriver BiDi (port 9222)
+pwa-nav open "https://notebooklm.google.com" --launch
 
 # Inspect the active UI elements in clean text (zero screenshots)
 pwa-nav snapshot
@@ -57,8 +57,8 @@ Traditional browser automation tools (Playwright, Puppeteer, Selenium with Chrom
 
 ### The `pwa-nav` Solution:
 
-- **Attaches to Your Real Browser**: Connects directly to your everyday, already-authenticated **Firefox PWA** (Progressive Web App installed via PWAsForFirefox) over standard **W3C WebDriver BiDi** on loopback (`localhost:9222`).
-- **Zero Bot Footprints**: It runs in your authentic Firefox profile with your active sessions, cookies, and human hardware fingerprint. You log in once by hand; the agent operates lawfully and seamlessly alongside you.
+- **Attaches to Your Real Browser**: Connects directly to your dedicated, standalone **Firefox PWA** runtime over standard **W3C WebDriver BiDi** on loopback (`localhost:9222`).
+- **Zero Bot Footprints**: It runs in authentic Firefox profiles with your active sessions, cookies, and human hardware fingerprint. You log in once by hand; the agent operates lawfully and seamlessly alongside you.
 - **Accessibility Tree Contracts**: Instead of pixel coordinates or brittle CSS selectors, `pwa-nav` uses a clean accessibility snapshot with ephemeral refs (`e1`, `e2`, ...). Mutations invalidate refs immediately, preventing stale misclicks.
 - **Screen Maps & User Journeys**: Declarative screen models (`screens/<app>.screens.json`) provide permanent semantic `@id` targets, slashing LLM token consumption by up to **86%** and enabling declarative multi-screen workflows (`pwa-nav journey <name>`).
 - **Native Model Context Protocol (MCP)**: Exposes all browser tools and workflows directly to AI coding assistants (Claude Desktop, Cursor, Antigravity, Claude Code, Windsurf, etc.).
@@ -73,21 +73,9 @@ Before installing `pwa-nav`, ensure you have the following installed on your sys
 - **Node.js**: `v22.0.0` or higher (`node --version`).
 - **pnpm**: `v10.0.0` or higher (`pnpm --version`), or `npm` / `corepack`.
 
-### 2. Firefox & PWAsForFirefox
-PWAsForFirefox turns any website into an isolated, standalone desktop app running with its own dedicated profile. It consists of **two parts** (both are mandatory):
-
-| Component | Purpose | Installation Link |
-|---|---|---|
-| **1. Firefox Add-on** | Browser extension to trigger PWA installation from the address bar | [PWAsForFirefox Add-on](https://addons.mozilla.org/firefox/addon/pwas-for-firefox/) |
-| **2. Native Runtime** | Native OS host that manages standalone profiles and desktop shortcuts | [PWAsForFirefox Releases](https://github.com/filips123/PWAsForFirefox/releases) |
-
-*Download the native installer for your OS (Windows: `.msi` or `.exe`, Linux: `.deb`/`.rpm`/Flatpak, macOS: `.pkg`).*
-
-### 3. Install Your Target PWA & Log In Once
-1. Open Firefox and navigate to your target web application (e.g. Google NotebookLM, Mercadona, Jira, or your local web app).
-2. Click the **PWAsForFirefox install icon** in Firefox's address bar.
-3. Complete the installation prompt. The web app is now installed as a desktop PWA with its own dedicated profile.
-4. Launch the installed PWA from your Start Menu / desktop and **log in manually** (including 2FA if required).
+### 2. Standalone Firefox Runtime
+`pwa-nav` uses the standalone Firefox runtime binary to render dedicated, isolated app windows without browser chrome or extension overhead.
+Each web application maintains its own dedicated profile folder inside `.agent/apps/<appSlug>/profile`.
 
 ---
 
@@ -366,7 +354,7 @@ If any intermediate step fails or the destination URL does not match `expectScre
 
 | Command | Description |
 |---|---|
-| `pwa-nav open <url\|app> [--launch] [--site <ULID>] [--allow-origin]` | Open an installed PWA or navigate to a URL. Auto-whitelists installed apps. |
+| `pwa-nav open <url|app> [--launch] [--allow-origin]` | Open an installed PWA or navigate to a URL. Auto-whitelists installed apps. |
 | `pwa-nav auth [<app\|url>] [--clean] [--debug] [--port <n>]` | Assisted login workflow for Google accounts and bot-walled login screens. |
 | `pwa-nav snapshot [-i \| --all] [--query <str>] [--role <str>] [--json] [--out <path>]` | Capture live accessibility DOM snapshot. Highlights active modal/dialogs. |
 | `pwa-nav snapshot --screen [--screen-map <f>] [--screens-dir <dir>]` | Print compact view of mapped screen matching current URL (no DOM dump). |
@@ -405,7 +393,7 @@ If any intermediate step fails or the destination URL does not match `expectScre
 | `PWA_NAV_SCREENS_DIR` | `<cache-dir>/screens` | Directory where screen map JSON files are stored. |
 | `PWA_NAV_DRY_RUN` | `0` | Set to `1` to force dry-run mode in MCP server. |
 | `PWA_NAV_KILL_SWITCH` | — | Path to emergency kill-switch file (or set to `1`). |
-| `PWA_NAV_FIREFOXPWA_DIR` | Auto | Override PWAsForFirefox data directory. |
+| `PWA_NAV_RUNTIME_DIR` | Auto | Override standalone runtime directory. |
 
 ---
 
@@ -413,7 +401,7 @@ If any intermediate step fails or the destination URL does not match `expectScre
 
 1. **User's Own Sessions**: Operates exclusively in your authenticated Firefox profile. Never automates credentials or bypasses CAPTCHAs.
 2. **Sensitive Fields Barrier**: Password fields, tokens, and payment inputs (`sensitive: true` / `humanOnly: true`) are never typed by the agent (fails fast with code 11 `sensitive_target`). You type them by hand.
-3. **Origin Allow-List Gate**: Navigation to uninstalled external origins is blocked unless registered in `.agent/allow.json` or explicitly passed with `--allow-origin` (code 6 `origin_blocked`). Installed Firefox PWAs are auto-whitelisted.
+3. **Origin Allow-List Gate**: Navigation to external origins is safely checked against `.agent/allow.json` or explicitly consented with `--allow-origin` (code 6 `origin_blocked`).
 4. **Emergency Kill-Switch**: Creating `.agent/kill` or setting `PWA_NAV_KILL_SWITCH` immediately terminates any armed operation (code 7 `kill_switch`).
 5. **Untrusted Page Content**: All HTML page contents, aria names, and element text are treated strictly as untrusted data, never instructions.
 6. **File Upload Security Boundary**: File uploads (`pwa_upload`, `upload`) are strictly restricted to files within allowed safe directories (workspace root or `.agent/`). Path traversal (`..`) or targeting sensitive files (`.env*`, private keys) is blocked immediately (exit code 15 `file_upload_blocked`).

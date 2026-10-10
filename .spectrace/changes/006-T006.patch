@@ -1,0 +1,22 @@
+diff --git a/src/browser/bidi-backend.ts b/src/browser/bidi-backend.ts
+index 2839e16..36a8192 100644
+--- a/src/browser/bidi-backend.ts
++++ b/src/browser/bidi-backend.ts
+@@ -133,7 +133,7 @@ export class BidiBackend implements Backend {
+           continue;
+         }
+         if (error instanceof PwaNavError && error.code === "no_browser") {
+-          throw await this.withLaunchHint(error, originUrl);
++          throw this.withLaunchHint(error, originUrl);
+         }
+         throw error;
+       }
+@@ -142,7 +142,7 @@ export class BidiBackend implements Backend {
+   }
+ 
+   // Best effort: exact launch command for the matching site, else a generic hint.
+-  private async withLaunchHint(error: PwaNavError, originUrl: string | undefined): Promise<PwaNavError> {
++  private withLaunchHint(error: PwaNavError, originUrl: string | undefined): PwaNavError {
+     let hint = `start the PWA runtime with --remote-debugging-port ${String(this.port)} (or: open <url> --launch)`;
+     try {
+       if (originUrl === undefined) throw new Error("no origin");

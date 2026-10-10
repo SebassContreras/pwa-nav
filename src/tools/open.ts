@@ -8,20 +8,19 @@ import { invalid, type ToolContext, type ToolOutcome } from "./types.js";
 export interface OpenArgs {
   url: string;
   launch?: boolean;
-  siteId?: string;
   allowOrigin?: boolean;
 }
 
 export async function openTool(args: OpenArgs, ctx: ToolContext): Promise<ToolOutcome> {
-  const { url, launch = false, siteId, allowOrigin = false } = args;
+  const { url, launch = false, allowOrigin = false } = args;
   if (!url || url.length === 0) {
     throw invalid("missing <url>.");
   }
-  if (ctx.mode === "offline" && (launch || siteId !== undefined || allowOrigin)) {
-    throw invalid("--launch, --site and --allow-origin require the live backend (--backend bidi).");
+  if (ctx.mode === "offline" && (launch || allowOrigin)) {
+    throw invalid("--launch and --allow-origin require the live backend (--backend bidi).");
   }
 
-  const backend = getBackend(ctx, { armed: false, launch, siteId });
+  const backend = getBackend(ctx, { armed: false, launch });
   const session = await performOpen(url, { backend, allowOrigin });
   const slug = appSlugFromUrl(session.url);
   const barrier = isLoginBarrier(session.url);

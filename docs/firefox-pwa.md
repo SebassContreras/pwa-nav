@@ -1,46 +1,40 @@
-# Live Firefox PWA backend
+# Live Standalone Firefox PWA backend
 
-pwa-nav drives your own logged-in Firefox PWA (PWAsForFirefox) over W3C WebDriver BiDi at `ws://127.0.0.1:<port>/session`. Loopback only: other hosts are rejected. No daemon: each command opens a session, works, ends it.
+pwa-nav drives your standalone Firefox PWA over W3C WebDriver BiDi at `ws://127.0.0.1:<port>/session`. Loopback only: other hosts are rejected. No daemon: each command opens a session, works, ends it.
 
 Status: validated by unit tests with a fake BiDi server; real-browser E2E is opt-in (`PWA_NAV_E2E=1`).
 
 ## Launch recipe
 
-The PWA runtime must be started with `--remote-debugging-port`. `firefoxpwa site launch <id> -- --remote-debugging-port` DROPS the flag, so spawn the runtime directly.
+The PWA runtime is started directly with `--profile <dir> --pwa <appSlug> --remote-debugging-port <port> <url>`.
 
-| OS | Runtime / data dir | Status |
+| OS | Runtime / binary location | Status |
 |---|---|---|
-| Windows | `%APPDATA%\FirefoxPWA` (`runtime\firefox.exe`, `profiles\<PROFILE-ULID>`) | Verified (Firefox 156.0.1, firefoxpwa 2.19.0) |
-| Linux | `~/.local/share/firefoxpwa` or `$XDG_DATA_HOME/firefoxpwa` (Flatpak: `~/.var/app/org.filips.FirefoxPWA/data/firefoxpwa`) | Verified resolution & matrix tests |
-| macOS | `~/Library/Application Support/firefoxpwa` (`runtime/Firefox.app/Contents/MacOS/firefox`) | Verified resolution & matrix tests |
+| Windows | `%APPDATA%\FirefoxPWA\runtime\firefox.exe` | Verified |
+| Linux | `~/.local/share/firefoxpwa/runtime/firefox` (or Flatpak, `/usr/lib/firefoxpwa/runtime/firefox`) | Verified |
+| macOS | `~/Library/Application Support/firefoxpwa/runtime/Firefox.app/Contents/MacOS/firefox` | Verified |
 
 ### Launch Commands per Platform
 
 #### Windows (PowerShell)
 
 ```powershell
-$FFPWA = "$env:APPDATA\FirefoxPWA"
-Start-Process -FilePath "$FFPWA\runtime\firefox.exe" -ArgumentList @("--profile","$FFPWA\profiles\<PROFILE-ULID>","--pwa","<SITE-ULID>","--remote-debugging-port","9222")
+Start-Process -FilePath "$env:APPDATA\FirefoxPWA\runtime\firefox.exe" -ArgumentList @("--profile",".agent\apps\<appSlug>\profile","--pwa","<appSlug>","--remote-debugging-port","9222","<target-url>")
 ```
 
 #### Linux (Bash / Zsh)
 
 ```bash
-FFPWA="${XDG_DATA_HOME:-$HOME/.local/share}/firefoxpwa"
-"$FFPWA/runtime/firefox" --profile "$FFPWA/profiles/<PROFILE-ULID>" --pwa "<SITE-ULID>" --remote-debugging-port 9222 &
+"$HOME/.local/share/firefoxpwa/runtime/firefox" --profile ".agent/apps/<appSlug>/profile" --pwa "<appSlug>" --remote-debugging-port 9222 "<target-url>" &
 ```
-*(If installed system-wide, the binary may reside at `/usr/lib/firefoxpwa/runtime/firefox` or `/usr/lib64/firefoxpwa/runtime/firefox`, detected automatically by `pwa-nav open --launch`).*
 
 #### macOS (Zsh / Bash)
 
 ```zsh
-FFPWA="$HOME/Library/Application Support/firefoxpwa"
-"$FFPWA/runtime/Firefox.app/Contents/MacOS/firefox" --profile "$FFPWA/profiles/<PROFILE-ULID>" --pwa "<SITE-ULID>" --remote-debugging-port 9222 &
+"$HOME/Library/Application Support/firefoxpwa/runtime/Firefox.app/Contents/MacOS/firefox" --profile ".agent/apps/<appSlug>/profile" --pwa "<appSlug>" --remote-debugging-port 9222 "<target-url>" &
 ```
 
-Two different ULIDs: profile vs site. Get them from `firefoxpwa profile list` or the platform `config.json`.
-
-Shortcut: `pwa-nav open <url> --launch --allow-origin` (gate is checked before anything is spawned) resolves the ULIDs by origin from `config.json`, spawns the runtime if nothing listens on the port, and never edits the profile. `--site <ULID>` disambiguates when several sites share an origin.
+Automatic Provisioning: `pwa-nav open <url> --launch --allow-origin` automatically prepares the dedicated profile and spawns the standalone PWA on demand without requiring manual configuration.
 
 ## Check the port
 
@@ -80,7 +74,7 @@ Each runtime needs its own port; select with `--port <n>` (or `PWA_NAV_PORT`), d
 | App A | 9222 | `pwa-nav open <url-a> --allow-origin` (first time; later without) |
 | App B | 9223 | `pwa-nav open <url-b> --port 9223 --allow-origin` (first time) |
 
-Several top-level contexts in one runtime: pass `--context <id>`. Several sites sharing an origin: `--site <ULID>`.
+Several top-level contexts in one runtime: pass `--context <id>`. Isolating multiple apps: run with different profiles or ports (`--port <n>`).
 
 ## Safety gate
 

@@ -2,7 +2,7 @@
 // CLI surface for specs 001 (nav-snapshot), 003 (qa-loop) and 004 (firefox-bidi-backend, T011).
 // Commands: `open <url>`, `snapshot`, `click`, `fill`, `extract`, `act`, `qa run <check-file>`.
 // Verb surface stays at the 5 verbs + act/qa; live capability is flags (--backend, --port,
-// --context, --armed, open --launch/--site/--allow-origin, snapshot --all).
+// --context, --armed, open --launch/--allow-origin, snapshot --all).
 // Backend: live (`bidi`) is the default; `snapshot --input`/piped stdin and `qa run` stay offline.
 // Action behavior lives in src/ops.ts (shared with the qa runner).
 // Option parsing: node:util parseArgs (strict, per-command tables); every usage error
@@ -49,14 +49,12 @@ import {
 import { isSemanticToken, parseFlowInputs } from "./screens/screen-resolve.js";
 import { performJourney } from "./ops/journey.js";
 
-const SITE_ULID = /^[0-9A-HJKMNP-TV-Z]{26}$/i;
-
 function usage(): string {
   return [
     "pwa-nav — fluid QA CLI (specs 001-nav-snapshot, 004-firefox-bidi-backend)",
     "",
     "Usage:",
-    "  pwa-nav open <url> [--launch] [--site <ULID>] [--allow-origin]",
+    "  pwa-nav open <url> [--launch] [--allow-origin]",
     "  pwa-nav snapshot [-i | --all] [--json] [--input <file>] [--url <url>] [--title <title>] [--out <path>]",
     "  pwa-nav snapshot --screen [--screen-map <file>] [--screens-dir <dir>]",
     "  pwa-nav snapshot --learn [--prune] [--locale <bcp47>] [--access public|authenticated|unknown]",
@@ -102,7 +100,6 @@ function usage(): string {
     "",
     "Open options:",
     "  --launch        Start the PWA runtime with the debugging port if nothing listens (never edits the profile).",
-    "  --site <ULID>   Pick the firefoxpwa site when several share the origin (bidi only).",
     "  --allow-origin  Consent to navigate to this origin: required unless it is already in .agent/allow.json.",
     "                  Added to the allow-list only after a successful navigation. Without it: origin_blocked (6),",
     "                  checked before any browser connection. An active kill-switch also blocks open (7).",
@@ -182,7 +179,6 @@ const VALUE_HINT: Readonly<Record<string, string>> = {
   "--port": "<n>",
   "--context": "<id>",
   "--backend": "offline|bidi",
-  "--site": "<ULID>",
   "--screen-map": "<file>",
   "--screens-dir": "<dir>",
   "--cache-dir": "<dir>",
@@ -294,7 +290,7 @@ function resolveLive(values: {
 
 function makeBackend(
   live: LiveConfig,
-  extra: { armed?: boolean; launch?: boolean; siteId?: string } = {},
+  extra: { armed?: boolean; launch?: boolean } = {},
 ): Backend {
   return createBackend({
     mode: live.mode,
@@ -303,7 +299,6 @@ function makeBackend(
     ...(live.contextId === undefined ? {} : { contextId: live.contextId }),
     ...(extra.armed === undefined ? {} : { armed: extra.armed }),
     ...(extra.launch === undefined ? {} : { launch: extra.launch }),
-    ...(extra.siteId === undefined ? {} : { siteId: extra.siteId }),
   });
 }
 
@@ -329,7 +324,6 @@ async function cmdOpen(rest: string[]): Promise<void> {
   const { values, positionals } = strictParse("open", rest, {
     ...LIVE_OPTIONS,
     launch: { type: "boolean" },
-    site: { type: "string" },
     "allow-origin": { type: "boolean" },
   });
   printHelpAndExit(values.help);
@@ -341,16 +335,11 @@ async function cmdOpen(rest: string[]): Promise<void> {
     throw invalid(`unexpected open argument: ${positionals[1] ?? ""}`);
   }
   const live = resolveLive(values);
-  const siteId = requireNonEmpty("--site", values.site);
-  if (siteId !== undefined && !SITE_ULID.test(siteId)) {
-    throw invalid(`invalid --site: ${siteId} (expected a 26-char ULID).`);
-  }
-  if (live.mode === "offline" && (values.launch === true || siteId !== undefined || values["allow-origin"] === true)) {
-    throw invalid("--launch, --site and --allow-origin require --backend bidi.");
+  if (live.mode === "offline" && (values.launch === true || values["allow-origin"] === true)) {
+    throw invalid("--launch and --allow-origin require --backend bidi.");
   }
   const backend = makeBackend(live, {
     ...(values.launch === true ? { launch: true } : {}),
-    ...(siteId === undefined ? {} : { siteId }),
   });
   await performOpen(url, { backend, allowOrigin: values["allow-origin"] === true });
 }

@@ -1,7 +1,7 @@
 // BidiBackend (spec 004, T010): the Backend port over WebDriver BiDi.
 // Every operation is ONE withTopLevelContext session (connect -> work -> session.end);
 // a session is never reused (Firefox allows a single active session).
-import { dirname } from "node:path";
+import { dirname, join } from "node:path";
 import { addAllowedOrigin, assertArmedAllowed, assertFileUploadAllowed, assertNavigationAllowed } from "../core/gate.js";
 import { resolveAgentDir } from "../core/storage.js";
 import { withTopLevelContext, type TopLevelContextOptions } from "../bidi/session.js";
@@ -30,18 +30,15 @@ import type { RawElement } from "./collector.js";
 import { buildLiveSnapshot, type LiveExtras } from "./live-snapshot.js";
 import { assertFresh } from "./locate.js";
 import {
-  buildLaunchArgs,
-  findSite,
   firefoxPwaDir,
   launchCommandHint,
-  launchPwa,
-  listInstalledSites,
-  profileDirOf,
-  readConfig,
   runtimePath,
   tcpProbe,
   type PortProbe,
 } from "./pwa-runtime.js";
+import { appSlugFromUrl } from "../backend/backend.js";
+import { buildStandaloneLaunchArgs } from "./standalone-runner.js";
+import { DefaultPwaProvisioner, type PwaProvisioner } from "./provisioner.js";
 
 export function endpointFor(port: number, host: string = DEFAULT_HOST): string {
   const shown = host.includes(":") && !host.startsWith("[") ? `[${host}]` : host;
@@ -58,13 +55,11 @@ export interface BidiBackendOptions {
   env?: NodeJS.ProcessEnv;
   /** `open` starts the PWA runtime first (never writes to the profile). */
   launch?: boolean;
-  /** Disambiguates several firefoxpwa sites on one origin (launch and hints). */
-  siteId?: string;
   platform?: string;
   /** Transport/signal options passed to every session. */
   session?: TopLevelContextOptions;
   probe?: PortProbe;
-  launchFn?: typeof launchPwa;
+  provisioner?: PwaProvisioner;
   /** Test hook: runs after each completed armed op of a batch (index is zero-based). */
   onOpDone?: (index: number) => void | Promise<void>;
 }
@@ -96,6 +91,8 @@ export class BidiBackend implements Backend {
   private readonly platform: string;
   private readonly options: BidiBackendOptions;
 
+  private readonly provisioner: PwaProvisioner;
+
   constructor(options: BidiBackendOptions) {
     this.options = options;
     this.port = options.port;
@@ -105,6 +102,7 @@ export class BidiBackend implements Backend {
     this.agentDir = options.agentDir ?? resolveAgentDir();
     this.env = options.env ?? process.env;
     this.platform = options.platform ?? process.platform;
+    this.provisioner = options.provisioner ?? new DefaultPwaProvisioner();
   }
 
   // --- session plumbing ---
@@ -135,7 +133,7 @@ export class BidiBackend implements Backend {
           continue;
         }
         if (error instanceof PwaNavError && error.code === "no_browser") {
-          throw await this.withLaunchHint(error, originUrl);
+          throw this.withLaunchHint(error, originUrl);
         }
         throw error;
       }
@@ -144,13 +142,14 @@ export class BidiBackend implements Backend {
   }
 
   // Best effort: exact launch command for the matching site, else a generic hint.
-  private async withLaunchHint(error: PwaNavError, originUrl: string | undefined): Promise<PwaNavError> {
+  private withLaunchHint(error: PwaNavError, originUrl: string | undefined): PwaNavError {
     let hint = `start the PWA runtime with --remote-debugging-port ${String(this.port)} (or: open <url> --launch)`;
     try {
       if (originUrl === undefined) throw new Error("no origin");
       const dir = firefoxPwaDir(this.platform, this.env);
-      const site = findSite(await readConfig(dir), new URL(originUrl).origin, this.options.siteId);
-      const args = buildLaunchArgs({ profileDir: profileDirOf(dir, site), siteId: site.ulid, port: this.port });
+      const appSlug = appSlugFromUrl(originUrl);
+      const profileDir = join(this.agentDir, "apps", appSlug, "profile");
+      const args = buildStandaloneLaunchArgs({ profileDir, appSlug, port: this.port, url: originUrl });
       hint = `launch the PWA: ${launchCommandHint(runtimePath(dir, this.platform), args, this.platform)}`;
     } catch {
       // keep the generic hint
@@ -162,19 +161,9 @@ export class BidiBackend implements Backend {
     return (await loadSession(agentPath(this.agentDir, "session.json")))?.url;
   }
 
-  private async getInstalledOrigins(): Promise<string[]> {
-    try {
-      const sites = await listInstalledSites(this.platform, this.env);
-      return sites.map((s) => s.origin);
-    } catch {
-      return [];
-    }
-  }
-
   private async assertGate(armed: boolean, ...urls: string[]): Promise<void> {
-    const extraOrigins = await this.getInstalledOrigins();
     for (const origin of urls) {
-      const decision = await assertArmedAllowed({ armed, origin, agentDir: this.agentDir, env: this.env, extraOrigins });
+      const decision = await assertArmedAllowed({ armed, origin, agentDir: this.agentDir, env: this.env });
       if (decision.kind === "blocked") throw decision.error;
     }
   }
@@ -182,24 +171,7 @@ export class BidiBackend implements Backend {
   // --- Backend ---
 
   async open(url: string, opts: OpenOptions = {}): Promise<Session> {
-    let target = url;
-    const installedOrigins = await this.getInstalledOrigins();
-    if (!isHttpUrl(target)) {
-      try {
-        const sites = await listInstalledSites(this.platform, this.env);
-        const match = sites.find(
-          (s) =>
-            s.name?.toLowerCase().includes(target.toLowerCase()) ||
-            s.origin.toLowerCase().includes(target.toLowerCase()) ||
-            s.ulid === target,
-        );
-        if (match !== undefined) {
-          target = match.documentUrl;
-        }
-      } catch {
-        // keep target as is
-      }
-    }
+    const target = url;
     if (target.length === 0 || !isHttpUrl(target)) {
       throw new PwaNavError("invalid_args", `invalid URL (expected http/https): ${url}`);
     }
@@ -209,26 +181,20 @@ export class BidiBackend implements Backend {
       allowOrigin: opts.allowOrigin === true,
       agentDir: this.agentDir,
       env: this.env,
-      extraOrigins: installedOrigins,
     });
     const probe = this.options.probe ?? tcpProbe;
     const portOpen = await probe(this.host, this.port);
-    if (!portOpen) {
-      // Auto-launch if launch: true was passed OR if this is an installed PWA
-      try {
-        await (this.options.launchFn ?? launchPwa)({
-          origin: new URL(target).origin,
-          port: this.port,
+    if (!portOpen && this.options.launch === true) {
+      await this.provisioner.provisionAndLaunch(target, {
+        port: this.port,
+        cacheDir: this.agentDir,
+        launchOptions: {
           host: this.host,
           env: this.env,
           platform: this.platform,
-          ...(this.options.siteId === undefined ? {} : { siteId: this.options.siteId }),
-          ...(this.options.probe === undefined ? {} : { probe: this.options.probe }),
-        });
-      } catch (err) {
-        if (this.options.launch === true) throw err;
-        // Non-fatal if launch was not explicitly requested; run() will throw standard no_browser hint
-      }
+          probe,
+        },
+      });
     }
     const navigated = await this.run(target, (client, context) => client.navigate(context, target, "complete"));
     if (opts.allowOrigin === true) {

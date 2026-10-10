@@ -1,0 +1,66 @@
+diff --git a/src/browser/test/provisioner.test.ts b/src/browser/test/provisioner.test.ts
+index 06d3852..fc96283 100644
+--- a/src/browser/test/provisioner.test.ts
++++ b/src/browser/test/provisioner.test.ts
+@@ -41,4 +41,34 @@ describe("DefaultPwaProvisioner - profile and slug", () => {
+       await rm(dir, { recursive: true, force: true });
+     }
+   });
++
++  it("provisions and delegates launch with port, profile, and appSlug", async () => {
++    let capturedOptions: unknown;
++    const mockLaunch = async (opts: unknown) => {
++      capturedOptions = opts;
++      return {
++        appSlug: "example-com",
++        url: "https://example.com/app",
++        port: 9222,
++        profileDir: "/fake/dir",
++        command: "mock-cmd",
++        pid: 1234,
++      };
++    };
++
++    const provisioner = new DefaultPwaProvisioner({ launchFn: mockLaunch as any });
++    const res = await provisioner.provisionAndLaunch("https://example.com/app", {
++      port: 9222,
++      cacheDir: "test-cache",
++    });
++
++    assert.equal(res.appSlug, "example-com");
++    assert.equal(res.launchResult?.pid, 1234);
++    assert.deepEqual(capturedOptions, {
++      url: "https://example.com/app",
++      appSlug: "example-com",
++      port: 9222,
++      cacheDir: "test-cache",
++    });
++  });
+ });
+diff --git a/test-cache/apps/example-com/profile/chrome/userChrome.css b/test-cache/apps/example-com/profile/chrome/userChrome.css
+new file mode 100644
+index 0000000..18d615c
+--- /dev/null
++++ b/test-cache/apps/example-com/profile/chrome/userChrome.css
+@@ -0,0 +1,7 @@
++/* Hide Firefox tabs toolbar and navigation/URL bar for clean standalone app window */
++#TabsToolbar {
++  visibility: collapse !important;
++}
++#nav-bar {
++  visibility: collapse !important;
++}
+diff --git a/test-cache/apps/example-com/profile/user.js b/test-cache/apps/example-com/profile/user.js
+new file mode 100644
+index 0000000..8515827
+--- /dev/null
++++ b/test-cache/apps/example-com/profile/user.js
+@@ -0,0 +1,8 @@
++user_pref("remote.active-protocols", 1);
++user_pref("remote.experimental-modules", 1);
++user_pref("browser.shell.checkDefaultBrowser", false);
++user_pref("datareporting.policy.dataSubmissionEnabled", false);
++user_pref("datareporting.healthreport.uploadEnabled", false);
++user_pref("toolkit.telemetry.unified", false);
++user_pref("toolkit.telemetry.enabled", false);
++user_pref("toolkit.legacyUserProfileCustomizations.stylesheets", true);
